@@ -263,6 +263,172 @@ class TestPlantsPopular:
             assert p.get("search_count", 0) >= 1
 
 
+# ---------------------------------------------------------------------------
+# Dedup verification (P1 bug fix)
+# ---------------------------------------------------------------------------
+def _skeleton(ik: str) -> str:
+    return (ik or "").split("-")[0]
+
+
+class TestPlantSearchDedup:
+    """
+    Regression tests for the 'duplicate compounds' bug.
+    After the _merge_and_dedupe fix in server.py, /api/plant/search must:
+      - not emit two rows sharing the same InChIKey connectivity skeleton
+      - not emit two rows sharing the same case-insensitive compound_name
+      - len(compounds) should be < imppat_count + lotus_count when merges occurred
+    """
+
+    @pytest.fixture(scope="class")
+    def curcuma_data(self, api):
+        r = api.get(
+            f"{BASE_URL}/api/plant/search",
+            params={"plant": "Curcuma longa", "limit": 200},
+            timeout=180,
+        )
+        assert r.status_code == 200, r.text
+        return r.json()
+
+    @pytest.fixture(scope="class")
+    def withania_data(self, api):
+        r = api.get(
+            f"{BASE_URL}/api/plant/search",
+            params={"plant": "Withania somnifera", "limit": 200},
+            timeout=180,
+        )
+        assert r.status_code == 200, r.text
+        return r.json()
+
+    def test_curcuma_no_duplicate_inchikey_skeleton(self, curcuma_data):
+        compounds = curcuma_data["compounds"]
+        skeletons = [
+            _skeleton(c.get("inchi_key")) for c in compounds if c.get("inchi_key")
+        ]
+        seen = set()
+        dups = []
+        for s in skeletons:
+            if s in seen:
+                dups.append(s)
+            seen.add(s)
+        assert not dups, f"Duplicate InChIKey skeletons in Curcuma longa: {dups[:5]}"
+
+    def test_curcuma_no_duplicate_compound_name(self, curcuma_data):
+        compounds = curcuma_data["compounds"]
+        names_lc = [
+            (c.get("compound_name") or "").strip().lower()
+            for c in compounds
+            if c.get("compound_name")
+        ]
+        seen = set()
+        dups = []
+        for n in names_lc:
+            if n in seen:
+                dups.append(n)
+            seen.add(n)
+        assert not dups, f"Duplicate compound_names (ci) for Curcuma longa: {dups[:5]}"
+
+    def test_curcuma_merged_size_less_than_sum(self, curcuma_data):
+        d = curcuma_data
+        imppat_ct = d["imppat_count"]
+        lotus_ct = d["lotus_count"]
+        merged = len(d["compounds"])
+        # counts still reflect RAW upstream
+        assert imppat_ct > 0
+        assert lotus_ct > 0
+        # Proof merge happened: unique < sum
+        assert merged < imppat_ct + lotus_ct, (
+            f"Expected merged={merged} < imppat_count({imppat_ct})+lotus_count({lotus_ct}); "
+            "either merge didn't happen or LOTUS/IMPPAT contributed non-overlapping."
+        )
+
+    def test_curcuma_has_cross_source_merged_row(self, curcuma_data):
+        """At least one compound must come from both IMPPAT and LOTUS with both ids populated."""
+        merged_rows = [
+            c
+            for c in curcuma_data["compounds"]
+            if c.get("source") == "IMPPAT+LOTUS"
+            and (c.get("imppat_id") or "").startswith("IMPHY")
+            and (c.get("lotus_id") or "").startswith("LTS")
+        ]
+        assert len(merged_rows) >= 1, (
+            "Expected >=1 compound with source='IMPPAT+LOTUS' carrying both "
+            "imppat_id (IMPHY*) and lotus_id (LTS*). "
+            f"Sources observed: {sorted({c.get('source') for c in curcuma_data['compounds']})}"
+        )
+
+    def test_curcuma_merge_backfills_missing_fields(self, curcuma_data):
+        """
+        For merged rows, if IMPPAT had no molecular_weight the LOTUS side (or vice-versa)
+        should have filled it in. At least one merged row must carry molecular_weight.
+        """
+        merged_rows = [
+            c for c in curcuma_data["compounds"] if c.get("source") == "IMPPAT+LOTUS"
+        ]
+        assert merged_rows, "No merged rows to check backfill on"
+        filled = [c for c in merged_rows if c.get("molecular_weight") is not None]
+        assert len(filled) >= 1, (
+            "No merged (IMPPAT+LOTUS) row has molecular_weight populated — "
+            "backfill from LOTUS into IMPPAT rows isn't working."
+        )
+
+    def test_withania_no_duplicate_inchikey_skeleton(self, withania_data):
+        compounds = withania_data["compounds"]
+        skeletons = [
+            _skeleton(c.get("inchi_key")) for c in compounds if c.get("inchi_key")
+        ]
+        assert len(skeletons) == len(set(skeletons)), (
+            "Duplicate InChIKey skeletons in Withania somnifera compounds"
+        )
+
+    def test_withania_no_duplicate_compound_name(self, withania_data):
+        compounds = withania_data["compounds"]
+        names_lc = [
+            (c.get("compound_name") or "").strip().lower()
+            for c in compounds
+            if c.get("compound_name")
+        ]
+        assert len(names_lc) == len(set(names_lc)), (
+            "Duplicate compound_names (case-insensitive) for Withania somnifera"
+        )
+
+
+class TestLotusDedup:
+    """LOTUS wrappers must also dedupe internally via _normalize_lotus."""
+
+    def test_lotus_simple_curcumin_no_inchikey_duplicates(self, api):
+        r = _retry_get(
+            api,
+            f"{BASE_URL}/api/lotus/simple",
+            {"query": "curcumin"},
+            timeout=45,
+        )
+        assert r.status_code == 200
+        compounds = r.json()["compounds"]
+        skeletons = [
+            _skeleton(c.get("inchi_key")) for c in compounds if c.get("inchi_key")
+        ]
+        assert len(skeletons) == len(set(skeletons)), (
+            f"Duplicate InChIKey skeletons in /lotus/simple?query=curcumin "
+            f"({len(skeletons)-len(set(skeletons))} dups)"
+        )
+
+    def test_lotus_molweight_no_inchikey_duplicates(self, api):
+        r = _retry_get(
+            api,
+            f"{BASE_URL}/api/lotus/molweight",
+            {"minMass": 300, "maxMass": 400, "maxHits": 50},
+            timeout=60,
+        )
+        assert r.status_code == 200
+        compounds = r.json()["compounds"]
+        skeletons = [
+            _skeleton(c.get("inchi_key")) for c in compounds if c.get("inchi_key")
+        ]
+        assert len(skeletons) == len(set(skeletons)), (
+            f"Duplicate InChIKey skeletons in /lotus/molweight ({len(skeletons)-len(set(skeletons))} dups)"
+        )
+
+
 class TestPlantSearchCache:
     """Second call for same plant should be a Mongo cache hit (<500ms)."""
 

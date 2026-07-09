@@ -1,0 +1,36 @@
+{
+  "summary": "P1 bug-fix verification — /api/plant/search duplicate rows FIXED. Added 9 new pytest cases for _merge_and_dedupe behaviour; total suite now 23 tests, all pass in 26s. Curcuma longa: 190 IMPPAT + 198 LOTUS raw upstream → 241 unique compounds after merge (120 IMPPAT-only, 63 LOTUS-only, 58 with source='IMPPAT+LOTUS' carrying both IMPHY* and LTS* IDs); zero duplicate InChIKey skeletons, zero duplicate case-insensitive names. Withania somnifera similarly de-duplicated. LOTUS wrappers (/api/lotus/simple, /api/lotus/molweight) also verified duplicate-free via _normalize_lotus. Regression suite (autocomplete, popular, cache <500ms, LOTUS wrappers, health, shape) still 100% green. Frontend: /plant-database → search 'Curcuma longa' via autocomplete Enter → row-count shows 241 (matches API len(compounds), NOT imppat+lotus sum), meta ribbon correctly displays 'IMPPAT 190 · LOTUS 198' raw counts; walked pages 1-3 (60 rows) — zero visually duplicated compound names.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "PlantDatabase page-size <select>", "issues": ["Pre-existing React warning '<span> cannot be a child of <option>' at page-size dropdown (Emergent dev-tools instrumentation). Not introduced by this iteration; flagged in iterations 1 & 2."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py _merge_and_dedupe: worst-case O(n) per upsert due to keys_of() being called twice and re-registration loop. For n≈400 acceptable, but if plant lists grow, consider a single-pass approach that maintains a canonical entry ID.",
+    "server.py _merge_and_dedupe: dedup keys mix ('k', <skeleton>) and ('n', <name_lc>) in the same dict. If two DIFFERENT compounds happen to share the same trivial name (e.g. 'unknown', 'mixture') they will incorrectly merge. Consider making the name-fallback conditional on absence of BOTH rows' InChIKey.",
+    "server.py plant_search: cache is keyed by full 'plant::<lc>::limit::…' — since dedup is now applied post-cache-population, existing cache entries created BEFORE the fix would still contain duplicates. Iteration prompt confirmed main agent purged plant_cache; a startup-time schema-version bump would future-proof this against silent cache poisoning.",
+    "server.py _normalize_lotus: calling _merge_and_dedupe(out, []) is idiomatically OK but slightly misleading; a dedicated `_dedupe_within(rows)` helper would be clearer for readers.",
+    "plants_col update on cache-hit (added in iter 2) bumps search_count — verified working (test_search_indexes_plant_into_autocomplete passes after 2nd call). No new comments there."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (added TestPlantSearchDedup with 7 cases + TestLotusDedup with 2 cases)"
+  ],
+  "success_rate": {"backend": "100% (23/23)", "frontend": "100% (dedup verified end-to-end)"},
+  "test_credentials": "N/A (public app, no auth)",
+  "seed_data_creation": "Plant cache purged pre-run (`plant_cache.delete_many({})` — 1 doc removed). Fresh Curcuma longa search recomputed: 241 unique compounds; then re-served <500ms from Mongo cache in cache-hit test.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 3 delta = dedup bug fix (server.py _merge_and_dedupe). New tests live under TestPlantSearchDedup and TestLotusDedup. Curcuma longa merge stats to reproduce: imppat_count=190, lotus_count=198, len(compounds)=241, source breakdown {IMPPAT: 120, LOTUS: 63, 'IMPPAT+LOTUS': 58}. All 23 tests run in ~26s on preview URL. Backend URL from /app/frontend/.env. If main agent adds more sources, extend _merge_and_dedupe key-set logic; current impl handles multi-source labels correctly (splits on '+' and sorted-unique join).",
+  "rca of the issue": "Root cause confirmed & fixed. Before: plant_search returned `list(enriched) + lotus_rows` — same compound appeared once from each source. After: `_merge_and_dedupe(enriched, lotus_rows)` merges on InChIKey connectivity-layer (first 14 chars of inchi_key.split('-')[0]) with case-insensitive compound_name fallback. When BOTH sources contain the same compound, a single row survives with source='IMPPAT+LOTUS' and BOTH identifiers preserved; back-fills SMILES/InChI/InChIKey/formula/MW/plant_part/reference from whichever source populated them. Also _normalize_lotus deduplicates within-LOTUS results via _merge_and_dedupe(out, []) so LOTUS wrappers can't re-introduce dups. Verified with 9 regression tests + Playwright UI check."
+}

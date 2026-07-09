@@ -210,6 +210,77 @@ async def _enrich_imppat_row(
     return row
 
 
+def _merge_and_dedupe(imppat_rows: List[dict], lotus_rows: List[dict]) -> List[dict]:
+    """
+    Merge IMPPAT + LOTUS compound rows, deduplicating by InChIKey skeleton
+    (first 14 chars, i.e. connectivity layer). Falls back to case-insensitive
+    compound name when InChIKey is unavailable. When the same compound is
+    present in both sources, keeps a single merged row that carries both
+    `imppat_id` and `lotus_id`, and back-fills any missing fields.
+    """
+    merged: dict[tuple, dict] = {}
+    order: list[tuple] = []
+
+    def keys_of(r: dict) -> list[tuple]:
+        ks = []
+        ik = (r.get("inchi_key") or "").strip()
+        if ik:
+            ks.append(("k", ik.split("-")[0]))  # connectivity layer only
+        name = (r.get("compound_name") or "").strip().lower()
+        if name:
+            ks.append(("n", name))
+        return ks
+
+    def upsert(row: dict):
+        ks = keys_of(row)
+        if not ks:
+            return
+        # If ANY key already exists, merge into that entry
+        for k in ks:
+            if k in merged:
+                existing = merged[k]
+                # Combine source labels
+                src_new = row.get("source")
+                src_old = existing.get("source")
+                if src_new and src_old and src_new != src_old:
+                    parts = sorted(set(src_old.split("+")) | {src_new})
+                    existing["source"] = "+".join(parts)
+                # Carry across identifiers
+                for id_field in ("imppat_id", "lotus_id"):
+                    if not existing.get(id_field) and row.get(id_field):
+                        existing[id_field] = row[id_field]
+                # Back-fill data fields
+                for f in (
+                    "smiles",
+                    "inchi",
+                    "inchi_key",
+                    "molecular_formula",
+                    "molecular_weight",
+                    "plant_part",
+                    "reference",
+                ):
+                    if not existing.get(f) and row.get(f):
+                        existing[f] = row[f]
+                # Register all keys for future look-ups
+                for k2 in keys_of(existing):
+                    if k2 not in merged:
+                        merged[k2] = existing
+                return
+        # New compound — insert under all its keys
+        entry = dict(row)
+        for k in ks:
+            merged[k] = entry
+        order.append(ks[0])
+
+    for r in imppat_rows:
+        upsert(r)
+    for r in lotus_rows:
+        upsert(r)
+
+    # order references the first key of each unique entry
+    return [merged[k] for k in order]
+
+
 @api_router.get("/plant/search")
 async def plant_search(
     plant: str = Query(..., min_length=2),
@@ -281,12 +352,13 @@ async def plant_search(
         except Exception as e:
             logging.warning(f"LOTUS simple failed: {e}")
 
+    compounds = _merge_and_dedupe(list(enriched), lotus_rows)
     result = {
         "plant": plant,
         "imppat_count": len(enriched),
         "lotus_count": len(lotus_rows),
         "total_listing": len(listing),
-        "compounds": enriched + lotus_rows,
+        "compounds": compounds,
     }
 
     # Persist cache in Mongo with TTL and index the plant name for autocomplete
@@ -337,7 +409,7 @@ def _normalize_lotus(nps: list) -> List[dict]:
                 "molecular_weight": np_.get("molecular_weight"),
             }
         )
-    return out
+    return _merge_and_dedupe(out, [])
 
 
 @api_router.get("/lotus/simple")
