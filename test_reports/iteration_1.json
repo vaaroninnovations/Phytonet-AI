@@ -1,0 +1,45 @@
+{
+  "summary": "Full backend + frontend testing pass for Dr. / Network Pharmacology app. All 8 pytest backend tests passed (health, plant search, LOTUS simple/exact/substructure/molweight, validation 422s). Frontend E2E via Playwright verified home hero, 8 feature cards, CTA navigation, plant-database page with 5 mode tabs, 8 output-field checkboxes, live IMPPAT+LOTUS search (388 compounds for 'Curcuma longa': 190 IMPPAT + 198 LOTUS in ~39s), results table with sort, filter (12 rows for 'curcumin'), pagination (1/20 pages), column toggling, and CSV export download. No critical issues found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/plant/search", "issue": "In-memory _cache dict grows unbounded (no eviction). Not a bug, but a memory leak risk over time; consider TTL or LRU cap."},
+      {"endpoint": "GET /api/plant/search", "issue": "want_structure/want_physchem accept the literal strings 'false'/'False' but FastAPI's bool parsing accepts only lowercase 'false'/'true'/'1'/'0'. Frontend passes booleans as query params via axios (serialized to 'true'/'false') — works, just worth documenting."},
+      {"endpoint": "All LOTUS wrappers", "issue": "On upstream 502, backend surfaces 502 to client immediately. Consider a single internal retry (currently the frontend gets no retry either). Not blocking — endpoints were reachable during this run."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "console", "issues": ["React hydration warning: '<span> cannot be a child of <option>' — likely an <option> that contains icons/spans somewhere. Non-fatal, but should be cleaned up."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Investigate React hydration warning '<span> cannot be a child of <option>' — check any <select><option>...</option></select> that renders JSX children (icons/spans) inside <option>.",
+    "(Optional) Add TTL / size cap to backend _cache dict to prevent unbounded memory growth in long-lived processes.",
+    "(Optional) Add one internal retry on 502 in LOTUS wrapper endpoints for resilience."
+  ],
+  "critical_code_review_comments": [
+    "server.py: _cache is unbounded — fine for demo, risky in production.",
+    "server.py: LOTUS wrappers create a new httpx.AsyncClient per request — acceptable but a module-level client with connection pooling would be more efficient.",
+    "PlantDatabase.jsx is 755 lines — consider extracting SearchInput/NumberField/ExportButton/CellValue/LoadingRows/EmptyState into separate files for maintainability (>700 line guideline).",
+    "PlantDatabase.jsx: `mode-molweight` submit is via `mw-search` button and does not honour Enter-key like other modes; minor UX inconsistency.",
+    "PlantDatabase.jsx: export uses `filtered` (respects search filter) but ignores toggled-off fields for CSV/XLSX/JSON (exportFields excludes 'structure' only). Behaviour is reasonable but may surprise users who expected 'export current view'."
+  ],
+  "updated_files": [
+    "/app/backend/tests/__init__.py (new)",
+    "/app/backend/tests/backend_test.py (new)"
+  ],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "100% of critical flows"},
+  "test_credentials": "N/A (public app, no auth)",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend pytest lives at /app/backend/tests/backend_test.py and completes in ~12s (uses live IMPPAT + LOTUS). Limit=5 was used for /api/plant/search to keep runs fast; larger limits can take 20-40s. LOTUS occasionally 502s — helper _retry_get retries once. Frontend live URL comes from /app/frontend/.env REACT_APP_BACKEND_URL. Plant search for 'Curcuma longa' with default limit=200 took ~39s end-to-end in the browser and returned 388 compounds; tests should keep timeout >= 60s for full plant flow."
+}
