@@ -186,3 +186,127 @@ class TestLotusMolweight:
         assert r.status_code == 200, r.text
         data = r.json()
         assert isinstance(data.get("compounds"), list)
+
+
+# ---------------------------------------------------------------------------
+# Plants autocomplete + popular + Mongo cache
+# ---------------------------------------------------------------------------
+class TestPlantsAutocomplete:
+    def test_empty_query_returns_seeded_matches(self, api):
+        """q empty => popular/seeded plants list, at least 5 items."""
+        r = api.get(
+            f"{BASE_URL}/api/plants/autocomplete",
+            params={"q": "", "limit": 6},
+            timeout=15,
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert "matches" in data
+        assert isinstance(data["matches"], list)
+        assert len(data["matches"]) >= 5, (
+            f"Expected >=5 seeded plants, got {len(data['matches'])}"
+        )
+        # Each match has required fields
+        for m in data["matches"]:
+            assert "name" in m
+            assert "search_count" in m
+            assert "imppat_hits" in m
+            assert isinstance(m["name"], str)
+            assert isinstance(m["search_count"], int)
+
+    def test_prefix_cur_matches_curcuma(self, api):
+        """q=cur should return Curcuma entries; prefix matches ranked first."""
+        r = api.get(
+            f"{BASE_URL}/api/plants/autocomplete",
+            params={"q": "cur", "limit": 8},
+            timeout=15,
+        )
+        assert r.status_code == 200
+        data = r.json()
+        matches = data["matches"]
+        assert len(matches) > 0
+        names = [m["name"] for m in matches]
+        # At least one Curcuma-ish name
+        assert any("cur" in n.lower() for n in names), f"No 'cur' match: {names}"
+        # Prefix ranked first: first result should start with 'cur' (case-insensitive)
+        assert names[0].lower().startswith("cur"), (
+            f"First match should be prefix match, got '{names[0]}' in {names}"
+        )
+
+    def test_prefix_withan_matches_withania(self, api):
+        r = api.get(
+            f"{BASE_URL}/api/plants/autocomplete",
+            params={"q": "withan", "limit": 5},
+            timeout=15,
+        )
+        assert r.status_code == 200
+        names = [m["name"] for m in r.json()["matches"]]
+        assert any("Withania somnifera" == n for n in names), (
+            f"'Withania somnifera' not in {names}"
+        )
+
+
+class TestPlantsPopular:
+    def test_popular_valid_json(self, api):
+        r = api.get(
+            f"{BASE_URL}/api/plants/popular",
+            params={"limit": 5},
+            timeout=15,
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert "plants" in data
+        assert isinstance(data["plants"], list)
+        # If any items exist, they must have search_count >= 1
+        for p in data["plants"]:
+            assert "name" in p
+            assert p.get("search_count", 0) >= 1
+
+
+class TestPlantSearchCache:
+    """Second call for same plant should be a Mongo cache hit (<500ms)."""
+
+    def test_curcuma_longa_cached_second_call(self, api):
+        params = {"plant": "Curcuma longa", "limit": 3}
+        # First call — may populate the cache (could already be cached from prior test)
+        t0 = time.time()
+        r1 = api.get(f"{BASE_URL}/api/plant/search", params=params, timeout=90)
+        e1 = time.time() - t0
+        assert r1.status_code == 200
+        d1 = r1.json()
+        assert d1.get("imppat_count", 0) > 0
+
+        # Second call — must be cache hit
+        t1 = time.time()
+        r2 = api.get(f"{BASE_URL}/api/plant/search", params=params, timeout=30)
+        e2 = time.time() - t1
+        assert r2.status_code == 200
+        d2 = r2.json()
+        assert d1 == d2, "Cached payload differs from initial"
+        assert e2 < 0.5, (
+            f"Second (cached) call took {e2:.3f}s (>500ms). "
+            f"First call: {e1:.3f}s"
+        )
+
+    def test_search_indexes_plant_into_autocomplete(self, api):
+        """After a successful plant search, that plant is indexed and searchable."""
+        # Trigger a search (may be cached from previous test, that's fine — index is set on first hit)
+        api.get(
+            f"{BASE_URL}/api/plant/search",
+            params={"plant": "Curcuma longa", "limit": 3},
+            timeout=90,
+        )
+        # Curcuma longa should now show up in autocomplete for 'curcuma'
+        r = api.get(
+            f"{BASE_URL}/api/plants/autocomplete",
+            params={"q": "curcuma longa", "limit": 5},
+            timeout=15,
+        )
+        assert r.status_code == 200
+        matches = r.json()["matches"]
+        target = next(
+            (m for m in matches if m["name"].lower() == "curcuma longa"), None
+        )
+        assert target is not None, f"Curcuma longa not indexed: {matches}"
+        assert target["search_count"] >= 1
+        assert target["imppat_hits"] >= 1

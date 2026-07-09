@@ -12,6 +12,7 @@ import {
   exportJSON,
 } from "@/lib/exporters";
 import StructureCanvas from "@/components/StructureCanvas";
+import PlantAutocomplete from "@/components/PlantAutocomplete";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
@@ -141,17 +142,19 @@ export default function PlantDatabase() {
     }
   };
 
-  const searchByMode = () => {
+  const searchByMode = (plantOverride) => {
     if (mode === "plant") {
-      if (!plant.trim()) return toast.error("Enter a plant name");
+      const p = (typeof plantOverride === "string" ? plantOverride : plant).trim();
+      if (!p) return toast.error("Enter a plant name");
+      if (typeof plantOverride === "string") setPlant(p);
       return runSearch(
         () =>
-          searchPlant(plant.trim(), {
+          searchPlant(p, {
             limit: 200,
             wantStructure: selectedFields.smiles || selectedFields.inchi || selectedFields.inchi_key || selectedFields.structure,
             wantPhyschem: selectedFields.molecular_formula || selectedFields.molecular_weight,
           }),
-        `Plant "${plant.trim()}"`
+        `Plant "${p}"`
       );
     }
     if (mode === "simple") {
@@ -253,14 +256,12 @@ export default function PlantDatabase() {
             </TabsList>
 
             <TabsContent value="plant">
-              <SearchInput
-                testid="plant-input"
-                icon={<Leaf className="h-5 w-5 text-[#5139ED]" />}
-                placeholder="e.g. Curcuma longa, Withania somnifera, Ocimum sanctum"
+              <PlantAutocomplete
                 value={plant}
                 onChange={setPlant}
-                onSubmit={searchByMode}
+                onSubmit={(name) => searchByMode(name)}
                 loading={loading}
+                placeholder="e.g. Curcuma longa, Withania somnifera, Ocimum sanctum"
               />
             </TabsContent>
 

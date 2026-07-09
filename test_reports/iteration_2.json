@@ -1,0 +1,43 @@
+{
+  "summary": "P1 iteration — Mongo cache + plant autocomplete — verified end-to-end. Extended pytest to 14 tests (all pass, 17.85s): existing 8 kept + 6 new for /api/plants/autocomplete (empty→seeded, prefix 'cur' returns Curcuma with prefix ranked first, 'withan' returns Withania somnifera), /api/plants/popular JSON shape, /api/plant/search Mongo cache-hit (<500ms on 2nd call, verified payload equality), and auto-indexing (Curcuma longa gets search_count>=1 and imppat_hits>=1 after successful search). Frontend Playwright confirmed: empty-focus dropdown shows 6 popular plants (Curcuma longa first with '5 hits' badge), typing 'cur' debounces and returns 6 matches all starting with Curc/Curu (prefix ranking OK), ArrowDown+Enter selects highlighted option and triggers search → 388 compounds for Curcuma longa, click-select populates input and triggers search → 280 compounds for Withania somnifera, Escape closes dropdown, manual Search button still works.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/plants/autocomplete", "issue": "MongoDB regex used with $regex+re.compile mixes Python re flags with Mongo — works because re.escape(q_lc) contains no metachars and the plant strings are ASCII, but for robustness prefer passing regex-string with $options: 'i' or storing/querying on name_lc (already lowercased) without IGNORECASE. Non-blocking."},
+      {"endpoint": "/api/plant/search", "issue": "Cache key excludes URL-decoded whitespace variants; 'Curcuma  longa' (two spaces) is a separate cache entry from 'Curcuma longa'. Consider normalising whitespace before hashing."},
+      {"endpoint": "/api/plant/search", "issue": "Plant is auto-indexed only when enriched IMPPAT rows exist. Correct behaviour, but note: if user searches a valid LOTUS-only plant, it won't populate autocomplete (LOTUS-only hits are silently dropped from the plants index)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "console (any page rendering PlantDatabase)", "issues": ["Pre-existing React hydration warning: '<span> cannot be a child of <option>' at PlantDatabase.jsx line 594-597 (page-size <select>). Caused by Emergent dev-tools instrumentation injecting a <span> inside <option>. Same warning was flagged in iteration 1; not introduced by this iteration."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Optional) Normalise plant name whitespace before cache key hashing in /api/plant/search.",
+    "(Optional, carry-over from iter1) Suppress or fix the '<span> cannot be a child of <option>' hydration warning on the page-size dropdown."
+  ],
+  "critical_code_review_comments": [
+    "server.py plant_search: cached path (line 227) returns cached['data'] but does NOT bump search_count in plants_col — analytics silently miss repeat searches. If popularity ordering matters, consider incrementing search_count on cache hits too.",
+    "server.py plant_search: on cache-hit the 'plants' index is not refreshed either — first cached plant will show search_count=1 forever even if 1,000 users query it. Minor for MVP but violates the 'popular = most searched' contract.",
+    "server.py startup seed: uses count_documents({'seeded': True}) which is O(n) — cheap now but replace with a 'seed_marker' document + find_one for scale.",
+    "PlantAutocomplete.jsx: no ARIA roles (role='combobox'/'listbox'/'option') — accessibility gap for keyboard/screen-reader users. Purely enhancement.",
+    "PlantAutocomplete.jsx: debounce 180ms is fine; consider aborting in-flight requests with an AbortController to avoid race conditions where a slow response for 'cur' arrives after a fast one for 'curc'."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (extended with 6 tests: TestPlantsAutocomplete x3, TestPlantsPopular x1, TestPlantSearchCache x2)"
+  ],
+  "success_rate": {"backend": "100% (14/14)", "frontend": "100% of requested autocomplete + cache flows"},
+  "test_credentials": "N/A (public app, no auth)",
+  "seed_data_creation": "266 plants auto-seeded via startup handler on first boot (verified: TestPlantsAutocomplete.test_empty_query_returns_seeded_matches returns 6 seeded plants incl. Abutilon indicum, Acacia arabica/catechu/nilotica, Acalypha indica).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 2 delta = Mongo cache + autocomplete. Backend tests at /app/backend/tests/backend_test.py; total runtime ~18s. Cache-hit test compares wall time (<500ms) — depends on network latency to preview URL; if latency spikes the assertion may flake, current runs measured 0.15-0.3s. Curcuma longa returns 388 compounds (190 IMPPAT + 198 LOTUS) on first call. NOTE: 'Ocimum sanctum' returns 0 compounds from IMPPAT — accepted name in IMPPAT is 'Ocimum tenuiflorum'; use that if you need a positive Ocimum test. The autocomplete DOES contain 'Ocimum tenuiflorum' and 'Ocimum sanctum' both — the seed list has both aliases.",
+  "rca of the issue": "No blocking issues found. The apparent 'Ocimum sanctum returns 0 compounds' during Playwright manual-Search test is not a bug — IMPPAT indexes it under its accepted binomial Ocimum tenuiflorum. The manual-Search integration itself works: request fired, response parsed, results panel rendered '0 compounds for Ocimum sanctum · IMPPAT 0 · LOTUS 0' — meta object populated correctly."
+}

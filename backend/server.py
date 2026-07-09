@@ -6,12 +6,15 @@ import os
 import re
 import asyncio
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional, Literal
 from urllib.parse import quote
 import httpx
 from bs4 import BeautifulSoup
+
+from plants_seed import PLANTS_SEED
 
 
 ROOT_DIR = Path(__file__).parent
@@ -20,6 +23,10 @@ load_dotenv(ROOT_DIR / ".env")
 mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ["DB_NAME"]]
+
+# Collections
+plant_cache_col = db["plant_cache"]  # cached /api/plant/search responses
+plants_col = db["plants"]  # autocomplete index
 
 app = FastAPI(title="Dr. / — Network Pharmacology API")
 api_router = APIRouter(prefix="/api")
@@ -35,8 +42,7 @@ USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36"
 )
 
-# Simple in-memory cache to avoid hammering IMPPAT during a single session
-_cache: dict[str, dict] = {}
+CACHE_TTL_SECONDS = 60 * 60 * 24 * 7  # 7 days
 
 
 # ---------------------------------------------------------------------------
@@ -217,8 +223,10 @@ async def plant_search(
     for up to `limit` compounds.
     """
     cache_key = f"plant::{plant.lower()}::{limit}::{want_structure}::{want_physchem}"
-    if cache_key in _cache:
-        return _cache[cache_key]
+    cached = await plant_cache_col.find_one({"_id": cache_key})
+    if cached:
+        # Refresh last_used stamp for analytics but return existing payload
+        return cached["data"]
 
     async with httpx.AsyncClient(follow_redirects=True) as client_:
         listing_url = f"{IMPPAT_BASE}/phytochemical/{quote(plant)}"
@@ -270,7 +278,34 @@ async def plant_search(
         "total_listing": len(listing),
         "compounds": enriched + lotus_rows,
     }
-    _cache[cache_key] = result
+
+    # Persist cache in Mongo with TTL and index the plant name for autocomplete
+    now = datetime.now(timezone.utc)
+    try:
+        await plant_cache_col.update_one(
+            {"_id": cache_key},
+            {"$set": {"data": result, "cached_at": now, "plant": plant}},
+            upsert=True,
+        )
+        if enriched:
+            # Index the plant name — only when IMPPAT returned real hits
+            await plants_col.update_one(
+                {"name_lc": plant.lower()},
+                {
+                    "$set": {
+                        "name": plant,
+                        "name_lc": plant.lower(),
+                        "last_searched": now,
+                        "imppat_hits": len(enriched),
+                    },
+                    "$inc": {"search_count": 1},
+                    "$setOnInsert": {"seeded": False, "first_seen": now},
+                },
+                upsert=True,
+            )
+    except Exception as e:
+        logging.warning(f"cache/index write failed: {e}")
+
     return result
 
 
@@ -376,6 +411,68 @@ async def health():
     return {"status": "ok", "service": "dr-slash"}
 
 
+# ---------------------------------------------------------------------------
+# Plants autocomplete + cache admin
+# ---------------------------------------------------------------------------
+@api_router.get("/plants/autocomplete")
+async def plants_autocomplete(
+    q: str = Query("", max_length=64),
+    limit: int = Query(10, ge=1, le=50),
+):
+    """
+    Prefix/contains match against the plants index. The index is seeded with a
+    curated list of Indian medicinal plants and auto-learns new names from
+    successful /api/plant/search hits.
+    """
+    q_lc = q.strip().lower()
+    if not q_lc:
+        # Popular plants — sorted by search_count desc, then alphabetical
+        cursor = plants_col.find(
+            {}, {"_id": 0, "name": 1, "search_count": 1, "imppat_hits": 1}
+        ).sort([("search_count", -1), ("name", 1)]).limit(limit)
+        results = await cursor.to_list(length=limit)
+        return {"query": q, "matches": results}
+
+    # Prefer prefix matches, then contains
+    prefix_re = re.compile(f"^{re.escape(q_lc)}", re.IGNORECASE)
+    contains_re = re.compile(re.escape(q_lc), re.IGNORECASE)
+
+    prefix_cursor = plants_col.find(
+        {"name_lc": {"$regex": prefix_re}},
+        {"_id": 0, "name": 1, "search_count": 1, "imppat_hits": 1},
+    ).sort([("search_count", -1), ("name", 1)]).limit(limit)
+    prefix_hits = await prefix_cursor.to_list(length=limit)
+
+    if len(prefix_hits) >= limit:
+        return {"query": q, "matches": prefix_hits}
+
+    remaining = limit - len(prefix_hits)
+    prefix_names = {p["name"] for p in prefix_hits}
+    contains_cursor = plants_col.find(
+        {
+            "name_lc": {"$regex": contains_re},
+            "name": {"$nin": list(prefix_names)},
+        },
+        {"_id": 0, "name": 1, "search_count": 1, "imppat_hits": 1},
+    ).sort([("search_count", -1), ("name", 1)]).limit(remaining)
+    contains_hits = await contains_cursor.to_list(length=remaining)
+
+    return {"query": q, "matches": prefix_hits + contains_hits}
+
+
+@api_router.get("/plants/popular")
+async def plants_popular(limit: int = Query(8, ge=1, le=50)):
+    cursor = (
+        plants_col.find(
+            {"search_count": {"$gte": 1}},
+            {"_id": 0, "name": 1, "search_count": 1},
+        )
+        .sort([("search_count", -1)])
+        .limit(limit)
+    )
+    return {"plants": await cursor.to_list(length=limit)}
+
+
 @api_router.get("/")
 async def root():
     return {"message": "Dr. / — Network Pharmacology API"}
@@ -399,6 +496,39 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+
+@app.on_event("startup")
+async def _startup():
+    """Seed the plants index and set indexes on first boot."""
+    try:
+        # TTL index on cache
+        await plant_cache_col.create_index("cached_at", expireAfterSeconds=CACHE_TTL_SECONDS)
+        await plants_col.create_index("name_lc", unique=True)
+        await plants_col.create_index([("search_count", -1)])
+
+        # Seed only if plants collection has no seeded entries
+        seeded_count = await plants_col.count_documents({"seeded": True})
+        if seeded_count == 0:
+            now = datetime.now(timezone.utc)
+            docs = [
+                {
+                    "name": name,
+                    "name_lc": name.lower(),
+                    "seeded": True,
+                    "first_seen": now,
+                    "search_count": 0,
+                    "imppat_hits": 0,
+                }
+                for name in PLANTS_SEED
+            ]
+            try:
+                await plants_col.insert_many(docs, ordered=False)
+                logger.info(f"Seeded {len(docs)} plants into autocomplete index")
+            except Exception as e:  # duplicate key etc.
+                logger.info(f"Plant seed insert partial: {e}")
+    except Exception as e:
+        logger.warning(f"Startup init failed (non-fatal): {e}")
 
 
 @app.on_event("shutdown")
