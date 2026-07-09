@@ -225,7 +225,17 @@ async def plant_search(
     cache_key = f"plant::{plant.lower()}::{limit}::{want_structure}::{want_physchem}"
     cached = await plant_cache_col.find_one({"_id": cache_key})
     if cached:
-        # Refresh last_used stamp for analytics but return existing payload
+        # Bump popularity counter so cache hits still reflect real search interest
+        try:
+            await plants_col.update_one(
+                {"name_lc": plant.lower()},
+                {
+                    "$set": {"last_searched": datetime.now(timezone.utc)},
+                    "$inc": {"search_count": 1},
+                },
+            )
+        except Exception:
+            pass
         return cached["data"]
 
     async with httpx.AsyncClient(follow_redirects=True) as client_:
