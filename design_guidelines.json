@@ -1,0 +1,135 @@
+{
+  "typography": {
+    "font_families": {
+      "display": "Sora, sans-serif",
+      "headings": "Plus Jakarta Sans, sans-serif",
+      "body": "Inter, sans-serif",
+      "data": "Inter, sans-serif"
+    },
+    "scale": {
+      "h1": "text-5xl sm:text-6xl tracking-tighter font-extrabold text-slate-900 font-['Sora']",
+      "h2": "text-3xl sm:text-4xl tracking-tight font-bold text-slate-900 font-['Plus_Jakarta_Sans']",
+      "h3": "text-xl sm:text-2xl font-semibold text-slate-800 font-['Plus_Jakarta_Sans']",
+      "body": "text-base leading-relaxed text-slate-600 font-['Inter']",
+      "small": "text-sm text-slate-500 font-['Inter']",
+      "overline": "text-xs font-bold uppercase tracking-[0.2em] text-[#5139ED] font-['Plus_Jakarta_Sans']"
+    }
+  },
+  "colors": {
+    "primary": {
+      "base": "#5139ED",
+      "light": "#8139ED",
+      "royal": "#395AED",
+      "hover": "#4228C4",
+      "active": "#351E9B"
+    },
+    "neutrals": {
+      "white": "#FFFFFF",
+      "slate_50": "#F8FAFC",
+      "slate_100": "#F1F5F9",
+      "slate_200": "#E2E8F0",
+      "slate_800": "#1E293B",
+      "slate_900": "#0F172A"
+    },
+    "background": "#FFFFFF",
+    "theme_logic": "Strictly light mode per problem statement requirements."
+  },
+  "visual_enhancers": {
+    "glassmorphism": {
+      "surface": "bg-white/70",
+      "blur": "backdrop-blur-xl",
+      "border": "border border-slate-200/50",
+      "shadow": "shadow-[0_8px_32px_rgba(0,0,0,0.04)]",
+      "rule": "Only use over subtle background elements or faint colored blobs. Never fully transparent without blur."
+    },
+    "shadows": {
+      "subtle": "shadow-sm",
+      "card": "shadow-[0_2px_20px_rgb(0,0,0,0.04)]",
+      "hover": "shadow-[0_10px_40px_rgb(81,57,237,0.12)]"
+    },
+    "radii": {
+      "card": "rounded-2xl",
+      "button": "rounded-full",
+      "input": "rounded-lg",
+      "badge": "rounded-full"
+    },
+    "motifs": {
+      "description": "Scientific/biomedical visual motifs (molecule graphs, network nodes). Use abstract intersecting lines or faint dotted grids in the background, specifically tinted with #5139ED at very low opacity (e.g. 5%). Avoid generic AI-slop."
+    }
+  },
+  "grids_and_layouts": {
+    "hero": {
+      "composition": "Centered layout. Large Sora H1 headline. Subheading directly beneath. Generous spacing. Action area containing the primary 'Plant Database' CTA. Background should feature a subtle blue abstract network (opacity < 10%)."
+    },
+    "features_grid": {
+      "composition": "Bento style or standard 4-column grid (grid-cols-1 md:grid-cols-2 lg:grid-cols-4) with generous gap-6 or gap-8. Cards must be glassmorphic with white background. 1 active card, 7 'Coming soon' cards visually distinct (dimmed or locked state)."
+    },
+    "plant_database": {
+      "composition": "Search tool layout. Top section: large centered search bar with mode-switcher tabs (Plant name / LOTUS exact / LOTUS simple / etc.) above it. Filter section: Checkboxes for selectable output fields inline or as a collapsible sidebar. Main section: Full-width results table."
+    },
+    "spacing": "Generous. py-24 or py-32 for sections. gap-8 for grids. p-8 for cards. Containers with borders must have internal padding to prevent collision."
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-[#5139ED] hover:bg-[#4228C4] text-white rounded-full px-8 py-3 font-semibold transition-transform duration-200 ease-out shadow-md hover:shadow-lg hover:-translate-y-0.5",
+      "secondary": "bg-white text-[#5139ED] border border-[#5139ED]/20 hover:bg-slate-50 rounded-full px-8 py-3 font-semibold transition-colors duration-200"
+    },
+    "cards": {
+      "base": "bg-white border border-slate-100 shadow-[0_2px_20px_rgb(0,0,0,0.04)] rounded-2xl p-6 transition-all duration-300 hover:shadow-[0_10px_40px_rgb(81,57,237,0.12)] hover:-translate-y-1"
+    },
+    "search_bar": {
+      "base": "w-full max-w-3xl flex items-center bg-white border-2 border-slate-200 focus-within:border-[#5139ED] focus-within:ring-4 focus-within:ring-[#5139ED]/10 rounded-full p-2 pl-6 shadow-sm transition-all duration-200"
+    },
+    "table": {
+      "header": "bg-slate-50/80 text-slate-600 font-semibold text-xs uppercase tracking-[0.05em] py-4 px-6 border-y border-slate-200",
+      "row": "border-b border-slate-100 hover:bg-[#5139ED]/[0.02] transition-colors",
+      "cell": "py-4 px-6 text-sm text-slate-700 align-middle"
+    }
+  },
+  "motion": {
+    "hover": "transition-all duration-300 ease-out",
+    "entrance": "Use framer-motion for staggered fade-in up (y: 20, opacity: 0 -> y: 0, opacity: 1) on feature cards.",
+    "interactions": "Micro-animations on buttons and checkboxes (scale 0.95 on tap)."
+  },
+  "accessibility": {
+    "contrast": "Ensure #5139ED on white exceeds 4.5:1. Use text-slate-900 for main headings and text-slate-700 for body.",
+    "focus": "focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5139ED] focus-visible:ring-offset-2",
+    "testing": "All interactive elements MUST include data-testid attributes."
+  },
+  "image_urls": [
+    {
+      "url": "https://images.unsplash.com/photo-1644325349124-d1756b79dd42?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzF8MHwxfHNlYXJjaHwzfHxhYnN0cmFjdCUyMGRhdGElMjBuZXR3b3JrfGVufDB8fHx8MTc4MzYyNDM0OXww&ixlib=rb-4.1.0&q=85",
+      "description": "Abstract blue background with lines and dots. Use as a very subtle, low-opacity (5-10%) background behind the hero or global wrapper.",
+      "category": "Hero Background"
+    },
+    {
+      "url": "https://images.unsplash.com/photo-1656331797721-b593b8f00297?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA0MTJ8MHwxfHNlYXJjaHwxfHxtb2xlY3VsYXIlMjBuZXR3b3JrfGVufDB8fHx8MTc4MzYyNDM0OXww&ixlib=rb-4.1.0&q=85",
+      "description": "White molecular structure 3D render. Use as a decorative accent image for the 'Molecular Dynamics' or 'Compound Extractor' feature cards.",
+      "category": "Feature Cards Motif"
+    }
+  ],
+  "instructions_to_main_agent": [
+    "Use pure HTML + Tailwind for marketing layouts (Hero, Features Grid). Avoid rigid structural Shadcn components here.",
+    "Use Shadcn UI components for complex logic (Tables, Tabs, Checkboxes, Pagination) but customize their styling heavily to match these guidelines.",
+    "For the 2D compound structures, integrate SmilesDrawer to render the SMILES strings inside the table cells. Ensure the canvas size is appropriate.",
+    "Implement the mode-switcher as Shadcn Tabs right above the main search bar in the Plant Database page.",
+    "Ensure 'Coming Soon' feature cards are visually distinct (e.g. grayscale, locked icon, opacity 60%) and non-clickable.",
+    "Adhere exactly to the color palette. No extraneous colors.",
+    "Create a clean, clinical yet modern vibe. Do NOT use heavy dark mode gradients. Stick to the white background."
+  ],
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": [
+    "You tend to converge toward generic, 'on distribution' outputs. In frontend design, this creates what users call the 'AI slop' aesthetic. Avoid this: make creative, distinctive frontends that surprise and delight.",
+    "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients.",
+    "Don't make generic centered layouts, simplistic gradients, and uniform styling.",
+    "Create depth through layered design elements with z-index hierarchy.",
+    "Use glass-morphism effects with backdrop filters (12-24px blur).",
+    "You MUST NOT apply universal transition. Eg: `transition: all`. Always add transitions for specific interactive elements excluding transforms.",
+    "You MUST NOT center align the app container, ie do not add `.App { text-align: center; }` in the css file. This disrupts the human natural reading flow of text.",
+    "Always use modern button styles like pill-shaped, or sharp button with interaction animations & color relevant to the app style.",
+    "NEVER: use AI assistant Emoji characters like 🤖🧠💭💡🔮🎯 etc for icons. Use standard professional icons (lucide-react).",
+    "Every interaction needs micro-animations - hover states, transitions, parallax effects, and entrance animations. Static = dead.",
+    "Use 2-3x more spacing than feels comfortable. Cramped designs look cheap.",
+    "Subtle grain textures, noise overlays, custom cursors, selection states, and loading animations: separates good from extraordinary.",
+    "Use sonner for toasts. Sonner component are located in /app/src/components/ui/sonner.tsx."
+  ]
+}
