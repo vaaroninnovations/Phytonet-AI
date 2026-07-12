@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 4 — Compound-Selection workflow + Drug-Likeness routing verified end-to-end. Backend regression: all 23 pre-existing pytests still pass (12.22s, /api/plant/search shape unchanged: imppat_count, lotus_count, compounds[]). Frontend Playwright: all 13 acceptance criteria PASS on preview URL for Withania somnifera (164 unique compounds, IMPPAT 36 / LOTUS 86 / IMPPAT+LOTUS 42 = 164). Verified: (1) header select-all + per-row checkboxes render with correct data-testids; (2) selection-count 'Selected compounds: N / M' updates on every toggle; (3) proceed-drug-likeness DISABLED at 0 and ENABLED at ≥1 with proceed-count matching selection-count; (4) results-search 'c28' narrows to 77 rows case-insensitive across name/formula/MW/source while preserving 3 prior selections; (5) source chips source-filter-{all,IMPPAT,LOTUS,IMPPAT+LOTUS} render with counts, active chip filled #5139ED, selection state persists across chip toggles; (6) 'Compound Name' header sort reverses direction on second click (asc:'(-)-Anaferine' → desc:'withastramonolide'); (7) selection persists across page-next and back through source-filter cycles; (8) confirm-dialog opens with count text, confirm-modify closes & keeps user on /plant-database, confirm-continue navigates to /drug-likeness; (9) drug-likeness-page shows stat-selected=3, stat-source='Withania somnifera', selected-list renders 3 items with structure canvas + formula + MW + source badge; (10) reload /plant-database keeps localStorage['drSlash.selection.v1'] and direct-nav /drug-likeness still shows 3 selected; (11) empty-state 'No compounds match this filter.' renders for zero-match query while proceed-bar stays hidden pre-search on fresh context; (12) design compliant — white bg, primary #5139ED/#8139ED/#395AED accents only, sticky header confirmed inside max-h-[640px] scroll container; (13) no NEW console errors — only the pre-existing benign '<span> cannot be a child of <option>' warning at the page-size <select> (already flagged in iterations 1–3 and explicitly excluded from this iteration).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "PlantDatabase page-size <select>", "issues": ["Pre-existing hydration warning '<span> cannot be a child of <option>' persists at the '25 / page' dropdown. Non-blocking; caller explicitly asked to ignore for this iteration."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml",
+    "/app/frontend/tests/selection_workflow.spec.js"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "SelectionContext.jsx compoundKey() falls back to lowercased trimmed compound_name when no ID/InChIKey exists. Given the backend dedup uses InChIKey-skeleton + name-lowercase fallback, this is safe today; however if two IMPPAT-only rows lack both imppat_id AND inchi_key AND share a trivial name (e.g. 'Unknown'), they would collide client-side into a single selection entry. Consider hashing (compound_name + molecular_formula + molecular_weight) as the fallback key.",
+    "PlantDatabase.jsx setMany(compounds, false) is used for 'Clear' (bottom bar) — this clears only compounds currently loaded. If localStorage held selections from a previous plant search (different compounds), those would remain silently stored and re-surface on the next reload. Consider offering an explicit 'Clear all persisted selections' action (or clear + persist on new search start).",
+    "PlantDatabase.jsx useEffect on [compounds] resets sourceFilter/query/sortKey/page. Good for UX, but silently wipes user's sort choice if the same-plant is re-searched (cache-hit re-triggers state). Minor.",
+    "DrugLikeness.jsx renders StructureCanvas for up to 30 compounds inline. If a user select-alls 250 LOTUS-MW compounds, the '+ N more' fallback kicks in but there is no pagination/lazy load — acceptable placeholder while module is 'Coming soon'.",
+    "checkbox.jsx: Indicator renders <Check> for BOTH checked and indeterminate states (Radix's default). Visually the indeterminate state looks identical to a checkmark on the select-all cell. A dash icon for data-state=indeterminate would improve clarity. Not blocking — the state semantics are still correct (Radix sets data-state='indeterminate' on the root, so aria/state is exposed).",
+    "PlantDatabase.jsx meta ribbon shows 'IMPPAT ${meta.imppat_count} · LOTUS ${meta.lotus_count}' (RAW upstream counts) while row-count and chip totals show DEDUPED counts. For Withania that reads 'IMPPAT 80 · LOTUS 200' next to '164 compounds' — potentially confusing. Consider adding a tooltip 'raw pre-merge counts' next to the meta ribbon.",
+    "SelectionContext.jsx: localStorage writes on every selection change (per-keystroke on select-all a 164-row plant). For very large selections this can jank on low-end devices. Consider debouncing setItem with a 200 ms trailing timer."
+  ],
+  "updated_files": [
+    "/app/frontend/tests/selection_workflow.spec.js (new — spec-level regression reference for next agent)"
+  ],
+  "success_rate": {"backend": "100% (23/23)", "frontend": "100% (13/13 acceptance criteria)"},
+  "test_credentials": "N/A (public app, no auth)",
+  "seed_data_creation": "None — Withania somnifera cache pre-existed in Mongo (search returned instantly). localStorage['drSlash.selection.v1'] was cleared at start of each Playwright run.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 4 delta = compound selection workflow (client-only, localStorage-backed via drSlash.selection.v1) + /drug-likeness landing page (Module 02, currently preview-only, Run screening button is intentionally disabled with 'Soon' badge). Selection keying is IMPPAT_id → LOTUS_id → inchi_key → 'n:'+lowercased compound_name. Sticky proceed-bar (data-testid=proceed-bar) is conditionally rendered only when compounds.length > 0 (NOT when selectedCount > 0) — so an empty-context page has no proceed bar until first search. select-all operates on the CURRENT FILTERED VIEW (filtered array, not just current page rows) — this is per acceptance criterion #2. Confirmation dialog uses shadcn AlertDialog; confirm-modify data-testid maps to AlertDialogCancel, confirm-continue to AlertDialogAction. Empty-state text is 'No compounds match this filter.' (verified). Backend regression suite is stable at 23 tests; if adding more sources or modes, extend TestPlantSearchDedup accordingly.",
+  "rca of the issue": "No bug encountered in this iteration — feature-addition verification only. All 13 acceptance criteria satisfied on first pass; no code changes required from the testing agent."
+}
