@@ -536,7 +536,7 @@ export default function PlantDatabase() {
                 className="mt-2 inline-flex items-center gap-2 rounded-full bg-[#5139ED]/8 px-3 py-1 text-xs font-semibold text-[#5139ED]"
               >
                 <FlaskConical className="h-3 w-3" />
-                Selected compounds: {selectedCount} / {compounds.length}
+                Selected compounds: {selectedCount}
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -812,7 +812,7 @@ export default function PlantDatabase() {
               </span>
               <div>
                 <div className="font-heading text-sm font-semibold text-[#0B0B18]">
-                  <span data-testid="proceed-count">{selectedCount}</span> / {compounds.length} compounds selected
+                  <span data-testid="proceed-count">{selectedCount}</span> compound{selectedCount === 1 ? "" : "s"} selected
                 </div>
                 <div className="text-[11px] text-[#64748B]">
                   Selections persist across search, filters and pages.
