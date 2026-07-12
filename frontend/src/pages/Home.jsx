@@ -1,69 +1,18 @@
 import { Link } from "react-router-dom";
-import {
-  FlaskConical,
-  Crosshair,
-  Network,
-  Share2,
-  BarChart3,
-  Atom,
-  Waves,
-  FileText,
-  ArrowUpRight,
-  Sparkles,
-  ChevronRight,
-} from "lucide-react";
+import { ArrowUpRight, Sparkles, ChevronRight, Rocket } from "lucide-react";
 import { motion } from "framer-motion";
 
-const FEATURES = [
-  {
-    slug: "compound-extractor",
-    title: "Compound Extractor",
-    desc: "Mine phytochemicals from IMPPAT, LOTUS and PubChem in a single sweep.",
-    icon: FlaskConical,
-    active: true,
-  },
-  {
-    slug: "target-identification",
-    title: "Target Identification",
-    desc: "Predict protein targets via SwissTargetPrediction & STITCH.",
-    icon: Crosshair,
-  },
-  {
-    slug: "network-pharmacology",
-    title: "Network Pharmacology",
-    desc: "Compound–target–disease graphs with community detection.",
-    icon: Network,
-  },
-  {
-    slug: "ppi",
-    title: "Protein Interaction Networks",
-    desc: "STRING PPI construction, hub scoring & topology metrics.",
-    icon: Share2,
-  },
-  {
-    slug: "enrichment",
-    title: "GO & KEGG Enrichment",
-    desc: "Functional and pathway enrichment with adjustable FDR.",
-    icon: BarChart3,
-  },
-  {
-    slug: "docking",
-    title: "Molecular Docking",
-    desc: "AutoDock Vina pipelines for virtual screening at scale.",
-    icon: Atom,
-  },
-  {
-    slug: "md",
-    title: "Molecular Dynamics",
-    desc: "GROMACS-ready systems, trajectory summaries and RMSD/RMSF.",
-    icon: Waves,
-  },
-  {
-    slug: "report",
-    title: "AI Scientific Report Generator",
-    desc: "Publication-quality figures + narrative auto-drafted per run.",
-    icon: FileText,
-  },
+const PIPELINE_STEPS = [
+  "Plant Database / LC-MS",
+  "Compound Standardization",
+  "Toxicity Prediction",
+  "Drug-Likeness Screening",
+  "Target Prediction",
+  "Disease Target Identification",
+  "Network Analysis",
+  "Molecular Docking",
+  "Molecular Dynamics",
+  "AI Scientific Report",
 ];
 
 export default function Home() {
@@ -193,7 +142,7 @@ export default function Home() {
         </motion.div>
       </section>
 
-      {/* Features grid */}
+      {/* PhytoNet AI — single premium feature card */}
       <section
         id="agents"
         data-testid="features-section"
@@ -205,23 +154,19 @@ export default function Home() {
               The pipeline
             </p>
             <h2 className="mt-3 font-display text-4xl font-bold tracking-tight text-[#0B0B18] sm:text-5xl">
-              Eight agents, one continuous
+              One AI Scientist,
               <br />
-              scientific workflow.
+              one continuous workflow.
             </h2>
           </div>
           <p className="max-w-md text-sm leading-relaxed text-[#64748B]">
-            Every card below is a specialized agent. Outputs are validated and
-            handed to the next stage automatically — no ad-hoc scripts, no
-            spreadsheets in between.
+            A single agentic system takes a medicinal plant or LC-MS input
+            through every stage — from compound standardization to a
+            publication-ready scientific report.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-4">
-          {FEATURES.map((f, i) => (
-            <FeatureCard key={f.slug} f={f} index={i} />
-          ))}
-        </div>
+        <PhytoNetAICard />
       </section>
 
       {/* How it works ribbon */}
@@ -305,67 +250,140 @@ export default function Home() {
   );
 }
 
-function FeatureCard({ f, index }) {
-  const Icon = f.icon;
-  const Wrap = f.active ? Link : "div";
-  const wrapProps = f.active
-    ? { to: "/plant-database", "data-testid": `feature-${f.slug}` }
-    : { "data-testid": `feature-${f.slug}` };
-
+function PhytoNetAICard() {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 16 }}
+      initial={{ opacity: 0, y: 24 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
-      transition={{ delay: index * 0.05, duration: 0.5 }}
+      transition={{ duration: 0.6 }}
     >
-      <Wrap
-        {...wrapProps}
-        className={`group relative flex h-full flex-col justify-between rounded-2xl border p-6 transition-all duration-300 ${
-          f.active
-            ? "cursor-pointer border-[#E7E7F3] bg-white hover:-translate-y-1 hover:border-[#5139ED]/30 hover:shadow-[0_20px_40px_-20px_rgba(81,57,237,0.35)]"
-            : "border-[#E7E7F3] bg-[#FAFAFF]"
-        }`}
+      <Link
+        to="/phytonet-ai"
+        data-testid="phytonet-ai-card"
+        className="group relative block overflow-hidden rounded-3xl border border-[#E7E7F3] bg-white p-8 shadow-[0_20px_60px_-30px_rgba(81,57,237,0.35)] transition-all duration-300 hover:-translate-y-1 hover:border-[#5139ED]/30 hover:shadow-[0_30px_80px_-30px_rgba(81,57,237,0.5)] md:p-12"
       >
-        <div>
-          <div className="flex items-center justify-between">
-            <span
-              className={`grid h-11 w-11 place-items-center rounded-xl ${
-                f.active
-                  ? "bg-gradient-to-br from-[#5139ED] via-[#395AED] to-[#8139ED] text-white shadow-[0_6px_18px_-6px_rgba(81,57,237,0.65)]"
-                  : "bg-white text-[#5139ED] border border-[#E7E7F3]"
-              }`}
-            >
-              <Icon className="h-5 w-5" />
-            </span>
-            {f.active ? (
-              <span className="rounded-full bg-[#5139ED]/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-[#5139ED]">
-                Live
-              </span>
-            ) : (
-              <span className="rounded-full bg-[#E7E7F3] px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-[#64748B]">
-                Soon
-              </span>
-            )}
-          </div>
-          <h3 className="mt-6 font-heading text-lg font-semibold text-[#0B0B18]">
-            {f.title}
-          </h3>
-          <p className="mt-2 text-sm leading-relaxed text-[#64748B]">
-            {f.desc}
-          </p>
-        </div>
+        {/* Ambient orbs inside the card */}
         <div
-          className={`mt-6 flex items-center gap-1 text-xs font-semibold ${
-            f.active ? "text-[#5139ED]" : "text-[#B4B4CD]"
-          }`}
-        >
-          {f.active ? "Launch agent" : "In development"}
-          {f.active && (
-            <ArrowUpRight className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-          )}
+          className="brand-orb"
+          style={{
+            background: "#5139ED",
+            width: 320,
+            height: 320,
+            top: -120,
+            left: -100,
+            opacity: 0.28,
+          }}
+        />
+        <div
+          className="brand-orb"
+          style={{
+            background: "#395AED",
+            width: 260,
+            height: 260,
+            bottom: -100,
+            right: -80,
+            opacity: 0.25,
+          }}
+        />
+        <div
+          className="brand-orb"
+          style={{
+            background: "#8139ED",
+            width: 220,
+            height: 220,
+            top: "45%",
+            right: "20%",
+            opacity: 0.14,
+          }}
+        />
+
+        <div className="relative grid gap-10 md:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] md:gap-14">
+          {/* Left: title, subtitle, description, CTA */}
+          <div className="flex min-w-0 flex-col justify-between">
+            <div>
+              <div
+                data-testid="phytonet-badge"
+                className="inline-flex items-center gap-2 rounded-full border border-[#5139ED]/20 bg-[#5139ED]/8 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-widest text-[#5139ED]"
+              >
+                <Sparkles className="h-3 w-3" />
+                End-to-end AI scientist
+              </div>
+              <h3
+                data-testid="phytonet-title"
+                className="mt-6 font-display text-4xl font-extrabold leading-[1.05] tracking-tight text-[#0B0B18] sm:text-5xl"
+              >
+                <span aria-hidden="true" className="mr-2">
+                  🧬
+                </span>
+                PhytoNet AI Scientist
+              </h3>
+              <p
+                data-testid="phytonet-subtitle"
+                className="mt-4 font-heading text-lg font-semibold text-[#1E1E33] sm:text-xl"
+              >
+                End-to-End AI Scientist for Medicinal Plant Network
+                Pharmacology
+              </p>
+              <p
+                data-testid="phytonet-description"
+                className="mt-5 max-w-xl text-[15px] leading-relaxed text-[#4B5563]"
+              >
+                PhytoNet AI performs the complete medicinal plant network
+                pharmacology workflow. It supports both public phytochemical
+                databases and experimentally identified LC-MS compounds, then
+                automatically executes toxicity prediction, drug-likeness
+                screening, target prediction, disease target analysis, network
+                construction, molecular docking, molecular dynamics simulation,
+                and AI report generation.
+              </p>
+            </div>
+
+            <div className="mt-10">
+              <span
+                data-testid="phytonet-launch-btn"
+                className="inline-flex items-center gap-2 rounded-full bg-[#5139ED] px-8 py-4 text-base font-semibold text-white shadow-[0_16px_40px_-16px_rgba(81,57,237,0.7)] transition-all duration-200 group-hover:-translate-y-0.5 group-hover:bg-[#4127c9]"
+              >
+                <Rocket className="h-4 w-4" />
+                <span aria-hidden="true">🚀</span> Launch PhytoNet AI
+                <ArrowUpRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+              </span>
+              <p className="mt-3 text-xs text-[#64748B]">
+                Click anywhere on this card to launch the pipeline.
+              </p>
+            </div>
+          </div>
+
+          {/* Right: workflow */}
+          <div
+            data-testid="phytonet-workflow"
+            className="relative flex flex-col rounded-2xl border border-[#F1F1FA] bg-white/70 p-6 backdrop-blur"
+          >
+            <p className="font-heading text-[10px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">
+              Pipeline
+            </p>
+            <ol className="mt-4 space-y-1.5">
+              {PIPELINE_STEPS.map((step, i) => (
+                <li
+                  key={step}
+                  data-testid={`phytonet-step-${i}`}
+                  className="flex items-center gap-3"
+                >
+                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-[#5139ED] via-[#395AED] to-[#8139ED] font-mono text-[10px] font-bold text-white shadow-[0_4px_10px_-4px_rgba(81,57,237,0.6)]">
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                  <span className="flex-1 rounded-lg border border-[#F1F1FA] bg-white px-3 py-2 text-sm font-medium text-[#0B0B18]">
+                    {step}
+                  </span>
+                  {i < PIPELINE_STEPS.length - 1 && (
+                    <ChevronRight className="h-3 w-3 shrink-0 rotate-90 text-[#5139ED]/40" />
+                  )}
+                </li>
+              ))}
+            </ol>
+          </div>
         </div>
-      </Wrap>
+      </Link>
     </motion.div>
   );
 }

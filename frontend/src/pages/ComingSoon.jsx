@@ -1,8 +1,14 @@
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useLocation } from "react-router-dom";
 import { ArrowLeft, Wrench } from "lucide-react";
 
 export default function ComingSoon() {
   const { slug } = useParams();
+  const { pathname } = useLocation();
+  const label = slug
+    ? slug.replace(/-/g, " ")
+    : pathname === "/phytonet-ai"
+    ? "PhytoNet AI"
+    : "This";
   return (
     <main
       data-testid="coming-soon-page"
@@ -12,7 +18,7 @@ export default function ComingSoon() {
         <Wrench className="h-6 w-6" />
       </span>
       <h1 className="mt-6 font-display text-4xl font-bold tracking-tight text-[#0B0B18]">
-        {slug?.replace(/-/g, " ")} agent — coming soon
+        {label} — coming soon
       </h1>
       <p className="mt-3 max-w-md text-[#64748B]">
         This agent is under active development. In the meantime, kick off your

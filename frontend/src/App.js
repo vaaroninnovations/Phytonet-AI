@@ -19,6 +19,7 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/plant-database" element={<PlantDatabase />} />
             <Route path="/drug-likeness" element={<DrugLikeness />} />
+            <Route path="/phytonet-ai" element={<ComingSoon />} />
             <Route path="/tool/:slug" element={<ComingSoon />} />
           </Routes>
           <SiteFooter />
