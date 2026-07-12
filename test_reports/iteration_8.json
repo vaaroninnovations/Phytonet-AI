@@ -1,0 +1,30 @@
+{
+  "summary": "Iteration 8 — LC-MS upload + PubChem/LOTUS enrichment verified end-to-end. Added 5 new pytests for POST /api/lcms/enrich; all 28 backend tests pass (23 regression + 5 new). Frontend: uploaded CSV of 4 compounds parses, lcms-enriching shows, lcms-loaded reports 'THUJA.csv · 4 compounds parsed · 3 with SMILES · 1 SMILES Not Available', existing results-table renders 4 rows with LC-MS + PubChem badges, missing row shows amber 'LC-MS · not found' badge + smiles-edit-* input with correct placeholder. Pasting into smiles-edit + Tab (blur) commits value and clears the amber input. Selection→proceed→confirm-continue navigates to /drug-likeness with stat-selected=2 and correct compound names in preview. Running a plant search after LC-MS replaces the table with 241 Curcuma-longa rows and clears selection to 0. All existing PlantDatabase test-ids intact.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py _pubchem_by_name correctly requests both new (SMILES) and legacy (CanonicalSMILES/IsomericSMILES/ConnectivitySMILES) property names and normalizes to lowercase 'smiles' — verified live against PubChem returning SMILES for Curcumin/Piperine/Withanolide A.",
+    "_enrich_lcms_row correctly preserves uploaded molecular_weight/molecular_formula/retention_time when non-empty and only backfills them when missing — regression test passes with mw=999.99, formula='CUSTOM_FMLA', rt=7.3.",
+    "Empty-name row returns source='LC-MS · missing name' and not_found=true. Empty compounds array returns {compounds:[], found:0, not_found:0}. Both codified in new pytests.",
+    "PlantDatabase CellValue renders an <input data-testid=smiles-edit-<key>/> for LC-MS rows with empty smiles and correctly commits on blur via onEdit → useResults.updateCompound. Verified by filling 'CCO' + Tab and confirming the smiles-edit input disappears (row now renders CCO as a plain font-mono SMILES cell).",
+    "LCMSUpload correctly clears prior selection on enrichment start (clearSelection() before setResults) so previous plant selections don't leak into an LC-MS workflow — verified: after LCMS→select 2 → then run plant search, selection returns to 0.",
+    "ResultsProvider is wired around <Routes> in App.js; state persists across page navigation (LC-MS rows→/drug-likeness stat-selected=2 preserved).",
+    "Source badge styling is correct: 'LC-MS + PubChem' rendered in emerald (matches src.startsWith('LC-MS') branch); 'LC-MS · not found' rendered amber via the notFound check on src.endsWith('not found'). Note the class handles the emerald branch first for src.startsWith('LC-MS') — this works because notFound is checked first in the ternary chain. Verified visually in the loaded screenshot.",
+    "Minor UX observation (non-blocking): after a plant search is dispatched, results-table briefly renders a skeleton state where data-testid=row-count reads '0' during loading. Not a bug — real value populates to 241 within ~5s. Consumers polling row-count should wait for a stable value.",
+    "Backend response for Piperine currently returns 285.34 as float (PubChem string parsed via float()); tests assert isinstance-agnostic so this stays green.",
+    "Pre-existing hydration warning (<span> in <option>) from iter 1–7 is unchanged; not introduced by this iteration."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py"],
+  "success_rate": {"backend": "100% (28/28)", "frontend": "100% (11/11 review scenarios)"},
+  "test_credentials": "N/A",
+  "seed_data_creation": "Inline CSV buffer with rows Curcumin/Withanolide A/Piperine/GarbageCompoundXYZ_9999 used for the frontend upload test.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 8 adds LC-MS upload (frontend LCMSUpload → POST /api/lcms/enrich → shared ResultsContext → existing PlantDatabase table). Backend flow: PubChem primary (name→property lookup for SMILES/InChI/InChIKey/MolecularFormula/MolecularWeight, both new and legacy property names accepted), LOTUS fallback (/simple?query=), unmatched → not_found=true+source='LC-MS · not found'. Uploaded mw/formula/rt are authoritative and never overwritten. Frontend: same rows go into useResults context so the existing 20+ testid-covered PlantDatabase table renders them unchanged (checkboxes, sort, pagination, exports, source-filter chips, proceed-drug-likeness). Missing-SMILES LC-MS rows get an inline <input data-testid=smiles-edit-<key>/> with placeholder 'SMILES Not Available — paste to edit'; onBlur commits and clears not_found. Plant search after LC-MS clears the table (LC-MS gone) and resets selection to 0. All 28 backend tests + 11 frontend acceptance scenarios pass. Backend PubChem calls take 4–10s per compound — enrich test timeout set to 60s.",
+  "rca of the issue": "N/A — no regressions found. Feature works end-to-end. Backend enrichment, frontend context wiring, PlantDatabase table rendering, source badge coloring, inline SMILES editing, and workflow selection+navigate all confirmed working on the preview URL."
+}

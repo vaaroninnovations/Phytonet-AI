@@ -36,6 +36,7 @@ api_router = APIRouter(prefix="/api")
 # ---------------------------------------------------------------------------
 IMPPAT_BASE = "https://cb.imsc.res.in/imppat"
 LOTUS_BASE = "https://lotus.naturalproducts.net/api/search"
+PUBCHEM_BASE = "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound"
 
 USER_AGENT = (
     "Mozilla/5.0 (compatible; DrSlashBot/1.0; +https://networkpharm.ai) "
@@ -491,6 +492,172 @@ async def lotus_molweight(
 @api_router.get("/health")
 async def health():
     return {"status": "ok", "service": "dr-slash"}
+
+
+# ---------------------------------------------------------------------------
+# LC-MS compound enrichment (PubChem primary + LOTUS fallback)
+# ---------------------------------------------------------------------------
+class LCMSCompoundIn(BaseModel):
+    compound_name: str = ""
+    molecular_formula: Optional[str] = None
+    molecular_weight: Optional[float] = None
+    retention_time: Optional[float] = None
+
+
+class LCMSEnrichPayload(BaseModel):
+    compounds: List[LCMSCompoundIn] = Field(default_factory=list)
+
+
+async def _pubchem_by_name(client_: httpx.AsyncClient, name: str) -> Optional[dict]:
+    """Look up a compound by name via PubChem PUG-REST and return normalized
+    properties, or None if not found."""
+    props = (
+        "CanonicalSMILES,IsomericSMILES,InChI,InChIKey,MolecularFormula,"
+        "MolecularWeight"
+    )
+    url = f"{PUBCHEM_BASE}/name/{quote(name)}/property/{props}/JSON"
+    try:
+        r = await client_.get(url, timeout=15.0, headers={"User-Agent": USER_AGENT})
+    except Exception as e:
+        logging.info(f"PubChem lookup failed for {name!r}: {e}")
+        return None
+    if r.status_code != 200:
+        return None
+    try:
+        data = r.json()
+    except Exception:
+        return None
+    entries = data.get("PropertyTable", {}).get("Properties", [])
+    if not entries:
+        return None
+    p = entries[0]
+    mw = p.get("MolecularWeight")
+    try:
+        mw = float(mw) if mw is not None else None
+    except (TypeError, ValueError):
+        mw = None
+    return {
+        "smiles": (
+            p.get("SMILES")
+            or p.get("CanonicalSMILES")
+            or p.get("IsomericSMILES")
+            or p.get("ConnectivitySMILES")
+        ),
+        "inchi": p.get("InChI"),
+        "inchi_key": p.get("InChIKey"),
+        "molecular_formula": p.get("MolecularFormula"),
+        "molecular_weight": mw,
+        "pubchem_cid": p.get("CID"),
+    }
+
+
+async def _lotus_by_name(client_: httpx.AsyncClient, name: str) -> Optional[dict]:
+    """Fallback to LOTUS `/simple?query=` and pick the closest name match."""
+    url = f"{LOTUS_BASE}/simple?query={quote(name)}"
+    try:
+        r = await client_.get(url, timeout=20.0, headers={"User-Agent": USER_AGENT})
+    except Exception:
+        return None
+    if r.status_code != 200:
+        return None
+    try:
+        data = r.json()
+    except Exception:
+        return None
+    nps = data.get("naturalProducts") or []
+    if not nps:
+        return None
+    # Prefer an exact case-insensitive traditional-name match; otherwise take the first hit
+    target = name.strip().lower()
+    hit = next(
+        (
+            n
+            for n in nps
+            if (n.get("traditional_name") or "").strip().lower() == target
+        ),
+        nps[0],
+    )
+    mw = hit.get("molecular_weight")
+    try:
+        mw = float(mw) if mw is not None else None
+    except (TypeError, ValueError):
+        mw = None
+    return {
+        "smiles": hit.get("smiles") or hit.get("smiles2D"),
+        "inchi": hit.get("inchi"),
+        "inchi_key": hit.get("inchikey"),
+        "molecular_formula": hit.get("molecular_formula"),
+        "molecular_weight": mw,
+        "lotus_id": hit.get("lotus_id"),
+    }
+
+
+async def _enrich_lcms_row(
+    client_: httpx.AsyncClient, row: LCMSCompoundIn
+) -> dict:
+    base = row.dict()
+    name = (base.get("compound_name") or "").strip()
+    out = dict(base)
+    # Uploaded values are authoritative — never overwrite non-empty user data.
+    if not name:
+        out["source"] = "LC-MS · missing name"
+        out["not_found"] = True
+        return out
+
+    # PubChem first (most authoritative for compound names)
+    pub = await _pubchem_by_name(client_, name)
+    if pub:
+        out["source"] = "LC-MS + PubChem"
+        for k in ("smiles", "inchi", "inchi_key", "pubchem_cid"):
+            if pub.get(k):
+                out[k] = pub[k]
+        if not out.get("molecular_formula") and pub.get("molecular_formula"):
+            out["molecular_formula"] = pub["molecular_formula"]
+        if not out.get("molecular_weight") and pub.get("molecular_weight"):
+            out["molecular_weight"] = pub["molecular_weight"]
+        return out
+
+    # Fallback: LOTUS by name
+    lot = await _lotus_by_name(client_, name)
+    if lot:
+        out["source"] = "LC-MS + LOTUS"
+        for k in ("smiles", "inchi", "inchi_key", "lotus_id"):
+            if lot.get(k):
+                out[k] = lot[k]
+        if not out.get("molecular_formula") and lot.get("molecular_formula"):
+            out["molecular_formula"] = lot["molecular_formula"]
+        if not out.get("molecular_weight") and lot.get("molecular_weight"):
+            out["molecular_weight"] = lot["molecular_weight"]
+        return out
+
+    # Not found in any database — mark row for manual entry
+    out["source"] = "LC-MS · not found"
+    out["not_found"] = True
+    return out
+
+
+@api_router.post("/lcms/enrich")
+async def lcms_enrich(payload: LCMSEnrichPayload):
+    """Enrich a batch of LC-MS compounds with SMILES / InChI / InChIKey and
+    molecular formula by looking each name up in PubChem, then LOTUS."""
+    if not payload.compounds:
+        return {"compounds": [], "found": 0, "not_found": 0}
+
+    async with httpx.AsyncClient() as client_:
+        sem = asyncio.Semaphore(8)
+
+        async def _run(row: LCMSCompoundIn) -> dict:
+            async with sem:
+                return await _enrich_lcms_row(client_, row)
+
+        results = await asyncio.gather(*[_run(r) for r in payload.compounds])
+
+    not_found = sum(1 for r in results if r.get("not_found"))
+    return {
+        "compounds": results,
+        "found": len(results) - not_found,
+        "not_found": not_found,
+    }
 
 
 # ---------------------------------------------------------------------------

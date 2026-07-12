@@ -1,7 +1,10 @@
 import { useCallback, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { toast } from "sonner";
-import { UploadCloud, FileSpreadsheet, X, CheckCircle2 } from "lucide-react";
+import { UploadCloud, FileSpreadsheet, X, CheckCircle2, Loader2 } from "lucide-react";
+import { lcmsEnrich } from "@/lib/api";
+import { useResults } from "@/context/ResultsContext";
+import { useSelection } from "@/context/SelectionContext";
 
 const REQUIRED_COLUMNS = [
   "Compound Name",
@@ -78,7 +81,12 @@ export default function LCMSUpload({ onLoaded }) {
   const [dragActive, setDragActive] = useState(false);
   const [fileName, setFileName] = useState("");
   const [count, setCount] = useState(0);
+  const [foundCount, setFoundCount] = useState(0);
+  const [notFoundCount, setNotFoundCount] = useState(0);
+  const [enriching, setEnriching] = useState(false);
   const [error, setError] = useState("");
+  const { setResults } = useResults();
+  const { clear: clearSelection } = useSelection();
 
   const handleFile = useCallback(
     async (file) => {
@@ -90,24 +98,78 @@ export default function LCMSUpload({ onLoaded }) {
         toast.error("Unsupported file type — use .xlsx or .csv");
         return;
       }
+      let parsed;
       try {
         const buf = await file.arrayBuffer();
         const wb = XLSX.read(buf, { type: "array" });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
-        const parsed = rows
+        parsed = rows
           .map(mapRow)
           .filter((r) => r.compound_name || r.molecular_formula);
-        setFileName(file.name);
-        setCount(parsed.length);
-        onLoaded && onLoaded({ file: file.name, compounds: parsed });
-        toast.success(`Loaded ${parsed.length} LC-MS compound${parsed.length === 1 ? "" : "s"}`);
       } catch (e) {
         setError("Could not read that file. Make sure it's a valid .xlsx or .csv.");
         toast.error("Failed to parse file");
+        return;
+      }
+
+      setFileName(file.name);
+      setCount(parsed.length);
+      setFoundCount(0);
+      setNotFoundCount(0);
+      onLoaded && onLoaded({ file: file.name, compounds: parsed });
+
+      if (parsed.length === 0) {
+        toast.error("No usable rows found in the file");
+        return;
+      }
+
+      // Enrich against PubChem + LOTUS on the backend, then push into the
+      // shared results context so the existing PlantDatabase table renders
+      // them without any UI change.
+      setEnriching(true);
+      // Immediately clear any prior selection so the workflow starts fresh.
+      clearSelection();
+      try {
+        const data = await lcmsEnrich(parsed);
+        const enriched = data.compounds || [];
+        setFoundCount(data.found || 0);
+        setNotFoundCount(data.not_found || 0);
+        setResults(
+          enriched,
+          {
+            plant: `LC-MS: ${file.name}`,
+            imppat_count: 0,
+            lotus_count: enriched.filter((c) =>
+              (c.source || "").includes("LOTUS")
+            ).length,
+            lcms_count: enriched.length,
+            source_file: file.name,
+          },
+          "lcms"
+        );
+        const nf = data.not_found || 0;
+        if (nf > 0) {
+          toast.warning(
+            `Loaded ${enriched.length} compound${
+              enriched.length === 1 ? "" : "s"
+            } · ${nf} missing SMILES`
+          );
+        } else {
+          toast.success(
+            `Loaded ${enriched.length} compound${
+              enriched.length === 1 ? "" : "s"
+            } with structures`
+          );
+        }
+      } catch (e) {
+        setError("Enrichment failed — please try again.");
+        toast.error(e?.response?.data?.detail || e.message || "Enrichment failed");
+      } finally {
+        setEnriching(false);
       }
     },
-    [onLoaded]
+    [onLoaded, setResults, clearSelection]
   );
 
   const onDrop = (e) => {
@@ -120,8 +182,11 @@ export default function LCMSUpload({ onLoaded }) {
   const clearFile = () => {
     setFileName("");
     setCount(0);
+    setFoundCount(0);
+    setNotFoundCount(0);
     setError("");
     if (inputRef.current) inputRef.current.value = "";
+    setResults([], null);
     onLoaded && onLoaded(null);
   };
 
@@ -226,15 +291,48 @@ export default function LCMSUpload({ onLoaded }) {
             {error}
           </div>
         )}
-        {fileName && !error && (
+        {fileName && !error && enriching && (
+          <div
+            data-testid="lcms-enriching"
+            className="mt-4 flex items-center gap-3 rounded-xl border border-[#E7E7F3] bg-[#FAFAFF] px-4 py-3 text-sm text-[#1E1E33]"
+          >
+            <Loader2 className="h-4 w-4 animate-spin text-[#5139ED]" />
+            <span className="font-medium">{fileName}</span>
+            <span className="text-[#B4B4CD]">·</span>
+            <span>
+              Retrieving SMILES / InChI for {count} compound
+              {count === 1 ? "" : "s"} from PubChem & LOTUS…
+            </span>
+          </div>
+        )}
+        {fileName && !error && !enriching && count > 0 && (
           <div
             data-testid="lcms-loaded"
-            className="mt-4 flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700"
+            className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700"
           >
             <CheckCircle2 className="h-4 w-4" />
             <span className="font-medium">{fileName}</span>
             <span className="text-emerald-600">·</span>
             <span>{count} compound{count === 1 ? "" : "s"} parsed</span>
+            {foundCount + notFoundCount > 0 && (
+              <>
+                <span className="text-emerald-600">·</span>
+                <span data-testid="lcms-found-count">
+                  {foundCount} with SMILES
+                </span>
+                {notFoundCount > 0 && (
+                  <>
+                    <span className="text-emerald-600">·</span>
+                    <span
+                      data-testid="lcms-not-found-count"
+                      className="text-amber-700"
+                    >
+                      {notFoundCount} SMILES Not Available
+                    </span>
+                  </>
+                )}
+              </>
+            )}
           </div>
         )}
       </div>

@@ -5,7 +5,7 @@ export const API = `${BACKEND_URL}/api`;
 
 export const api = axios.create({
   baseURL: API,
-  timeout: 90000,
+  timeout: 120000,
 });
 
 export const searchPlant = (plant, opts = {}) =>
@@ -35,3 +35,6 @@ export const lotusMolweight = (minMass, maxMass, maxHits = 20) =>
   api
     .get("/lotus/molweight", { params: { minMass, maxMass, maxHits } })
     .then((r) => r.data);
+
+export const lcmsEnrich = (compounds) =>
+  api.post("/lcms/enrich", { compounds }).then((r) => r.data);

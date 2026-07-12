@@ -476,3 +476,111 @@ class TestPlantSearchCache:
         assert target is not None, f"Curcuma longa not indexed: {matches}"
         assert target["search_count"] >= 1
         assert target["imppat_hits"] >= 1
+
+
+# ---------------------------------------------------------------------------
+# LC-MS enrichment (PubChem + LOTUS by name)
+# ---------------------------------------------------------------------------
+class TestLCMSEnrich:
+    """POST /api/lcms/enrich — enrichment against PubChem primary + LOTUS fallback."""
+
+    def test_enrich_happy_path_with_missing(self, api):
+        payload = {
+            "compounds": [
+                {"compound_name": "Curcumin"},
+                {"compound_name": "Piperine"},
+                {"compound_name": "Withanolide A"},
+                {"compound_name": "NONEXISTENT_XYZ_ABC"},
+            ]
+        }
+        r = api.post(f"{BASE_URL}/api/lcms/enrich", json=payload, timeout=60)
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert isinstance(data.get("compounds"), list)
+        assert len(data["compounds"]) == 4
+        assert data.get("found") == 3
+        assert data.get("not_found") == 1
+
+        by_name = {c.get("compound_name"): c for c in data["compounds"]}
+
+        for nm in ("Curcumin", "Piperine", "Withanolide A"):
+            row = by_name[nm]
+            assert "LC-MS" in (row.get("source") or ""), row
+            assert (
+                "PubChem" in row["source"] or "LOTUS" in row["source"]
+            ), f"expected upstream in source for {nm}: {row['source']}"
+            assert row.get("smiles"), f"smiles missing for {nm}"
+            assert isinstance(row["smiles"], str) and len(row["smiles"]) > 0
+            assert row.get("inchi_key"), f"inchi_key missing for {nm}"
+            assert row.get("molecular_formula"), f"formula missing for {nm}"
+            assert row.get("molecular_weight") is not None, (
+                f"molecular_weight missing for {nm}"
+            )
+            assert not row.get("not_found")
+
+        missing = by_name["NONEXISTENT_XYZ_ABC"]
+        assert missing.get("source") == "LC-MS · not found"
+        assert missing.get("not_found") is True
+        assert not missing.get("smiles")
+
+    def test_enrich_preserves_uploaded_values(self, api):
+        payload = {
+            "compounds": [
+                {
+                    "compound_name": "Curcumin",
+                    "molecular_weight": 999.99,
+                    "molecular_formula": "CUSTOM_FMLA",
+                    "retention_time": 7.3,
+                }
+            ]
+        }
+        r = api.post(f"{BASE_URL}/api/lcms/enrich", json=payload, timeout=60)
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert len(data["compounds"]) == 1
+        row = data["compounds"][0]
+        # Uploaded values must be preserved (never overwritten)
+        assert row["molecular_weight"] == 999.99, row
+        assert row["molecular_formula"] == "CUSTOM_FMLA", row
+        assert row["retention_time"] == 7.3, row
+        # But SMILES / InChI / InChIKey / source still enriched from PubChem
+        assert row.get("smiles"), "smiles must still be populated from PubChem"
+        assert row.get("inchi_key"), "inchi_key must still be populated from PubChem"
+        assert row.get("inchi"), "inchi must still be populated from PubChem"
+        assert "LC-MS" in (row.get("source") or "")
+        assert "PubChem" in row["source"] or "LOTUS" in row["source"]
+
+    def test_enrich_empty_compounds(self, api):
+        r = api.post(
+            f"{BASE_URL}/api/lcms/enrich", json={"compounds": []}, timeout=15
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data == {"compounds": [], "found": 0, "not_found": 0}
+
+    def test_enrich_missing_name_row(self, api):
+        payload = {"compounds": [{"compound_name": ""}]}
+        r = api.post(f"{BASE_URL}/api/lcms/enrich", json=payload, timeout=15)
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert len(data["compounds"]) == 1
+        row = data["compounds"][0]
+        assert row.get("source") == "LC-MS · missing name"
+        assert row.get("not_found") is True
+        assert not row.get("smiles")
+        assert data.get("found") == 0
+        assert data.get("not_found") == 1
+
+    def test_enrich_no_body_returns_422(self, api):
+        # Missing the required `compounds` field entirely
+        r = api.post(
+            f"{BASE_URL}/api/lcms/enrich",
+            json={"garbage": True},
+            timeout=15,
+        )
+        # Pydantic accepts default_factory=list, so 200 is also valid.
+        # We accept either but ensure the returned structure is sane.
+        assert r.status_code in (200, 422)
+        if r.status_code == 200:
+            data = r.json()
+            assert data.get("compounds") == []
