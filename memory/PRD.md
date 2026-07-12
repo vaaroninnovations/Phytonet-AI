@@ -37,11 +37,26 @@ fields; sortable/searchable/paginated results table; export CSV/XLSX/JSON.
 - Sticky glass header, sticky footer, sonner toaster
 - All interactive elements have data-testid
 
+## Implemented (2026-02-12)
+- 9-step persistent WorkflowSidebar across all modules
+- LC-MS Upload (.csv/.xlsx) with PubChem/LOTUS SMILES enrichment
+- Automatic Compound Standardization (PubChem/ChEBI/LOTUS dedupe)
+- Step 2 — ADMET & Drug-Likeness Analysis via local `admet-ai` (async polling)
+- **ADMET Configurable Scoring Engine** (2026-02-12):
+  - Compact `ScoringConfigPanel` above the filter panel — editable weights (Drug-Likeness 35% / ADME 35% / Toxicity 30%) with live total badge; scoring disabled when total ≠ 100
+  - Scoring uses only user-selected filters/rules; equal within-category distribution; per-compound renormalization when data is unavailable
+  - Final Score (0–100) + Star Assessment (5 tiers: Excellent → Poor) columns
+  - Compounds auto-ranked by Final Score descending, still sortable by any column
+  - Expandable per-row breakdown (Parameter · Observed · Threshold · Pass/Fail · Contribution)
+  - CSV + Excel export includes rank, score, assessment, category scores, breakdown, weight config, and selected criteria for full reproducibility
+  - Verified 25/25 by testing agent (iteration_12.json)
+
 ## Backlog / Next Actions
-- P1: Cache IMPPAT responses in Mongo (currently in-memory)
-- P1: Add plant name autocomplete (IMPPAT plant index)
-- P2: Build "Target Identification" agent (SwissTargetPrediction)
-- P2: Build "Network Pharmacology" agent (cytoscape.js viz)
-- P2: PPI (STRING), GO/KEGG (g:Profiler / KEGG REST)
-- P3: Docking (AutoDock Vina), MD (GROMACS), AI Report generator
+- P1: Step 3 — Target Prediction (SwissTargetPrediction / STITCH)
+- P1: Step 4 — Disease Target Identification (OMIM / DisGeNET / GeneCards)
+- P2: Step 5 — Network Analysis (cytoscape.js visualization + STRING PPI)
+- P2: Step 6 — Molecular Docking (AutoDock Vina)
+- P2: Step 7 — Molecular Dynamics (GROMACS)
+- P2: Step 8 — AI Scientific Report generation (Claude / GPT)
 - P3: SaaS auth + billing tiers
+- Refactor: split `server.py` into `/app/backend/routes/*`, models to `/app/backend/models/*`
