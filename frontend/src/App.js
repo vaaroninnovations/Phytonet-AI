@@ -1,7 +1,7 @@
 import "@/App.css";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Home from "@/pages/Home";
-import PlantDatabase from "@/pages/PlantDatabase";
+import PhytoNetAI from "@/pages/PhytoNetAI";
 import DrugLikeness from "@/pages/DrugLikeness";
 import ComingSoon from "@/pages/ComingSoon";
 import SiteHeader from "@/components/SiteHeader";
@@ -17,9 +17,12 @@ function App() {
           <SiteHeader />
           <Routes>
             <Route path="/" element={<Home />} />
-            <Route path="/plant-database" element={<PlantDatabase />} />
+            <Route path="/phytonet-ai" element={<PhytoNetAI />} />
+            <Route
+              path="/plant-database"
+              element={<Navigate to="/phytonet-ai" replace />}
+            />
             <Route path="/drug-likeness" element={<DrugLikeness />} />
-            <Route path="/phytonet-ai" element={<ComingSoon />} />
             <Route path="/tool/:slug" element={<ComingSoon />} />
           </Routes>
           <SiteFooter />

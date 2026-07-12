@@ -36,7 +36,7 @@ export default function DrugLikeness() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Link
-            to="/plant-database"
+            to="/phytonet-ai"
             data-testid="modify-selection-link"
             className="inline-flex items-center gap-2 rounded-full border border-[#E7E7F3] bg-white px-5 py-2.5 text-sm font-semibold text-[#0B0B18] hover:border-[#5139ED]/40 hover:text-[#5139ED]"
           >

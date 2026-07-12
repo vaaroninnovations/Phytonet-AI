@@ -35,15 +35,15 @@ export default function SiteHeader() {
             Home
           </Link>
           <Link
-            to="/plant-database"
+            to="/phytonet-ai"
             data-testid="nav-plant-database"
             className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-              isActive("/plant-database")
+              isActive("/phytonet-ai")
                 ? "bg-[#5139ED]/8 text-[#5139ED]"
                 : "text-[#1E1E33] hover:text-[#5139ED]"
             }`}
           >
-            Plant Database
+            PhytoNet AI
           </Link>
           <a
             href="#agents"
@@ -54,7 +54,7 @@ export default function SiteHeader() {
           </a>
         </nav>
         <Link
-          to="/plant-database"
+          to="/phytonet-ai"
           data-testid="header-cta"
           className="hidden rounded-full bg-[#0B0B18] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-transform duration-200 hover:-translate-y-0.5 hover:bg-[#1E1E33] md:inline-flex"
         >

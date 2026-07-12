@@ -25,7 +25,7 @@ export default function ComingSoon() {
         workflow from the Plant Database.
       </p>
       <Link
-        to="/plant-database"
+        to="/phytonet-ai"
         data-testid="back-to-plant-db"
         className="mt-8 inline-flex items-center gap-2 rounded-full bg-[#5139ED] px-6 py-3 text-sm font-semibold text-white hover:bg-[#4127c9]"
       >

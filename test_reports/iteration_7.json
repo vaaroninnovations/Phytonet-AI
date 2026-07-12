@@ -1,0 +1,37 @@
+{
+  "summary": "Iteration 7 — Refactor of standalone /plant-database into the PhytoNet AI Scientist workspace verified end-to-end on preview URL. 12/12 acceptance scenarios PASS. Sidebar (10 steps, sticky, Plant Database=NOW), unchanged PlantDatabase (all 20+ testids intact), and new LC-MS card (drag-drop, browse, hidden .xlsx/.csv input, 4 required-column badges, upload parses 3 rows) all render in correct order. /plant-database → /phytonet-ai redirect works. Home hero CTA, bottom CTA, header nav and PhytoNet card all point at /phytonet-ai. Completed-step green check activates on row-select and resets on reload. Backend not tested (skipped per request).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "PlantDatabase page-size <select>", "issues": ["Pre-existing (iter 1–6) React hydration warning: '<span> cannot be a child of <option>' emitted by dev-only ve-dynamic wrapper. Not user-visible, not introduced by this iteration."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/frontend/src/pages/PhytoNetAI.jsx",
+    "/app/frontend/src/components/WorkflowSidebar.jsx",
+    "/app/frontend/src/components/LCMSUpload.jsx",
+    "/app/frontend/src/App.js"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "PhytoNetAI.jsx composes correctly: WorkflowSidebar + PlantDatabase + LCMSUpload; no extra panels, dashboards, welcome screens or AI chat between sections (verified DOM inspection).",
+    "WorkflowSidebar is `sticky top-16` on md+ (verified: y=64 after 800px scroll). Mobile disclosure is properly gated to md:hidden. All 10 step ids present with data-testids.",
+    "Completion logic in PhytoNetAI.jsx marks 'plant-database' completed when selectedCount>0 OR lcmsFile.compounds.length — verified: initial state has no check icon; after ticking one row the sidebar step shows lucide-circle-check-big SVG; after reload the badge returns to '01 / NOW' (green check gone). Matches spec.",
+    "LCMSUpload uses XLSX.read on arrayBuffer for both .csv and .xlsx with sensible header aliases, non-blocking parsing, and clear-file affordance. `data-testid=lcms-file-input` is `hidden` (className='hidden') but Playwright set_input_files works correctly. accept string includes .xlsx,.csv and MIME variants.",
+    "App.js correctly renders <Navigate to='/phytonet-ai' replace/> for legacy /plant-database — verified: page.url ends /phytonet-ai after settle.",
+    "SiteHeader nav-plant-database label is 'PhytoNet AI' and href='/phytonet-ai'. Home.jsx hero-cta-plant-database, cta-plant-database, and phytonet-ai-card all href='/phytonet-ai'.",
+    "PlantDatabase.jsx is imported unchanged; all previously-passing data-testids continue to work when rendered inside PhytoNetAI (mode-*, plant-input, plant-input-submit, results-table, results-search, page-*, page-size, export-*, source-filter-*, select-all, proceed-drug-likeness, confirm-dialog all verified after a Curcuma longa search returning 241 rows). Source-filter and proceed testids are correctly gated on results state — expected.",
+    "Design compliance intact: white bg, brand purples #5139ED/#8139ED/#395AED used on sidebar gradient + step badges + LC-MS dropzone icon, no new emojis on /phytonet-ai (Home card 🧬 🚀 remain as expected).",
+    "Minor UX note (non-blocking): 'Assistant' text found once on /phytonet-ai — it's the pre-existing brand tagline 'Dr. / — Research AI Assistant' in the footer/branding, NOT an AI-chat panel. Complies with the 'no AI chat' requirement."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "100% (12/12 scenarios)"},
+  "test_credentials": "N/A",
+  "seed_data_creation": "None. Used cached Curcuma longa (241 rows) for T9/T11. Uploaded inline CSV buffer for T8 LC-MS upload (Curcumin, Withanolide A, Piperine).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 7 merges Plant Database into /phytonet-ai workspace with a 10-step Research Workflow sidebar and an optional LC-MS upload card. Verified: (T1) workspace layout — sidebar.x=0, plant-database.x=288, plant-database.y=65 above lcms.y=1341; (T2) all 10 step testids present, plant-database has 'NOW' badge; (T3) sidebar sticky at y=64 after 800px scroll; (T4) step navigation — drug-likeness-screening→/drug-likeness, plant-database→/phytonet-ai; (T5) /plant-database redirects to /phytonet-ai; (T6) home nav+hero+cta+card all href /phytonet-ai and navigate correctly; (T7) LC-MS card has title 'Experimental LC-MS Data', 'Upload experimentally identified compounds' description, dropzone, browse button, hidden file input accepting .xlsx,.csv, and 4 required-column badges; (T8) inline CSV upload produces lcms-loaded='test.csv · 3 compounds parsed'; (T9) row selection turns plant-database step into green check-circle SVG; (T10) reload resets step to Active/NOW; (T11) all PlantDatabase testids (mode-*, source-filter-*, export-*, select-all, proceed-drug-likeness, confirm-dialog) intact after search; (T12) no unexpected dashboards/AI chat/welcome screens ('Assistant' hit was brand tagline, not a panel). Pre-existing <span>-in-<option> hydration warning still present, unchanged from iter 1–6.",
+  "rca of the issue": "N/A — no regressions found. This iteration is a pure structural refactor and all acceptance criteria are satisfied."
+}
