@@ -1,0 +1,27 @@
+{
+  "summary": "Iteration 12 — Configurable ADMET & Drug-Likeness Scoring Engine (Step 2) fully verified end-to-end. All 25 test assertions passed (25/25). Full workflow exercised: /phytonet-ai → Withania somnifera search (164 compounds returned) → selected 4 compounds → Proceed to Drug-Likeness → ADMET predictions completed → Scoring Configuration panel behaviour tested → filter/rule interactions verified → row expansion breakdown verified → CSV + XLSX export downloads confirmed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "admetScoring.js implementation is clean and mathematically correct: category weights renormalize when a category has no evaluable params (activeSum guard), per-parameter contribution equals categoryWeight/evaluableCount so contributions sum to the category score share — verified live (with only Lipinski selected, DL category gets 100% of active weight and all 4 selected compounds correctly scored 100.0 since they all pass Lipinski).",
+    "DrugLikeness.jsx: Rank computation is independent of the current column sort — ranks are assigned on a separately-sorted (desc by score) copy via rankMap, then re-attached before column sort. Correct behaviour verified — first row displays #1 with the highest score.",
+    "Chevron expand button is correctly disabled (opacity-30) when scoring is disabled (weights invalid / no params selected) — good UX signal.",
+    "Weight input uses Math.max(0, Math.min(100, round(Number(raw)))) — protects against negatives, decimals, and >100 values from typing. Empty string coerces to 0.",
+    "Export metadata rows write the criteria description into the 'Compound Name' cell of blank rows; this is a pragmatic single-file layout, but it may confuse users importing back — consider prepending true metadata rows as a separate 'Metadata' sheet in XLSX. Not a bug; product-decision only.",
+    "PRE-EXISTING (unchanged from iteration 10/11): '<span> cannot be a child of <option>' hydration warning on PlantDatabase.jsx:817 page-size select — introduced by Emergent visual-editor annotations. Not caused by this iteration."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only review)", "frontend": "100% (25/25 assertions)"},
+  "test_credentials": "N/A",
+  "seed_data_creation": "Live IMPPAT/LOTUS 'Withania somnifera' Mongo-cached response used (164 compounds). No new seed data.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Feature under test: configurable scoring engine for ADMET & Drug-Likeness page (/drug-likeness). Key testids: admet-scoring-config, admet-weight-total, admet-scoring-status, weight-druglikeness, weight-adme, weight-toxicity, scoring-reset, filter-lipinski/bbb/ames, admet-score-<key>, admet-stars-<key>, admet-row-expand-<key>, admet-breakdown-<key>, admet-export-csv, admet-export-xlsx. The scoring engine lives in /app/frontend/src/lib/admetScoring.js and is pure (no backend involvement). To reach the page: search a plant on /phytonet-ai → select compounds → click proceed-drug-likeness → confirm-continue. First ADMET prediction run can take 20-40s while the Chemprop ensemble warms up. Watch for the 'admet-done' testid to know the table is ready.",
+  "rca of the issue": "N/A — no defects found. All required behaviours pass: default weights (35/35/30), Total 100% valid badge, 'paused' pill with no filter, 'active · N parameters selected' pill after selecting Lipinski/BBB/AMES, per-row Final Score + stars, auto-sort by score descending with #1/#2/#3 ranks, red 'must equal 100%' badge + '—' scores when weights sum ≠100, Reset defaults restores 35/35/30, expandable breakdown table with Category/Parameter/Observed/Threshold/Pass-Fail/Contribution columns, and CSV + XLSX downloads with the correct admet_scored.* filenames. Scoring engine correctness confirmed empirically: with only Lipinski selected, compounds with lipinski_pass=true score exactly 100.0 (DL renormalizes to 100% of active weight when ADME and Toxicity have no selected params)."
+}

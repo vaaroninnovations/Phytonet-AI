@@ -6,16 +6,27 @@ import WorkflowLayout from "@/components/WorkflowLayout";
 import { Checkbox } from "@/components/ui/checkbox";
 import { admetPredict, admetStatus } from "@/lib/api";
 import { exportCSV, exportXLSX } from "@/lib/exporters";
+import {
+  DEFAULT_WEIGHTS,
+  assess,
+  scoreCompound,
+  selectedParameters,
+  totalSelected,
+} from "@/lib/admetScoring";
 import { toast } from "sonner";
 import {
   ArrowLeft,
   ArrowRight,
   ArrowUpDown,
   Beaker,
+  ChevronDown,
+  ChevronRight,
   Download,
   FlaskConical,
   Loader2,
   Search,
+  Sparkles,
+  Star,
   Trash2,
 } from "lucide-react";
 
@@ -46,6 +57,7 @@ const INITIAL_FILTERS = {
   dili: "any",
   carcinogenicity: "any",
   skin: "any",
+  clintox: "any",
   lipinski: false,
   veber: false,
   ghose: false,
@@ -58,6 +70,10 @@ const INITIAL_FILTERS = {
   tpsaMax: "",
   mwMin: "",
   mwMax: "",
+  halfLifeMin: "",
+  halfLifeMax: "",
+  clearanceMin: "",
+  clearanceMax: "",
 };
 
 export default function DrugLikeness() {
@@ -78,11 +94,22 @@ export default function DrugLikeness() {
 
   // UI state
   const [filters, setFilters] = useState(INITIAL_FILTERS);
+  const [weights, setWeights] = useState(DEFAULT_WEIGHTS);
   const [query, setQuery] = useState("");
-  const [sortKey, setSortKey] = useState(null);
-  const [sortDir, setSortDir] = useState("asc");
+  const [sortKey, setSortKey] = useState("score");
+  const [sortDir, setSortDir] = useState("desc");
+  const [expanded, setExpanded] = useState({}); // { compoundKey: bool }
   const [finalSel, setFinalSel] = useState(() => ({})); // {compoundKey: row}
   const finalCount = Object.keys(finalSel).length;
+
+  const weightTotal =
+    (Number(weights.druglikeness) || 0) +
+    (Number(weights.adme) || 0) +
+    (Number(weights.toxicity) || 0);
+  const weightsValid = weightTotal === 100;
+
+  const selMap = useMemo(() => selectedParameters(filters), [filters]);
+  const scoringEnabled = weightsValid && totalSelected(selMap) > 0;
 
   // Mark previous step complete on mount so the sidebar reflects progression.
   useEffect(() => {
@@ -145,7 +172,7 @@ export default function DrugLikeness() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inputCount]);
 
-  // Filtering + sorting
+  // Filtering + scoring + sorting
   const filtered = useMemo(() => {
     const applyRange = (v, min, max) => {
       if (v == null || Number.isNaN(v)) return true;
@@ -179,6 +206,7 @@ export default function DrugLikeness() {
       if (!passesSelect(a.dili, filters.dili)) return false;
       if (!passesSelect(a.carcinogenicity, filters.carcinogenicity)) return false;
       if (!passesSelect(a.skin_sensitization, filters.skin)) return false;
+      if (!passesSelect(a.clintox, filters.clintox)) return false;
       if (filters.lipinski && !passBool(d.lipinski_pass)) return false;
       if (filters.veber && !passBool(d.veber_pass)) return false;
       if (filters.ghose && !passBool(d.ghose_pass)) return false;
@@ -192,6 +220,9 @@ export default function DrugLikeness() {
       if (!applyRange(p.logp, filters.logpMin, filters.logpMax)) return false;
       if (!applyRange(p.tpsa, filters.tpsaMin, filters.tpsaMax)) return false;
       if (!applyRange(p.mw, filters.mwMin, filters.mwMax)) return false;
+      if (!applyRange(a.half_life, filters.halfLifeMin, filters.halfLifeMax)) return false;
+      if (!applyRange(a.clearance_hepatocyte, filters.clearanceMin, filters.clearanceMax))
+        return false;
       return true;
     });
     if (query.trim()) {
@@ -203,6 +234,19 @@ export default function DrugLikeness() {
           String(r.physchem?.mw ?? "").includes(q) ||
           (r.source || "").toLowerCase().includes(q)
       );
+    }
+    // Compute score for each row (attached inline).
+    out = out.map((r) => {
+      const s = scoringEnabled ? scoreCompound(r, selMap, weights) : null;
+      return { ...r, _score: s };
+    });
+    // Rank by score descending (independent of column sort).
+    if (scoringEnabled) {
+      const ranked = [...out].sort(
+        (a, b) => (b._score?.score ?? -1) - (a._score?.score ?? -1)
+      );
+      const rankMap = new Map(ranked.map((r, i) => [compoundKey(r), i + 1]));
+      out = out.map((r) => ({ ...r, _rank: rankMap.get(compoundKey(r)) }));
     }
     if (sortKey) {
       out = [...out].sort((a, b) => {
@@ -216,7 +260,7 @@ export default function DrugLikeness() {
       });
     }
     return out;
-  }, [rows, filters, query, sortKey, sortDir]);
+  }, [rows, filters, query, sortKey, sortDir, selMap, weights, scoringEnabled]);
 
   const onSort = (key) => {
     if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
@@ -260,57 +304,102 @@ export default function DrugLikeness() {
   };
 
   // Export helpers
-  const flatten = (r) => ({
-    "Compound Name": r.compound_name,
-    "Formula": r.molecular_formula,
-    "Molecular Weight": r.physchem?.mw ?? r.molecular_weight,
-    "Canonical SMILES": r.canonical_smiles || r.smiles,
-    "LogP": r.physchem?.logp,
-    "TPSA": r.physchem?.tpsa,
-    "HBA": r.physchem?.hba,
-    "HBD": r.physchem?.hbd,
-    "Rotatable Bonds": r.druglikeness?.rotatable_bonds,
-    "QED": r.physchem?.qed,
-    "HIA": r.admet?.hia,
-    "Caco-2": r.admet?.caco2,
-    "P-gp inhibitor": r.admet?.pgp_inhibitor,
-    "BBB": r.admet?.bbb,
-    "PPBR": r.admet?.ppbr,
-    "VDss": r.admet?.vdss,
-    "CYP1A2 inhibitor": r.admet?.cyp1a2_inhibitor,
-    "CYP2C9 inhibitor": r.admet?.cyp2c9_inhibitor,
-    "CYP2C19 inhibitor": r.admet?.cyp2c19_inhibitor,
-    "CYP2D6 inhibitor": r.admet?.cyp2d6_inhibitor,
-    "CYP3A4 inhibitor": r.admet?.cyp3a4_inhibitor,
-    "Clearance (hepatocyte)": r.admet?.clearance_hepatocyte,
-    "Half-life": r.admet?.half_life,
-    "AMES": r.admet?.ames,
-    "hERG": r.admet?.herg,
-    "DILI": r.admet?.dili,
-    "Carcinogenicity": r.admet?.carcinogenicity,
-    "Skin sensitization": r.admet?.skin_sensitization,
-    "Lipinski Pass": r.druglikeness?.lipinski_pass,
-    "Veber Pass": r.druglikeness?.veber_pass,
-    "Ghose Pass": r.druglikeness?.ghose_pass,
-    "Egan Pass": r.druglikeness?.egan_pass,
-    "Muegge Pass": r.druglikeness?.muegge_pass,
-    "Bioavailability": r.admet?.bioavailability,
-    "Selection Status": finalSel[compoundKey(r)] ? "Selected" : "Not selected",
-  });
+  const flatten = (r) => {
+    const s = r._score;
+    const asmt = s?.score != null ? assess(s.score) : null;
+    const breakdownStr =
+      s?.breakdown
+        ?.map(
+          (b) =>
+            `${b.parameter}[${b.threshold || "—"}]=${
+              b.pass == null ? "n/a" : b.pass ? "PASS" : "FAIL"
+            }(+${(b.contribution ?? 0).toFixed(2)})`
+        )
+        .join(" | ") || "";
+    return {
+      "Rank": r._rank ?? "",
+      "Compound Name": r.compound_name,
+      "Formula": r.molecular_formula,
+      "Canonical SMILES": r.canonical_smiles || r.smiles,
+      "Final Score": s?.score ?? "",
+      "Assessment": asmt?.label ?? "",
+      "Stars": asmt ? "★".repeat(asmt.stars) + "☆".repeat(5 - asmt.stars) : "",
+      "Drug-Likeness Score": s?.categoryScores?.druglikeness ?? "",
+      "ADME Score": s?.categoryScores?.adme ?? "",
+      "Toxicity Score": s?.categoryScores?.toxicity ?? "",
+      "Scoring Breakdown": breakdownStr,
+      "Molecular Weight": r.physchem?.mw ?? r.molecular_weight,
+      "LogP": r.physchem?.logp,
+      "TPSA": r.physchem?.tpsa,
+      "HBA": r.physchem?.hba,
+      "HBD": r.physchem?.hbd,
+      "Rotatable Bonds": r.druglikeness?.rotatable_bonds,
+      "QED": r.physchem?.qed,
+      "HIA": r.admet?.hia,
+      "Caco-2": r.admet?.caco2,
+      "P-gp inhibitor": r.admet?.pgp_inhibitor,
+      "BBB": r.admet?.bbb,
+      "PPBR": r.admet?.ppbr,
+      "VDss": r.admet?.vdss,
+      "CYP1A2 inhibitor": r.admet?.cyp1a2_inhibitor,
+      "CYP2C9 inhibitor": r.admet?.cyp2c9_inhibitor,
+      "CYP2C19 inhibitor": r.admet?.cyp2c19_inhibitor,
+      "CYP2D6 inhibitor": r.admet?.cyp2d6_inhibitor,
+      "CYP3A4 inhibitor": r.admet?.cyp3a4_inhibitor,
+      "Clearance (hepatocyte)": r.admet?.clearance_hepatocyte,
+      "Half-life": r.admet?.half_life,
+      "AMES": r.admet?.ames,
+      "hERG": r.admet?.herg,
+      "DILI": r.admet?.dili,
+      "Carcinogenicity": r.admet?.carcinogenicity,
+      "Skin sensitization": r.admet?.skin_sensitization,
+      "ClinTox": r.admet?.clintox,
+      "Lipinski Pass": r.druglikeness?.lipinski_pass,
+      "Veber Pass": r.druglikeness?.veber_pass,
+      "Ghose Pass": r.druglikeness?.ghose_pass,
+      "Egan Pass": r.druglikeness?.egan_pass,
+      "Muegge Pass": r.druglikeness?.muegge_pass,
+      "Bioavailability": r.admet?.bioavailability,
+      "Selection Status": finalSel[compoundKey(r)] ? "Selected" : "Not selected",
+    };
+  };
 
-  const exportRows = () => filtered.filter((r) => finalSel[compoundKey(r)]).map(flatten);
-  const doExport = (fn) => {
+  const exportRows = () => {
+    const chosen = filtered.filter((r) => finalSel[compoundKey(r)]);
+    // Preserve rank order (descending) inside the export.
+    return [...chosen]
+      .sort((a, b) => (a._rank ?? 9e9) - (b._rank ?? 9e9))
+      .map(flatten);
+  };
+  const doExport = (fn, filename) => {
     const data = exportRows();
     if (data.length === 0) return toast.error("Select compounds to export");
+    // Build metadata rows describing the scoring config for reproducibility.
+    const criteriaLines = [
+      `Category weights → Drug-Likeness ${weights.druglikeness}% · ADME ${weights.adme}% · Toxicity ${weights.toxicity}% (total ${weightTotal}%)`,
+      `Selected parameters (${totalSelected(selMap)}): ` +
+        [
+          ...selMap.druglikeness.map((p) => `DL/${p.label} [${p.threshold}]`),
+          ...selMap.adme.map((p) => `ADME/${p.label} [${p.threshold}]`),
+          ...selMap.toxicity.map((p) => `TOX/${p.label} [${p.threshold}]`),
+        ].join(" | "),
+    ];
+    const metaRows = criteriaLines.map((line) => {
+      const o = {};
+      Object.keys(data[0]).forEach((k) => (o[k] = ""));
+      o["Compound Name"] = line;
+      return o;
+    });
+    const finalData = [...metaRows, ...data];
     const fields = Object.keys(data[0]).map((k) => ({ key: k, label: k }));
     fn(
-      data.map((d) => {
+      finalData.map((d) => {
         const obj = {};
         fields.forEach((f) => (obj[f.key] = d[f.label]));
         return obj;
       }),
       fields,
-      "admet_selected.csv"
+      filename
     );
   };
 
@@ -388,6 +477,16 @@ export default function DrugLikeness() {
           )}
         </div>
 
+        {/* Scoring Configuration */}
+        <ScoringConfigPanel
+          weights={weights}
+          setWeights={setWeights}
+          weightTotal={weightTotal}
+          weightsValid={weightsValid}
+          scoringEnabled={scoringEnabled}
+          selectedCount={totalSelected(selMap)}
+        />
+
         {/* Filters */}
         <FiltersPanel filters={filters} setFilters={setFilters} />
 
@@ -431,8 +530,9 @@ export default function DrugLikeness() {
               label="CSV"
               testid="admet-export-csv"
               onClick={() =>
-                doExport((data, fields) =>
-                  exportCSV(data, fields, "admet_selected.csv")
+                doExport(
+                  (data, fields, name) => exportCSV(data, fields, name),
+                  "admet_scored.csv"
                 )
               }
               disabled={finalCount === 0}
@@ -441,8 +541,9 @@ export default function DrugLikeness() {
               label="Excel"
               testid="admet-export-xlsx"
               onClick={() =>
-                doExport((data, fields) =>
-                  exportXLSX(data, fields, "admet_selected.xlsx")
+                doExport(
+                  (data, fields, name) => exportXLSX(data, fields, name),
+                  "admet_scored.xlsx"
                 )
               }
               disabled={finalCount === 0}
@@ -484,6 +585,14 @@ export default function DrugLikeness() {
                       className="h-4 w-4 border-[#5139ED] data-[state=checked]:bg-[#5139ED] data-[state=indeterminate]:bg-[#5139ED] data-[state=checked]:text-white data-[state=indeterminate]:text-white"
                     />
                   </Th>
+                  <Th sticky>#</Th>
+                  <Th sticky onClick={() => onSort("score")}>
+                    <span className="inline-flex items-center gap-1">
+                      Final Score
+                      <ArrowUpDown className="h-3 w-3 opacity-60" />
+                    </span>
+                  </Th>
+                  <Th sticky>Assessment</Th>
                   {[
                     ["compound_name", "Compound"],
                     ["mw", "MW"],
@@ -533,6 +642,14 @@ export default function DrugLikeness() {
                       row={r}
                       selected={!!finalSel[compoundKey(r)]}
                       onToggle={() => toggleRow(r)}
+                      expanded={!!expanded[compoundKey(r)]}
+                      onExpand={() =>
+                        setExpanded((s) => ({
+                          ...s,
+                          [compoundKey(r)]: !s[compoundKey(r)],
+                        }))
+                      }
+                      scoringEnabled={scoringEnabled}
                     />
                   ))
                 )}
@@ -592,6 +709,7 @@ export default function DrugLikeness() {
 
 function pickSort(r, key) {
   if (key === "compound_name") return r.compound_name;
+  if (key === "score") return r._score?.score ?? -1;
   if (["mw", "logp", "tpsa"].includes(key)) return r.physchem?.[key];
   if (["hia", "bbb", "ames", "herg", "dili"].includes(key)) return r.admet?.[key];
   if (key === "lipinski_pass") return r.druglikeness?.lipinski_pass ? 1 : 0;
@@ -612,55 +730,245 @@ function Th({ children, sticky, onClick }) {
   );
 }
 
-function AdmetRow({ row, selected, onToggle }) {
+function AdmetRow({ row, selected, onToggle, expanded, onExpand, scoringEnabled }) {
   const p = row.physchem || {};
   const a = row.admet || {};
   const d = row.druglikeness || {};
+  const s = row._score;
+  const rank = row._rank;
+  const scoreVal = s?.score;
+  const asmt = assess(scoreVal ?? -1);
   return (
-    <tr
-      data-testid={`admet-row-${compoundKey(row)}`}
-      className={`border-b border-[#F1F1FA] ${
-        selected ? "bg-[#5139ED]/[0.04]" : "hover:bg-[#F8F8FE]"
-      }`}
-    >
-      <td className="px-3 py-3">
-        <Checkbox
-          data-testid={`admet-row-check-${compoundKey(row)}`}
-          checked={selected}
-          onCheckedChange={onToggle}
-          className="h-4 w-4 border-[#5139ED] data-[state=checked]:bg-[#5139ED] data-[state=checked]:text-white"
+    <>
+      <tr
+        data-testid={`admet-row-${compoundKey(row)}`}
+        className={`border-b border-[#F1F1FA] ${
+          selected ? "bg-[#5139ED]/[0.04]" : "hover:bg-[#F8F8FE]"
+        }`}
+      >
+        <td className="px-3 py-3">
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              data-testid={`admet-row-expand-${compoundKey(row)}`}
+              onClick={onExpand}
+              disabled={!scoringEnabled}
+              className="rounded p-0.5 text-[#64748B] hover:bg-[#5139ED]/10 hover:text-[#5139ED] disabled:opacity-30"
+              aria-label="Toggle score breakdown"
+            >
+              {expanded ? (
+                <ChevronDown className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5" />
+              )}
+            </button>
+            <Checkbox
+              data-testid={`admet-row-check-${compoundKey(row)}`}
+              checked={selected}
+              onCheckedChange={onToggle}
+              className="h-4 w-4 border-[#5139ED] data-[state=checked]:bg-[#5139ED] data-[state=checked]:text-white"
+            />
+          </div>
+        </td>
+        <td className="px-3 py-3 text-center font-mono text-[11px] font-semibold text-[#64748B]">
+          {rank ? `#${rank}` : "—"}
+        </td>
+        <td className="px-3 py-3">
+          {scoringEnabled && typeof scoreVal === "number" ? (
+            <div className="flex items-center gap-2">
+              <span
+                data-testid={`admet-score-${compoundKey(row)}`}
+                className={`inline-flex min-w-[42px] justify-center rounded-full px-2 py-0.5 text-[11px] font-bold ring-1 ring-inset ${
+                  scoreVal >= 70
+                    ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                    : scoreVal >= 40
+                    ? "bg-amber-50 text-amber-700 ring-amber-200"
+                    : "bg-rose-50 text-rose-700 ring-rose-200"
+                }`}
+              >
+                {scoreVal.toFixed(1)}
+              </span>
+              <div className="h-1.5 w-16 overflow-hidden rounded-full bg-[#F1F1FA]">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-[#5139ED] via-[#395AED] to-[#8139ED]"
+                  style={{ width: `${Math.max(2, Math.min(100, scoreVal))}%` }}
+                />
+              </div>
+            </div>
+          ) : (
+            <span className="text-[11px] text-[#B4B4CD]">—</span>
+          )}
+        </td>
+        <td className="px-3 py-3">
+          {scoringEnabled && typeof scoreVal === "number" ? (
+            <div
+              data-testid={`admet-stars-${compoundKey(row)}`}
+              className="flex flex-col"
+            >
+              <StarRow n={asmt.stars} />
+              <span className="mt-0.5 text-[9px] uppercase tracking-widest text-[#64748B]">
+                {asmt.label}
+              </span>
+            </div>
+          ) : (
+            <span className="text-[11px] text-[#B4B4CD]">—</span>
+          )}
+        </td>
+        <td className="max-w-[240px] px-3 py-3 text-[13px]">
+          <div className="font-heading font-semibold text-[#0B0B18]">
+            {row.compound_name || "—"}
+          </div>
+          <div className="mt-0.5 text-[10px] text-[#64748B]">
+            {row.molecular_formula || ""} · {row.source || ""}
+          </div>
+        </td>
+        <Cell num={p.mw} fixed={2} />
+        <Cell num={p.logp} fixed={2} />
+        <Cell num={p.tpsa} fixed={1} />
+        <ProbCell v={a.hia} label="HIA" />
+        <ProbCell v={a.bbb} label="BBB" />
+        <ProbCell v={a.ames} label="AMES" reverse />
+        <ProbCell v={a.herg} label="hERG" reverse />
+        <ProbCell v={a.dili} label="DILI" reverse />
+        <BoolCell v={d.lipinski_pass} />
+        <BoolCell v={d.veber_pass} />
+        <td className="px-3 py-3 text-[10px] font-mono text-[#64748B]">
+          {[
+            d.lipinski_pass && "Lip",
+            d.veber_pass && "Veb",
+            d.ghose_pass && "Gho",
+            d.egan_pass && "Ega",
+            d.muegge_pass && "Mue",
+          ]
+            .filter(Boolean)
+            .join(" · ") || "—"}
+        </td>
+      </tr>
+      {expanded && scoringEnabled && s && (
+        <tr
+          data-testid={`admet-breakdown-${compoundKey(row)}`}
+          className="border-b border-[#F1F1FA] bg-[#FAFAFF]"
+        >
+          <td colSpan={16} className="px-6 py-4">
+            <ScoreBreakdown score={s} />
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+function StarRow({ n }) {
+  return (
+    <div className="flex items-center gap-0.5">
+      {[1, 2, 3, 4, 5].map((i) => (
+        <Star
+          key={i}
+          className={`h-3 w-3 ${
+            i <= n
+              ? "fill-[#F5B301] text-[#F5B301]"
+              : "fill-transparent text-[#D9D9E8]"
+          }`}
         />
-      </td>
-      <td className="max-w-[260px] px-3 py-3 text-[13px]">
-        <div className="font-heading font-semibold text-[#0B0B18]">
-          {row.compound_name || "—"}
-        </div>
-        <div className="mt-0.5 text-[10px] text-[#64748B]">
-          {row.molecular_formula || ""} · {row.source || ""}
-        </div>
-      </td>
-      <Cell num={p.mw} fixed={2} />
-      <Cell num={p.logp} fixed={2} />
-      <Cell num={p.tpsa} fixed={1} />
-      <ProbCell v={a.hia} label="HIA" />
-      <ProbCell v={a.bbb} label="BBB" />
-      <ProbCell v={a.ames} label="AMES" reverse />
-      <ProbCell v={a.herg} label="hERG" reverse />
-      <ProbCell v={a.dili} label="DILI" reverse />
-      <BoolCell v={d.lipinski_pass} />
-      <BoolCell v={d.veber_pass} />
-      <td className="px-3 py-3 text-[10px] font-mono text-[#64748B]">
-        {[
-          d.lipinski_pass && "Lip",
-          d.veber_pass && "Veb",
-          d.ghose_pass && "Gho",
-          d.egan_pass && "Ega",
-          d.muegge_pass && "Mue",
-        ]
-          .filter(Boolean)
-          .join(" · ") || "—"}
-      </td>
-    </tr>
+      ))}
+    </div>
+  );
+}
+
+function formatObserved(v) {
+  if (v == null) return "—";
+  if (typeof v === "boolean") return v ? "Pass" : "Fail";
+  if (typeof v === "number") return v.toFixed(3).replace(/\.?0+$/, "");
+  return String(v);
+}
+
+function ScoreBreakdown({ score }) {
+  const catLabel = {
+    druglikeness: "Drug-Likeness",
+    adme: "ADME",
+    toxicity: "Toxicity",
+  };
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-3 text-xs text-[#64748B]">
+        <span className="font-heading font-bold uppercase tracking-widest text-[#5139ED]">
+          Score breakdown
+        </span>
+        {Object.entries(score.categoryScores).map(([k, v]) => (
+          <span
+            key={k}
+            className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 ring-1 ring-[#E7E7F3]"
+          >
+            <b className="text-[#0B0B18]">{catLabel[k]}</b>
+            {v == null
+              ? "—"
+              : `${v.toFixed(1)} · weight ${score.activeCategoryWeights[k].toFixed(0)}%`}
+          </span>
+        ))}
+      </div>
+      <table className="w-full border-collapse text-[11px]">
+        <thead>
+          <tr className="border-b border-[#E7E7F3] text-[#64748B]">
+            <th className="px-2 py-1.5 text-left font-semibold uppercase tracking-widest">
+              Category
+            </th>
+            <th className="px-2 py-1.5 text-left font-semibold uppercase tracking-widest">
+              Parameter
+            </th>
+            <th className="px-2 py-1.5 text-left font-semibold uppercase tracking-widest">
+              Observed
+            </th>
+            <th className="px-2 py-1.5 text-left font-semibold uppercase tracking-widest">
+              Threshold
+            </th>
+            <th className="px-2 py-1.5 text-left font-semibold uppercase tracking-widest">
+              Pass / Fail
+            </th>
+            <th className="px-2 py-1.5 text-right font-semibold uppercase tracking-widest">
+              Contribution
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {score.breakdown.length === 0 ? (
+            <tr>
+              <td colSpan={6} className="px-2 py-3 text-center text-[#B4B4CD]">
+                No parameters selected — set filters or rules to build a score.
+              </td>
+            </tr>
+          ) : (
+            score.breakdown.map((b, i) => (
+              <tr key={i} className="border-b border-[#F1F1FA]">
+                <td className="px-2 py-1.5 text-[#64748B]">{catLabel[b.category]}</td>
+                <td className="px-2 py-1.5 font-semibold text-[#0B0B18]">
+                  {b.parameter}
+                </td>
+                <td className="px-2 py-1.5 font-mono text-[#1E1E33]">
+                  {formatObserved(b.value)}
+                </td>
+                <td className="px-2 py-1.5 text-[#64748B]">{b.threshold || "—"}</td>
+                <td className="px-2 py-1.5">
+                  {b.pass == null ? (
+                    <span className="text-[#B4B4CD]">n/a</span>
+                  ) : b.pass ? (
+                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 ring-1 ring-inset ring-emerald-200">
+                      PASS
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-700 ring-1 ring-inset ring-rose-200">
+                      FAIL
+                    </span>
+                  )}
+                </td>
+                <td className="px-2 py-1.5 text-right font-mono text-[#0B0B18]">
+                  {b.pass == null ? "—" : `+${b.contribution.toFixed(2)}`}
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -709,6 +1017,137 @@ function BoolCell({ v }) {
   );
 }
 
+function ScoringConfigPanel({
+  weights,
+  setWeights,
+  weightTotal,
+  weightsValid,
+  scoringEnabled,
+  selectedCount,
+}) {
+  const setW = (k) => (e) => {
+    const raw = e.target.value;
+    const n = raw === "" ? 0 : Math.max(0, Math.min(100, Math.round(Number(raw))));
+    setWeights((w) => ({ ...w, [k]: n }));
+  };
+  const resetDefaults = () => setWeights(DEFAULT_WEIGHTS);
+  return (
+    <div
+      data-testid="admet-scoring-config"
+      className="mt-6 rounded-3xl border border-[#E7E7F3] bg-white p-5 md:p-6"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">
+            <Sparkles className="mr-1 inline h-3.5 w-3.5" />
+            Scoring configuration
+          </p>
+          <h2 className="mt-1 font-display text-lg font-bold tracking-tight text-[#0B0B18]">
+            Weighted Final Score
+          </h2>
+          <p className="mt-1 max-w-xl text-xs text-[#64748B]">
+            Weights are distributed equally across the parameters you select in
+            the filters below. Unavailable ADMET values are ignored and the
+            remaining weights are renormalized automatically.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div
+            data-testid="admet-weight-total"
+            className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-bold ring-1 ring-inset ${
+              weightsValid
+                ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                : "bg-rose-50 text-rose-700 ring-rose-200"
+            }`}
+          >
+            Total {weightTotal}%
+            {weightsValid ? " · valid" : " · must equal 100%"}
+          </div>
+          <button
+            data-testid="scoring-reset"
+            type="button"
+            onClick={resetDefaults}
+            className="text-xs font-semibold text-[#64748B] underline decoration-dotted underline-offset-4 hover:text-[#5139ED]"
+          >
+            Reset defaults
+          </button>
+        </div>
+      </div>
+      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+        <WeightInput
+          testid="weight-druglikeness"
+          label="Drug-Likeness"
+          hint="Lipinski · Veber · Ghose · Egan · Muegge · Bioavailability · LogP · MW · TPSA"
+          value={weights.druglikeness}
+          onChange={setW("druglikeness")}
+        />
+        <WeightInput
+          testid="weight-adme"
+          label="ADME"
+          hint="Absorption · Distribution · Metabolism · Excretion"
+          value={weights.adme}
+          onChange={setW("adme")}
+        />
+        <WeightInput
+          testid="weight-toxicity"
+          label="Toxicity"
+          hint="AMES · hERG · DILI · Carcinogenicity · Skin · ClinTox"
+          value={weights.toxicity}
+          onChange={setW("toxicity")}
+        />
+      </div>
+      <div
+        data-testid="admet-scoring-status"
+        className="mt-4 flex flex-wrap items-center gap-2 text-xs"
+      >
+        {scoringEnabled ? (
+          <span className="rounded-full bg-[#5139ED]/8 px-3 py-1 font-semibold text-[#5139ED]">
+            Scoring active · {selectedCount} parameter
+            {selectedCount === 1 ? "" : "s"} selected
+          </span>
+        ) : (
+          <span className="rounded-full bg-amber-50 px-3 py-1 font-semibold text-amber-700 ring-1 ring-inset ring-amber-200">
+            {weightsValid
+              ? "Scoring paused — select at least one filter or rule below"
+              : "Scoring disabled — weights must total 100%"}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function WeightInput({ label, hint, value, onChange, testid }) {
+  return (
+    <div className="rounded-2xl border border-[#F1F1FA] bg-[#FAFAFF] p-4">
+      <div className="flex items-center justify-between">
+        <span className="font-heading text-[11px] font-bold uppercase tracking-widest text-[#5139ED]">
+          {label}
+        </span>
+        <div className="inline-flex items-center gap-1 rounded-lg border border-[#E7E7F3] bg-white px-2 py-1">
+          <input
+            data-testid={testid}
+            type="number"
+            min={0}
+            max={100}
+            value={value}
+            onChange={onChange}
+            className="w-12 bg-transparent text-right text-sm font-bold tabular-nums text-[#0B0B18] outline-none"
+          />
+          <span className="text-xs text-[#64748B]">%</span>
+        </div>
+      </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white ring-1 ring-inset ring-[#E7E7F3]">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-[#5139ED] via-[#395AED] to-[#8139ED]"
+          style={{ width: `${Math.max(0, Math.min(100, Number(value) || 0))}%` }}
+        />
+      </div>
+      <p className="mt-2 text-[10px] leading-relaxed text-[#64748B]">{hint}</p>
+    </div>
+  );
+}
+
 function FiltersPanel({ filters, setFilters }) {
   const setF = (patch) => setFilters((s) => ({ ...s, ...patch }));
   return (
@@ -736,6 +1175,8 @@ function FiltersPanel({ filters, setFilters }) {
           options={[["any","Any"],["yes","Positive"],["no","Negative"]]} />
         <Select label="Skin sensitization" testid="filter-skin" value={filters.skin} onChange={(v) => setF({ skin: v })}
           options={[["any","Any"],["yes","Positive"],["no","Negative"]]} />
+        <Select label="ClinTox" testid="filter-clintox" value={filters.clintox} onChange={(v) => setF({ clintox: v })}
+          options={[["any","Any"],["yes","Positive"],["no","Negative"]]} />
         <Select label="CYP1A2 inhibitor" testid="filter-cyp1a2" value={filters.cyp1a2} onChange={(v) => setF({ cyp1a2: v })}
           options={[["any","Any"],["yes","Yes"],["no","No"]]} />
         <Select label="CYP2C9 inhibitor" testid="filter-cyp2c9" value={filters.cyp2c9} onChange={(v) => setF({ cyp2c9: v })}
@@ -754,6 +1195,10 @@ function FiltersPanel({ filters, setFilters }) {
           onMin={(v) => setF({ tpsaMin: v })} onMax={(v) => setF({ tpsaMax: v })} />
         <RangeInput label="Mol. Weight" testid="filter-mw" min={filters.mwMin} max={filters.mwMax}
           onMin={(v) => setF({ mwMin: v })} onMax={(v) => setF({ mwMax: v })} />
+        <RangeInput label="Half-life (h)" testid="filter-halflife" min={filters.halfLifeMin} max={filters.halfLifeMax}
+          onMin={(v) => setF({ halfLifeMin: v })} onMax={(v) => setF({ halfLifeMax: v })} />
+        <RangeInput label="Clearance" testid="filter-clearance" min={filters.clearanceMin} max={filters.clearanceMax}
+          onMin={(v) => setF({ clearanceMin: v })} onMax={(v) => setF({ clearanceMax: v })} />
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <span className="mr-1 text-xs font-semibold uppercase tracking-widest text-[#64748B]">
