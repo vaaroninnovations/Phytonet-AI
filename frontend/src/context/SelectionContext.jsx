@@ -15,39 +15,23 @@ export function compoundKey(c) {
 }
 
 export function SelectionProvider({ children }) {
-  const [selection, setSelection] = useState(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return {};
-      const parsed = JSON.parse(raw);
-      return parsed && typeof parsed === "object" ? parsed : {};
-    } catch {
-      return {};
-    }
-  });
-  const [sourcePlant, setSourcePlant] = useState(() => {
-    try {
-      return localStorage.getItem(STORAGE_KEY + ".plant") || "";
-    } catch {
-      return "";
-    }
-  });
+  // Selections are intentionally NOT persisted across page reloads or between
+  // searches. A fresh page load starts with an empty selection; each new
+  // /api/plant/search call clears the previous selection (handled by
+  // PlantDatabase). This prevents stale cross-search counts.
+  const [selection, setSelection] = useState({});
+  const [sourcePlant, setSourcePlant] = useState("");
 
   useEffect(() => {
+    // Purge any stale legacy-persisted selections (previous versions of the app
+    // wrote to localStorage — clear on first mount so old data can't resurface).
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(selection));
-    } catch {
-      /* ignore quota errors */
-    }
-  }, [selection]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY + ".plant", sourcePlant || "");
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(STORAGE_KEY + ".plant");
     } catch {
       /* ignore */
     }
-  }, [sourcePlant]);
+  }, []);
 
   const toggle = useCallback((compound) => {
     setSelection((prev) => {

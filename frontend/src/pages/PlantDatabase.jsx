@@ -79,6 +79,7 @@ export default function PlantDatabase() {
     setMany,
     count: selectedCount,
     setSourcePlant,
+    clear: clearSelection,
   } = useSelection();
 
   const [mode, setMode] = useState("plant");
@@ -181,6 +182,8 @@ export default function PlantDatabase() {
     setCompounds([]);
     setMeta(null);
     setPage(1);
+    // A new search resets any prior selection so the counter starts at 0.
+    clearSelection();
     const tick = setInterval(
       () => setProgress((p) => (p < 92 ? p + Math.random() * 6 : p)),
       500
@@ -815,7 +818,7 @@ export default function PlantDatabase() {
                   <span data-testid="proceed-count">{selectedCount}</span> compound{selectedCount === 1 ? "" : "s"} selected
                 </div>
                 <div className="text-[11px] text-[#64748B]">
-                  Selections persist across search, filters and pages.
+                  Selection resets when you start a new search.
                 </div>
               </div>
             </div>

@@ -1,0 +1,30 @@
+{
+  "summary": "Iteration 6 — Selection persistence removal verified. Bug 'counter shows 167 with no search' is FIXED. All 9 acceptance scenarios PASS on preview URL. SelectionContext now starts empty & purges any legacy drSlash.selection.v1 / .plant localStorage keys on first mount; PlantDatabase.runSearch() calls clearSelection() at the very start of each new search so the counter resets to 0 immediately during the loading state. Backend not tested (skipped per request).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "PlantDatabase — page-size <select>", "issues": ["Pre-existing (iterations 1–5) React hydration warning: <span> cannot be a child of <option>. Injected by dev-only ve-dynamic tooling wrapping option children. Not user-visible; not introduced by this iteration."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/frontend/src/context/SelectionContext.jsx",
+    "/app/frontend/src/pages/PlantDatabase.jsx"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "SelectionContext.jsx correctly initializes selection to {} and useEffect on mount removes both STORAGE_KEY and STORAGE_KEY + '.plant'. Purge runs unconditionally on every mount — correct for the new 'no persistence' design.",
+    "PlantDatabase.runSearch() invokes clearSelection() before the async fn(); combined with setCompounds([]) this yields an immediate counter reset visible during the loading state (verified — chip shows 'Selected compounds: 0' within 150ms of pressing Enter on the new search). Good UX.",
+    "Note: selection is intentionally kept in React context so it still survives route changes within a single tab (verified in T9: 3 selections carried into /drug-likeness stat-selected). This matches the request's 'in-memory only, survives route changes but not reload' contract.",
+    "Minor cosmetic note (carry-over): sticky proceed-bar caption reads 'Selection resets when you start a new search.' — accurate and aligned with new behavior. No mention of reload-loss, which could be a UX consideration but not a bug."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "100% (9/9 scenarios)"},
+  "test_credentials": "N/A",
+  "seed_data_creation": "None. Used cached Curcuma longa (241 rows) and Withania somnifera plants for search.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 6 reverses iteration 4's cross-session persistence. Selections are pure React-context in-memory now. Verified scenarios: (T1) fresh load counter=0 & localStorage null; (T2) pre-populated localStorage purged on mount, counter=0 after reload, localStorage cleared; (T3) counter stays 0 post-search with 241 rows, proceed button disabled; (T4) individual toggles update counter (0→4→3); (T5) select-all sets count = filtered total (241 = 241); (T6) new search resets counter to 0 IMMEDIATELY during loading; (T7) reload with 5 selections → counter=0, localStorage=null; (T8) results-search filter and source-filter chips do NOT change counter (stayed at 3); (T9) proceed dialog disabled at 0, enabled >0, navigate to /drug-likeness carries count via context (stat-selected=3 preserved across route). No new regressions.",
+  "rca of the issue": "Original bug 'counter=167 with no search': previous iteration (iter 4) added localStorage persistence for selections via key drSlash.selection.v1. Selections written by prior sessions remained in localStorage across reloads, so on next visit SelectionProvider hydrated its state from localStorage and the counter chip immediately showed the stale count (e.g. 167) even before any search — worse, the chip was visible unconditionally so users saw stale numbers with no plant loaded. Fix in this iteration: (a) SelectionProvider initializes with empty {} (no localStorage hydration); (b) useEffect on mount removes both drSlash.selection.v1 and drSlash.selection.v1.plant, purging any legacy artefacts from iter-4 sessions; (c) PlantDatabase.runSearch() clears selection at the start of every new search so cross-search stale counts cannot leak into the counter. Reproduction pre-fix: pre-populate localStorage.setItem('drSlash.selection.v1', JSON.stringify({...167 fakes...})) then load /plant-database → chip showed 167. Post-fix: chip shows 0 and the localStorage entry is null immediately after mount (verified in T2)."
+}
