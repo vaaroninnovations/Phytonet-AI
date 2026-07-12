@@ -44,3 +44,9 @@ export const standardizeStart = (compounds) =>
 
 export const standardizeStatus = (jobId) =>
   api.get(`/standardize/status/${jobId}`).then((r) => r.data);
+
+export const admetPredict = (compounds) =>
+  api.post("/admet/predict", { compounds }).then((r) => r.data);
+
+export const admetStatus = (jobId) =>
+  api.get(`/admet/status/${jobId}`).then((r) => r.data);

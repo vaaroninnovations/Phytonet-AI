@@ -17,6 +17,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from plants_seed import PLANTS_SEED
+import admet_service
 
 
 ROOT_DIR = Path(__file__).parent
@@ -493,7 +494,113 @@ async def lotus_molweight(
 
 @api_router.get("/health")
 async def health():
-    return {"status": "ok", "service": "dr-slash"}
+    return {"status": "ok", "service": "dr-slash", "admet_ready": admet_service.is_ready()}
+
+
+# ---------------------------------------------------------------------------
+# ADMET & Drug-Likeness Prediction (admet-ai)
+# ---------------------------------------------------------------------------
+_admet_jobs: dict[str, dict] = {}
+
+
+class AdmetCompound(BaseModel):
+    compound_name: Optional[str] = ""
+    smiles: Optional[str] = None
+    canonical_smiles: Optional[str] = None
+    molecular_formula: Optional[str] = None
+    molecular_weight: Optional[float] = None
+    imppat_id: Optional[str] = None
+    lotus_id: Optional[str] = None
+    pubchem_cid: Optional[int] = None
+    inchi_key: Optional[str] = None
+    source: Optional[str] = None
+    id: Optional[str] = None  # stable key from the frontend
+
+    class Config:
+        extra = "allow"
+
+
+class AdmetPayload(BaseModel):
+    compounds: List[AdmetCompound] = Field(default_factory=list)
+
+
+async def _run_admet_job(job_id: str, compounds: List[dict]):
+    try:
+        smiles = [
+            (c.get("canonical_smiles") or c.get("smiles") or "").strip()
+            for c in compounds
+        ]
+        # Predict all valid SMILES in one batch, but keep row alignment.
+        valid_idx = [i for i, s in enumerate(smiles) if s]
+        valid_smiles = [smiles[i] for i in valid_idx]
+
+        preds_valid: List[dict] = []
+        if valid_smiles:
+            preds_valid = await admet_service.predict_batch(valid_smiles)
+            _admet_jobs[job_id]["done"] = len(valid_smiles)
+
+        empty_pred = {"admet": {}, "physchem": {}, "druglikeness": {}, "no_smiles": True}
+        preds: List[dict] = []
+        j = 0
+        for i, s in enumerate(smiles):
+            if s:
+                preds.append(preds_valid[j])
+                j += 1
+            else:
+                preds.append(dict(empty_pred))
+
+        # Merge back onto original compound rows
+        merged: List[dict] = []
+        for c, p in zip(compounds, preds):
+            row = dict(c)
+            row.update(p)
+            row["admet_ready"] = not p.get("no_smiles")
+            merged.append(row)
+
+        _admet_jobs[job_id]["compounds"] = merged
+        _admet_jobs[job_id]["done"] = len(compounds)
+        _admet_jobs[job_id]["status"] = "done"
+    except Exception as e:
+        _admet_jobs[job_id]["status"] = "failed"
+        _admet_jobs[job_id]["error"] = str(e)
+        logging.exception(f"ADMET job {job_id} failed: {e}")
+
+
+@api_router.post("/admet/predict")
+async def admet_predict(payload: AdmetPayload):
+    if not payload.compounds:
+        return {"job_id": None, "total": 0}
+    job_id = str(uuid.uuid4())
+    total = len(payload.compounds)
+    _admet_jobs[job_id] = {
+        "done": 0,
+        "total": total,
+        "status": "running",
+        "compounds": None,
+        "started_at": time.time(),
+    }
+    asyncio.create_task(
+        _run_admet_job(job_id, [c.dict() for c in payload.compounds])
+    )
+    return {"job_id": job_id, "total": total, "model_ready": admet_service.is_ready()}
+
+
+@api_router.get("/admet/status/{job_id}")
+async def admet_status(job_id: str):
+    job = _admet_jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    resp = {
+        "job_id": job_id,
+        "done": job.get("done", 0),
+        "total": job.get("total", 0),
+        "status": job.get("status"),
+        "error": job.get("error"),
+        "model_ready": admet_service.is_ready(),
+    }
+    if job.get("status") == "done":
+        resp["compounds"] = job.get("compounds", [])
+    return resp
 
 
 # ---------------------------------------------------------------------------

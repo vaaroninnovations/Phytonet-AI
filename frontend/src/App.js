@@ -5,7 +5,6 @@ import PhytoNetAI from "@/pages/PhytoNetAI";
 import DrugLikeness from "@/pages/DrugLikeness";
 import ComingSoon from "@/pages/ComingSoon";
 import {
-  ToxicityPrediction,
   TargetPrediction,
   DiseaseTargetIdentification,
   NetworkAnalysis,
@@ -35,7 +34,6 @@ function App() {
                   path="/plant-database"
                   element={<Navigate to="/phytonet-ai" replace />}
                 />
-                <Route path="/toxicity-prediction" element={<ToxicityPrediction />} />
                 <Route path="/drug-likeness" element={<DrugLikeness />} />
                 <Route path="/target-prediction" element={<TargetPrediction />} />
                 <Route

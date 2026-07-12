@@ -12,8 +12,7 @@ import {
  */
 export const WORKFLOW_STEPS = [
   { id: "plant-database", label: "Plant Database", route: "/phytonet-ai" },
-  { id: "toxicity-prediction", label: "Toxicity Prediction", route: "/toxicity-prediction" },
-  { id: "drug-likeness-screening", label: "Drug-Likeness Screening", route: "/drug-likeness" },
+  { id: "admet-drug-likeness", label: "ADMET & Drug-Likeness Analysis", route: "/drug-likeness" },
   { id: "target-prediction", label: "Target Prediction", route: "/target-prediction" },
   { id: "disease-target-identification", label: "Disease Target Identification", route: "/disease-target-identification" },
   { id: "network-analysis", label: "Network Analysis", route: "/network-analysis" },
