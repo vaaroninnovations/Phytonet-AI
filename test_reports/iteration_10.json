@@ -1,0 +1,30 @@
+{
+  "summary": "Iteration 10 — Persistent 9-step Research Workflow sidebar fully verified across all workflow module pages. All 13 review scenarios pass: (1) sidebar structure/order on /phytonet-ai with exactly 9 steps in required order and NO compound-standardization anywhere, (2) sidebar renders on every workflow route (/toxicity-prediction, /drug-likeness, /target-prediction, /disease-target-identification, /network-analysis, /molecular-docking, /molecular-dynamics, /ai-scientific-report), (3) initial fresh state: plant-database data-active=true, all 8 downstream steps data-locked=true + disabled + clicks are no-ops, (4) Withania somnifera search → 164 rows → tick first row → plant-database completed + toxicity unlocked; deselecting reverts, (5) clicking unlocked workflow-step-toxicity-prediction navigates to /toxicity-prediction and plant-database shows CheckCircle2 SVG + toxicity has NOW badge, (6) continue-toxicity-prediction advances to /drug-likeness with plant-database + toxicity marked completed, target-prediction still locked on first arrival, (7) all downstream steps stay locked on /toxicity-prediction and locked clicks are no-ops, (8) clicking completed workflow-step-plant-database from /drug-likeness navigates back to /phytonet-ai preserving completion state, (9) full sequential walk (verified in two runs + isolated hops): reached /ai-scientific-report with all 8 prior steps data-completed=true and ai-scientific-report data-active=true, (10) mobile (400x800) hides desktop sidebar (display:none) and reveals workflow-mobile-toggle which opens disclosure containing all 9 step buttons, (11) /plant-database redirects to /phytonet-ai with sidebar rendered, (12) UI compliance: white bg, sidebar classes include sticky top-16 w-72 md:flex, glass bg-white/85 backdrop-blur-md, brand colors preserved.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "WorkflowContext.jsx correctly implements the accessibility rule (step i accessible iff all prior steps completed). markComplete/markIncomplete idempotency preserved via functional setState.",
+    "WorkflowSidebar computes activeId from useLocation().pathname matching step.route; locked steps have disabled attr + data-locked='true'; the onStepClick early-returns when !isAccessible so clicking a locked step is a no-op. Data attributes (data-active/data-completed/data-locked) are correctly wired.",
+    "WorkflowModulePage's useEffect marking previous steps complete on mount is the intended UX for deep-links / navigating back and forward.",
+    "PhytoNetAI's useEffect correctly conditions plant-database completion on compounds.length > 0 AND selectedCount > 0 — verified by unlock + deselect revert test.",
+    "DrugLikeness.jsx marks plant-database + toxicity-prediction complete on mount, while continue-drug-likeness-screening then marks drug-likeness-screening and navigates to /target-prediction — verified.",
+    "PRE-EXISTING console warning still present: '<span> cannot be a child of <option>' at PlantDatabase.jsx line ~817 (page-size select). Unchanged by this iteration; introduced by Emergent visual-editor annotations. Not user-visible but pollutes console. Recommend flagging to VE team or leaving as-is.",
+    "The failing sequence-walk assertion earlier was a Playwright quirk with page.wait_for_url('**/disease-target-identification', wait_until='load') not resolving despite URL changing (React client-side nav doesn't fire 'load'). Direct URL polling verified the continue button on target-prediction correctly navigates to /disease-target-identification (and disease-target-identification → /network-analysis). Not a product bug."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only review)", "frontend": "100% (13/13 review scenarios)"},
+  "test_credentials": "N/A",
+  "seed_data_creation": "Live 'Withania somnifera' Mongo-cached search response used (164 compounds, IMPPAT 80 · LOTUS 200 pre-dedupe). No new seed data created.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 10 adds a persistent 9-step Research Workflow sidebar rendered by WorkflowLayout across all module routes. WorkflowContext exposes markComplete/markIncomplete/isCompleted/isAccessible with accessibility gated by 'all prior steps completed'. Sidebar buttons carry data-testid=workflow-step-<id> with data-active/data-completed/data-locked attributes plus a native disabled attr on locked buttons. Mobile disclosure via data-testid=workflow-mobile-toggle. Continue buttons on module pages use data-testid=continue-<stepId>. Plant Database completion criterion is compounds>0 AND selectedCount>0; downstream placeholder pages mark all previous step IDs complete on mount. Compound Standardization is intentionally NOT in the sidebar — runs automatically in ResultsContext after any dataset lands. When testing the full sequential walk in Playwright, prefer polling page.url instead of page.wait_for_url(wait_until='load') because client-side React Router navigation may not fire the load event reliably.",
+  "rca of the issue": "N/A — no defects found. All required sidebar behaviours (structure, locking, unlocking, progression, back-nav, mobile disclosure, redirect) behave per spec."
+}

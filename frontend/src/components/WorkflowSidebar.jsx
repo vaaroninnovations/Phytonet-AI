@@ -1,51 +1,53 @@
-import { Link, useLocation } from "react-router-dom";
-import { CheckCircle2, Circle, Menu } from "lucide-react";
-import { useState } from "react";
-
-export const WORKFLOW_STEPS = [
-  { id: "plant-database", label: "Plant Database" },
-  { id: "compound-standardization", label: "Compound Standardization" },
-  { id: "toxicity-prediction", label: "Toxicity Prediction" },
-  { id: "drug-likeness-screening", label: "Drug-Likeness Screening" },
-  { id: "target-prediction", label: "Target Prediction" },
-  { id: "disease-target-identification", label: "Disease Target Identification" },
-  { id: "network-analysis", label: "Network Analysis" },
-  { id: "molecular-docking", label: "Molecular Docking" },
-  { id: "molecular-dynamics", label: "Molecular Dynamics" },
-  { id: "ai-scientific-report", label: "AI Scientific Report" },
-];
+import { useNavigate, useLocation } from "react-router-dom";
+import { CheckCircle2, Lock, Menu } from "lucide-react";
+import { useMemo, useState } from "react";
+import { useWorkflow, WORKFLOW_STEPS } from "@/context/WorkflowContext";
 
 /**
- * Fixed left sidebar for the PhytoNet AI workspace.
- * - Active step highlighted.
- * - Completed steps show a green check.
- * - Pending steps stay grey.
- * - Sidebar is sticky under the app header on md+ screens; on mobile it
- *   collapses into a top disclosure to avoid competing with the header.
+ * Persistent left sidebar rendered on every workflow module. The active step
+ * is derived from the current route; completed steps come from WorkflowContext.
  */
-export default function WorkflowSidebar({
-  activeId,
-  completedIds = [],
-  onStepClick,
-}) {
+export default function WorkflowSidebar() {
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const { isCompleted, isAccessible } = useWorkflow();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const isCompleted = (id) => completedIds.includes(id);
 
-  const items = WORKFLOW_STEPS.map((s, idx) => {
-    const active = s.id === activeId;
-    const completed = isCompleted(s.id);
+  const activeId = useMemo(
+    () => WORKFLOW_STEPS.find((s) => s.route === pathname)?.id || null,
+    [pathname]
+  );
+
+  const onStepClick = (step) => {
+    if (!isAccessible(step.id)) return;
+    if (step.route === pathname) return;
+    navigate(step.route);
+  };
+
+  const items = WORKFLOW_STEPS.map((step, idx) => {
+    const active = step.id === activeId;
+    const completed = isCompleted(step.id);
+    const accessible = isAccessible(step.id);
+    const locked = !accessible && !active;
     return (
       <button
-        key={s.id}
-        data-testid={`workflow-step-${s.id}`}
-        onClick={() => onStepClick && onStepClick(s.id)}
+        key={step.id}
+        data-testid={`workflow-step-${step.id}`}
+        data-active={active ? "true" : "false"}
+        data-completed={completed ? "true" : "false"}
+        data-locked={locked ? "true" : "false"}
+        onClick={() => onStepClick(step)}
+        disabled={locked}
         className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
           active
             ? "bg-[#5139ED]/10 text-[#5139ED]"
+            : locked
+            ? "cursor-not-allowed text-[#B4B4CD]"
             : completed
             ? "text-[#0B0B18] hover:bg-[#F5F5FC]"
             : "text-[#64748B] hover:bg-[#F5F5FC] hover:text-[#0B0B18]"
         }`}
+        title={locked ? "Complete the previous step to unlock" : undefined}
       >
         <span
           className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg font-mono text-[10px] font-bold ${
@@ -53,11 +55,15 @@ export default function WorkflowSidebar({
               ? "bg-gradient-to-br from-[#5139ED] via-[#395AED] to-[#8139ED] text-white shadow-[0_4px_10px_-4px_rgba(81,57,237,0.6)]"
               : completed
               ? "bg-emerald-500 text-white"
+              : locked
+              ? "bg-[#F5F5FC] text-[#B4B4CD]"
               : "bg-[#F1F1FA] text-[#64748B]"
           }`}
         >
           {completed ? (
             <CheckCircle2 className="h-3.5 w-3.5" />
+          ) : locked ? (
+            <Lock className="h-3 w-3" />
           ) : (
             String(idx + 1).padStart(2, "0")
           )}
@@ -67,7 +73,7 @@ export default function WorkflowSidebar({
             active ? "font-semibold" : ""
           }`}
         >
-          {s.label}
+          {step.label}
         </span>
         {active && (
           <span className="rounded-full bg-[#5139ED]/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-[#5139ED]">
@@ -92,8 +98,7 @@ export default function WorkflowSidebar({
             Research Workflow
           </span>
           <span className="text-xs text-[#64748B]">
-            {(activeId &&
-              WORKFLOW_STEPS.find((s) => s.id === activeId)?.label) ||
+            {(activeId && WORKFLOW_STEPS.find((s) => s.id === activeId)?.label) ||
               "Choose step"}
           </span>
         </button>
@@ -119,8 +124,8 @@ export default function WorkflowSidebar({
         </div>
         <nav className="flex-1 space-y-0.5 px-3 pb-6">{items}</nav>
         <div className="border-t border-[#E7E7F3] px-5 py-4 text-[11px] text-[#64748B]">
-          Follow each step to build a complete, reproducible network
-          pharmacology study.
+          Complete each step to unlock the next. Standardization runs
+          automatically after the Plant Database step.
         </div>
       </aside>
     </>
