@@ -4,6 +4,8 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import re
+import time
+import uuid
 import asyncio
 import logging
 from datetime import datetime, timezone
@@ -492,6 +494,335 @@ async def lotus_molweight(
 @api_router.get("/health")
 async def health():
     return {"status": "ok", "service": "dr-slash"}
+
+
+# ---------------------------------------------------------------------------
+# Compound Standardization (PubChem + LOTUS + ChEBI)
+# ---------------------------------------------------------------------------
+CHEBI_OLS_URL = "https://www.ebi.ac.uk/ols4/api/search"
+
+_standardize_jobs: dict[str, dict] = {}
+_JOB_TTL = 60 * 60  # 1 hour
+
+
+class StandardizeCompoundIn(BaseModel):
+    compound_name: Optional[str] = ""
+    smiles: Optional[str] = None
+    canonical_smiles: Optional[str] = None
+    isomeric_smiles: Optional[str] = None
+    inchi: Optional[str] = None
+    inchi_key: Optional[str] = None
+    molecular_formula: Optional[str] = None
+    molecular_weight: Optional[float] = None
+    source: Optional[str] = None
+    imppat_id: Optional[str] = None
+    lotus_id: Optional[str] = None
+    pubchem_cid: Optional[int] = None
+    retention_time: Optional[float] = None
+    plant_part: Optional[str] = None
+    reference: Optional[str] = None
+
+    class Config:
+        extra = "allow"
+
+
+class StandardizePayload(BaseModel):
+    compounds: List[StandardizeCompoundIn] = Field(default_factory=list)
+
+
+async def _pubchem_full(client_: httpx.AsyncClient, name: str) -> Optional[dict]:
+    """Fetch complete standardization properties (canonical + isomeric SMILES,
+    InChI, InChIKey, formula, weight, CID, IUPAC name) via PubChem PUG-REST."""
+    props = (
+        "SMILES,ConnectivitySMILES,InChI,InChIKey,MolecularFormula,"
+        "MolecularWeight,IUPACName"
+    )
+    url = f"{PUBCHEM_BASE}/name/{quote(name)}/property/{props}/JSON"
+    try:
+        r = await client_.get(url, timeout=15.0, headers={"User-Agent": USER_AGENT})
+    except Exception:
+        return None
+    if r.status_code != 200:
+        return None
+    try:
+        data = r.json()
+    except Exception:
+        return None
+    entries = data.get("PropertyTable", {}).get("Properties", [])
+    if not entries:
+        return None
+    p = entries[0]
+    mw = p.get("MolecularWeight")
+    try:
+        mw = float(mw) if mw is not None else None
+    except (TypeError, ValueError):
+        mw = None
+    # Newer PubChem returns "SMILES" (isomeric) and "ConnectivitySMILES" (canonical);
+    # older responses use CanonicalSMILES/IsomericSMILES.
+    canonical = p.get("ConnectivitySMILES") or p.get("CanonicalSMILES")
+    isomeric = p.get("SMILES") or p.get("IsomericSMILES")
+    return {
+        "canonical_smiles": canonical,
+        "isomeric_smiles": isomeric or canonical,
+        "inchi": p.get("InChI"),
+        "inchi_key": p.get("InChIKey"),
+        "molecular_formula": p.get("MolecularFormula"),
+        "molecular_weight": mw,
+        "pubchem_cid": p.get("CID"),
+        "iupac_name": p.get("IUPACName"),
+    }
+
+
+async def _chebi_by_name(client_: httpx.AsyncClient, name: str) -> Optional[dict]:
+    """Best-effort ChEBI lookup via EBI OLS. Returns {chebi_id, label} or None."""
+    try:
+        r = await client_.get(
+            CHEBI_OLS_URL,
+            params={
+                "q": name,
+                "ontology": "chebi",
+                "type": "class",
+                "exact": "false",
+                "rows": 1,
+            },
+            timeout=10.0,
+            headers={"User-Agent": USER_AGENT},
+        )
+    except Exception:
+        return None
+    if r.status_code != 200:
+        return None
+    try:
+        data = r.json()
+    except Exception:
+        return None
+    docs = ((data.get("response") or {}).get("docs")) or []
+    if not docs:
+        return None
+    d = docs[0]
+    obo_id = d.get("obo_id") or d.get("short_form") or ""
+    if not obo_id.upper().startswith("CHEBI:"):
+        return None
+    return {"chebi_id": obo_id, "chebi_label": d.get("label")}
+
+
+def _is_complete(row: dict) -> bool:
+    """A row is already fully standardized if it has canonical SMILES, InChIKey,
+    formula and weight. Used to skip external calls when data is already good."""
+    return bool(
+        row.get("canonical_smiles")
+        and row.get("inchi_key")
+        and row.get("molecular_formula")
+        and row.get("molecular_weight")
+    )
+
+
+async def _standardize_one(client_: httpx.AsyncClient, c: dict) -> dict:
+    """Standardize a single compound: PubChem primary, LOTUS fallback,
+    ChEBI verification. Sets status = 'standardized' | 'manual_review'."""
+    out = dict(c)
+    name = (out.get("compound_name") or "").strip()
+
+    # Ensure canonical SMILES field is derived from existing `smiles` if the
+    # incoming row already has SMILES but no explicit canonical/isomeric split.
+    if not out.get("canonical_smiles") and out.get("smiles"):
+        out["canonical_smiles"] = out["smiles"]
+    if not out.get("isomeric_smiles") and out.get("smiles"):
+        out["isomeric_smiles"] = out["smiles"]
+
+    if not name and not _is_complete(out):
+        out["status"] = "manual_review"
+        return out
+
+    # Skip PubChem for already-standardized rows (IMPPAT/LOTUS with full data).
+    if _is_complete(out):
+        # Still add ChEBI id best-effort — non-blocking.
+        chebi = await _chebi_by_name(client_, name) if name else None
+        if chebi:
+            out.update(chebi)
+            src = out.get("source") or ""
+            if "ChEBI" not in src:
+                out["source"] = f"{src} + ChEBI".strip(" +") if src else "ChEBI"
+        out["status"] = "standardized"
+        return out
+
+    # PubChem primary — handles synonyms automatically via name endpoint.
+    pub = await _pubchem_full(client_, name)
+    if pub:
+        for k in (
+            "canonical_smiles",
+            "isomeric_smiles",
+            "inchi",
+            "inchi_key",
+            "pubchem_cid",
+            "iupac_name",
+        ):
+            if pub.get(k):
+                out[k] = pub[k]
+        # Prefer isomeric SMILES for the main `smiles` field (better for docking).
+        if pub.get("isomeric_smiles") or pub.get("canonical_smiles"):
+            out["smiles"] = pub.get("isomeric_smiles") or pub.get("canonical_smiles")
+        if not out.get("molecular_formula") and pub.get("molecular_formula"):
+            out["molecular_formula"] = pub["molecular_formula"]
+        if not out.get("molecular_weight") and pub.get("molecular_weight"):
+            out["molecular_weight"] = pub["molecular_weight"]
+        src = out.get("source") or ""
+        if "PubChem" not in src:
+            out["source"] = f"{src} + PubChem".strip(" +") if src else "PubChem"
+    else:
+        # LOTUS fallback
+        lot = await _lotus_by_name(client_, name)
+        if lot:
+            if lot.get("smiles"):
+                out["canonical_smiles"] = out.get("canonical_smiles") or lot["smiles"]
+                out["isomeric_smiles"] = out.get("isomeric_smiles") or lot["smiles"]
+                out["smiles"] = out.get("smiles") or lot["smiles"]
+            if lot.get("inchi") and not out.get("inchi"):
+                out["inchi"] = lot["inchi"]
+            if lot.get("inchi_key") and not out.get("inchi_key"):
+                out["inchi_key"] = lot["inchi_key"]
+            if lot.get("molecular_formula") and not out.get("molecular_formula"):
+                out["molecular_formula"] = lot["molecular_formula"]
+            if lot.get("molecular_weight") and not out.get("molecular_weight"):
+                out["molecular_weight"] = lot["molecular_weight"]
+            if lot.get("lotus_id") and not out.get("lotus_id"):
+                out["lotus_id"] = lot["lotus_id"]
+            src = out.get("source") or ""
+            if "LOTUS" not in src:
+                out["source"] = f"{src} + LOTUS".strip(" +") if src else "LOTUS"
+
+    # ChEBI verification (adds chebi_id when found — never blocks status)
+    chebi = await _chebi_by_name(client_, name) if name else None
+    if chebi:
+        out.update(chebi)
+        src = out.get("source") or ""
+        if "ChEBI" not in src:
+            out["source"] = f"{src} + ChEBI".strip(" +") if src else "ChEBI"
+
+    out["status"] = "standardized" if out.get("canonical_smiles") else "manual_review"
+    return out
+
+
+def _dedupe_standardized(rows: List[dict]) -> List[dict]:
+    """Deduplicate standardized rows by InChIKey connectivity layer (first 14
+    chars). Duplicates are kept in the list but flagged status='duplicate_removed'
+    so the frontend can display them with a strike-through status badge."""
+    first_seen: dict[str, str] = {}
+    out: List[dict] = []
+    for r in rows:
+        r = dict(r)
+        # Skip existing marker rows
+        if r.get("status") == "duplicate_removed":
+            out.append(r)
+            continue
+        key = None
+        ik = (r.get("inchi_key") or "").strip()
+        if ik:
+            key = f"k:{ik.split('-')[0]}"
+        else:
+            n = (r.get("compound_name") or "").strip().lower()
+            if n:
+                key = f"n:{n}"
+        if key and key in first_seen:
+            r["status"] = "duplicate_removed"
+            r["duplicate_of"] = first_seen[key]
+        elif key:
+            first_seen[key] = r.get("compound_name") or ""
+        out.append(r)
+    return out
+
+
+def _summary_stats(rows: List[dict]) -> dict:
+    stats = {
+        "total": len(rows),
+        "standardized": 0,
+        "manual_review": 0,
+        "duplicate_removed": 0,
+    }
+    for r in rows:
+        s = r.get("status") or "standardized"
+        stats[s] = stats.get(s, 0) + 1
+    return stats
+
+
+async def _run_standardize_job(job_id: str, compounds: list):
+    try:
+        async with httpx.AsyncClient() as client_:
+            sem = asyncio.Semaphore(6)
+            counter = {"n": 0}
+
+            async def _process(c):
+                async with sem:
+                    result = await _standardize_one(client_, c)
+                counter["n"] += 1
+                job = _standardize_jobs.get(job_id)
+                if job:
+                    job["done"] = counter["n"]
+                return result
+
+            results = await asyncio.gather(*[_process(c) for c in compounds])
+        results = _dedupe_standardized(results)
+        job = _standardize_jobs.get(job_id)
+        if job:
+            job["compounds"] = results
+            job["stats"] = _summary_stats(results)
+            job["status"] = "done"
+            job["done"] = len(compounds)
+    except Exception as e:
+        job = _standardize_jobs.get(job_id)
+        if job:
+            job["status"] = "failed"
+            job["error"] = str(e)
+        logging.exception(f"standardize job {job_id} failed: {e}")
+
+
+def _gc_standardize_jobs():
+    now = time.time()
+    stale = [
+        jid
+        for jid, job in _standardize_jobs.items()
+        if now - job.get("started_at", now) > _JOB_TTL
+    ]
+    for jid in stale:
+        _standardize_jobs.pop(jid, None)
+
+
+@api_router.post("/standardize/start")
+async def standardize_start(payload: StandardizePayload):
+    _gc_standardize_jobs()
+    if not payload.compounds:
+        return {"job_id": None, "total": 0}
+    job_id = str(uuid.uuid4())
+    total = len(payload.compounds)
+    _standardize_jobs[job_id] = {
+        "done": 0,
+        "total": total,
+        "status": "running",
+        "compounds": None,
+        "started_at": time.time(),
+    }
+    asyncio.create_task(
+        _run_standardize_job(job_id, [c.dict() for c in payload.compounds])
+    )
+    return {"job_id": job_id, "total": total}
+
+
+@api_router.get("/standardize/status/{job_id}")
+async def standardize_status(job_id: str):
+    job = _standardize_jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    resp = {
+        "job_id": job_id,
+        "done": job.get("done", 0),
+        "total": job.get("total", 0),
+        "status": job.get("status"),
+        "stats": job.get("stats"),
+        "error": job.get("error"),
+    }
+    if job.get("status") == "done":
+        resp["compounds"] = job.get("compounds", [])
+    return resp
 
 
 # ---------------------------------------------------------------------------

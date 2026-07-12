@@ -38,3 +38,9 @@ export const lotusMolweight = (minMass, maxMass, maxHits = 20) =>
 
 export const lcmsEnrich = (compounds) =>
   api.post("/lcms/enrich", { compounds }).then((r) => r.data);
+
+export const standardizeStart = (compounds) =>
+  api.post("/standardize/start", { compounds }).then((r) => r.data);
+
+export const standardizeStatus = (jobId) =>
+  api.get(`/standardize/status/${jobId}`).then((r) => r.data);

@@ -584,3 +584,230 @@ class TestLCMSEnrich:
         if r.status_code == 200:
             data = r.json()
             assert data.get("compounds") == []
+
+
+
+# ---------------------------------------------------------------------------
+# Compound Standardization (PubChem + LOTUS + ChEBI, async job pattern)
+# ---------------------------------------------------------------------------
+def _poll_standardize(api, job_id, timeout=90, interval=0.7):
+    """Poll /api/standardize/status until status == 'done' or 'failed'."""
+    deadline = time.time() + timeout
+    last = None
+    while time.time() < deadline:
+        r = api.get(
+            f"{BASE_URL}/api/standardize/status/{job_id}", timeout=20
+        )
+        assert r.status_code == 200, r.text
+        last = r.json()
+        if last.get("status") in ("done", "failed"):
+            return last
+        time.sleep(interval)
+    raise AssertionError(f"Standardize job {job_id} did not complete in {timeout}s: {last}")
+
+
+class TestStandardizeStartAndStatus:
+    """POST /standardize/start returns job_id + total. GET /status polls to done."""
+
+    def test_start_and_status_4_compounds(self, api):
+        payload = {
+            "compounds": [
+                {"compound_name": "Curcumin"},
+                {"compound_name": "Piperine"},
+                {"compound_name": "Withanolide A"},
+                {"compound_name": "Quercetin"},
+            ]
+        }
+        r = api.post(f"{BASE_URL}/api/standardize/start", json=payload, timeout=15)
+        assert r.status_code == 200, r.text
+        start = r.json()
+        assert start.get("total") == 4
+        assert start.get("job_id"), f"job_id missing: {start}"
+
+        final = _poll_standardize(api, start["job_id"], timeout=120)
+        assert final.get("status") == "done", final
+        assert final.get("done") == final.get("total") == 4
+        stats = final.get("stats") or {}
+        assert stats.get("total") == 4
+        assert "standardized" in stats
+        assert "manual_review" in stats
+        assert "duplicate_removed" in stats
+        assert isinstance(final.get("compounds"), list)
+        # 4 unique -> should be 4 rows (no dedup expected)
+        assert len(final["compounds"]) == 4
+
+    def test_empty_compounds_returns_null_job(self, api):
+        r = api.post(
+            f"{BASE_URL}/api/standardize/start", json={"compounds": []}, timeout=10
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data.get("job_id") is None
+        assert data.get("total") == 0
+
+    def test_status_unknown_job_returns_404(self, api):
+        import uuid as _uuid
+
+        random_id = str(_uuid.uuid4())
+        r = api.get(
+            f"{BASE_URL}/api/standardize/status/{random_id}", timeout=10
+        )
+        assert r.status_code == 404
+
+
+class TestStandardizeIdentifiers:
+    """Curcumin must resolve to full identifiers from PubChem + ChEBI."""
+
+    def test_curcumin_full_identifiers(self, api):
+        r = api.post(
+            f"{BASE_URL}/api/standardize/start",
+            json={"compounds": [{"compound_name": "Curcumin"}]},
+            timeout=15,
+        )
+        assert r.status_code == 200
+        job_id = r.json()["job_id"]
+        final = _poll_standardize(api, job_id, timeout=90)
+        assert final["status"] == "done"
+        row = final["compounds"][0]
+        # canonical_smiles or smiles
+        smi = row.get("canonical_smiles") or row.get("smiles")
+        assert smi and isinstance(smi, str) and len(smi) > 5, row
+        assert row.get("inchi"), row
+        assert row.get("inchi_key"), row
+        assert row.get("molecular_formula"), row
+        assert row.get("molecular_weight") is not None
+        assert isinstance(row.get("pubchem_cid"), int), (
+            f"pubchem_cid should be int, got {type(row.get('pubchem_cid'))}: {row.get('pubchem_cid')}"
+        )
+        src = row.get("source") or ""
+        assert "PubChem" in src, f"expected PubChem in source: {src}"
+        # ChEBI is best-effort; if present must start with CHEBI:
+        if row.get("chebi_id"):
+            assert row["chebi_id"].upper().startswith("CHEBI:")
+            assert "ChEBI" in src, f"expected ChEBI in source when chebi_id present: {src}"
+        assert row.get("status") == "standardized"
+
+
+class TestStandardizeSynonymResolution:
+    """Vitamin C -> L-ascorbic acid via PubChem synonym lookup."""
+
+    def test_vitamin_c_resolves(self, api):
+        r = api.post(
+            f"{BASE_URL}/api/standardize/start",
+            json={"compounds": [{"compound_name": "Vitamin C"}]},
+            timeout=15,
+        )
+        assert r.status_code == 200
+        job_id = r.json()["job_id"]
+        final = _poll_standardize(api, job_id, timeout=90)
+        assert final["status"] == "done"
+        row = final["compounds"][0]
+        assert row.get("status") == "standardized", row
+        assert row.get("pubchem_cid"), f"pubchem_cid missing for Vitamin C: {row}"
+        smi = row.get("canonical_smiles") or row.get("smiles")
+        assert smi, row
+        assert row.get("inchi_key"), row
+
+
+class TestStandardizeManualReview:
+    """Bogus compound name -> manual_review with no SMILES."""
+
+    def test_bogus_compound_manual_review(self, api):
+        r = api.post(
+            f"{BASE_URL}/api/standardize/start",
+            json={"compounds": [{"compound_name": "TotallyMadeUpMolecule_XYZ_ZZZZZZ"}]},
+            timeout=15,
+        )
+        assert r.status_code == 200
+        job_id = r.json()["job_id"]
+        final = _poll_standardize(api, job_id, timeout=90)
+        assert final["status"] == "done"
+        row = final["compounds"][0]
+        assert row.get("status") == "manual_review", row
+        assert not row.get("canonical_smiles")
+        assert not row.get("smiles")
+        assert not row.get("inchi_key")
+
+    def test_empty_name_manual_review(self, api):
+        r = api.post(
+            f"{BASE_URL}/api/standardize/start",
+            json={"compounds": [{"compound_name": ""}]},
+            timeout=15,
+        )
+        assert r.status_code == 200
+        job_id = r.json()["job_id"]
+        final = _poll_standardize(api, job_id, timeout=30)
+        assert final["status"] == "done"
+        row = final["compounds"][0]
+        assert row.get("status") == "manual_review", row
+
+
+class TestStandardizeDuplicate:
+    """[Curcumin, Piperine, Curcumin] -> second Curcumin flagged duplicate_removed."""
+
+    def test_duplicate_second_curcumin(self, api):
+        r = api.post(
+            f"{BASE_URL}/api/standardize/start",
+            json={
+                "compounds": [
+                    {"compound_name": "Curcumin"},
+                    {"compound_name": "Piperine"},
+                    {"compound_name": "Curcumin"},
+                ]
+            },
+            timeout=15,
+        )
+        assert r.status_code == 200
+        job_id = r.json()["job_id"]
+        final = _poll_standardize(api, job_id, timeout=120)
+        assert final["status"] == "done"
+        rows = final["compounds"]
+        assert len(rows) == 3, f"expected 3 rows, got {len(rows)}: {rows}"
+        # First Curcumin standardized
+        assert rows[0].get("status") == "standardized", rows[0]
+        # Piperine standardized
+        assert rows[1].get("status") == "standardized", rows[1]
+        # Third row is the second Curcumin, must be duplicate_removed
+        assert rows[2].get("status") == "duplicate_removed", rows[2]
+        assert (rows[2].get("duplicate_of") or "").lower() == "curcumin", rows[2]
+
+
+class TestStandardizeShortCircuit:
+    """Pre-populated (IMPPAT-like) rows must NOT overwrite SMILES/InChIKey."""
+
+    def test_prepopulated_row_short_circuits_pubchem(self, api):
+        # A synthetic row with all four required fields already set.
+        # We deliberately provide a slightly non-standard SMILES so we can prove it
+        # is not overwritten (real PubChem would return a different canonical form).
+        custom_smiles = "CUSTOM_UNIQUE_SMILES_XYZ"
+        custom_inchi_key = "CUSTOMINCHIKEY-XYZABC-N"
+        custom_formula = "C1H1"
+        custom_mw = 12345.6
+        payload = {
+            "compounds": [
+                {
+                    "compound_name": "Curcumin",
+                    "canonical_smiles": custom_smiles,
+                    "smiles": custom_smiles,
+                    "inchi_key": custom_inchi_key,
+                    "molecular_formula": custom_formula,
+                    "molecular_weight": custom_mw,
+                }
+            ]
+        }
+        t0 = time.time()
+        r = api.post(f"{BASE_URL}/api/standardize/start", json=payload, timeout=15)
+        assert r.status_code == 200
+        job_id = r.json()["job_id"]
+        final = _poll_standardize(api, job_id, timeout=90)
+        elapsed = time.time() - t0
+        assert final["status"] == "done"
+        row = final["compounds"][0]
+        # Fast-path must preserve user-supplied values
+        assert row.get("canonical_smiles") == custom_smiles, row
+        assert row.get("inchi_key") == custom_inchi_key, row
+        assert row.get("molecular_formula") == custom_formula, row
+        assert row.get("molecular_weight") == custom_mw, row
+        assert row.get("status") == "standardized"
+        # Overall elapsed should be < ~20s (only ChEBI is called, if reachable)
+        assert elapsed < 30, f"short-circuit took {elapsed:.1f}s — too slow"

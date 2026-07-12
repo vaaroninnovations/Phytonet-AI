@@ -51,6 +51,7 @@ const ALL_FIELDS = [
   { key: "molecular_formula", label: "Molecular Formula", default: true },
   { key: "molecular_weight", label: "Molecular Weight", default: true },
   { key: "source", label: "Source", default: true },
+  { key: "status", label: "Status", default: true },
   { key: "imppat_id", label: "IMPPAT ID", default: false },
   { key: "smiles", label: "SMILES", default: true },
   { key: "inchi", label: "InChI", default: false },
@@ -94,6 +95,8 @@ export default function PlantDatabase() {
     meta,
     setResults,
     updateCompound,
+    standardizing,
+    stdStats,
   } = useResults();
 
   // Plant mode
@@ -537,6 +540,38 @@ export default function PlantDatabase() {
                     : "no query yet"}
                 </span>
               </div>
+              {standardizing && (
+                <div
+                  data-testid="standardize-progress"
+                  className="mt-2 inline-flex items-center gap-2 rounded-full bg-[#5139ED]/8 px-3 py-1 text-xs font-semibold text-[#5139ED]"
+                >
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Standardizing compounds…{" "}
+                  <span data-testid="standardize-progress-count">
+                    {standardizing.done} of {standardizing.total} completed
+                  </span>
+                </div>
+              )}
+              {!standardizing && stdStats && (
+                <div
+                  data-testid="standardize-stats"
+                  className="mt-2 inline-flex flex-wrap items-center gap-1.5 text-[11px] font-semibold"
+                >
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-emerald-700 ring-1 ring-inset ring-emerald-200">
+                    {stdStats.standardized ?? 0} standardized
+                  </span>
+                  {stdStats.manual_review > 0 && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-amber-700 ring-1 ring-inset ring-amber-200">
+                      {stdStats.manual_review} manual review
+                    </span>
+                  )}
+                  {stdStats.duplicate_removed > 0 && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-[#F1F1FA] px-2.5 py-0.5 text-[#64748B] ring-1 ring-inset ring-[#E7E7F3]">
+                      {stdStats.duplicate_removed} duplicate removed
+                    </span>
+                  )}
+                </div>
+              )}
               <div
                 data-testid="selection-count"
                 className="mt-2 inline-flex items-center gap-2 rounded-full bg-[#5139ED]/8 px-3 py-1 text-xs font-semibold text-[#5139ED]"
@@ -960,6 +995,33 @@ function ExportButton({ label, testid, onClick, disabled }) {
 function CellValue({ field, row, onEdit }) {
   if (field === "structure") {
     return <StructureCanvas smiles={row.smiles} size={160} />;
+  }
+  if (field === "status") {
+    const st = row.status;
+    if (!st) return <span className="text-[#B4B4CD]">—</span>;
+    const map = {
+      standardized: {
+        label: "Standardized",
+        cls: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+      },
+      manual_review: {
+        label: "Requires Manual Review",
+        cls: "bg-amber-50 text-amber-700 ring-amber-200",
+      },
+      duplicate_removed: {
+        label: "Duplicate Removed",
+        cls: "bg-[#F1F1FA] text-[#64748B] ring-[#E7E7F3] line-through",
+      },
+    };
+    const m = map[st] || { label: st, cls: "bg-[#F1F1FA] text-[#64748B] ring-[#E7E7F3]" };
+    return (
+      <span
+        data-testid={`status-${compoundKey(row)}`}
+        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest ring-1 ring-inset ${m.cls}`}
+      >
+        {m.label}
+      </span>
+    );
   }
   if (field === "source") {
     const src = row.source || "";

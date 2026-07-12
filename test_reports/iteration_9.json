@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 9 — Compound Standardization workflow fully verified end-to-end. Added 9 new pytests for POST /api/standardize/start + GET /api/standardize/status/{job_id}; all 37 backend tests pass (28 regression + 9 new). Frontend: LC-MS upload of 5 rows (Curcumin, Withanolide A, Piperine, Curcumin dup, GarbageCompoundXYZ_9999) drives standardize-progress → standardize-stats ('3 standardized · 1 manual review · 1 duplicate removed'), STATUS column header + 5 status-<key> badges rendered correctly (Standardized emerald / Duplicate Removed grey+line-through / Requires Manual Review amber). Plant search 'Curcuma longa' loads 241 rows from Mongo cache in ~1s; standardize-progress '10 of 241 completed' shown, standardize-stats reports '241 standardized' when done (fast-path PubChem skip is working — no per-row PubChem calls). Navigation /phytonet-ai ↔ /drug-likeness does NOT re-trigger standardization (standardize-progress not visible on return).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "PlantDatabase results-table (LC-MS scenario)", "issue": "React key collision on duplicate rows — both Curcumin rows share compoundKey 'VFLDPWHFBUODDF-FCXRPNKRSA-N' so React logs 'Encountered two children with the same key'. Both rows still render correctly (including 1 Standardized + 1 Duplicate Removed status), so no functional impact, but the console warning is real. Recommendation: append '#dup<index>' or use array index as a secondary key part for duplicate_removed rows.", "selector": "[data-testid^=\"row-\"]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Optional: fix React duplicate-key warning in PlantDatabase table when a row has status='duplicate_removed' with the same InChIKey as its original (compoundKey collision). Cosmetic only — no user-facing bug."
+  ],
+  "critical_code_review_comments": [
+    "server.py _standardize_one correctly separates the fast-path (_is_complete → skip PubChem, still hit ChEBI best-effort) from the full path (PubChem primary → LOTUS fallback → ChEBI). Verified: an IMPPAT-like row with custom canonical_smiles/inchi_key/formula/mw is NOT overwritten and completes in ~9s (only ChEBI called).",
+    "_dedupe_standardized uses InChIKey connectivity skeleton (first 14 chars) as the dedup key, with case-insensitive compound_name as fallback. Duplicate row keeps status='duplicate_removed' and populates duplicate_of=<first compound_name>. Order is preserved.",
+    "PubChem property query uses BOTH new (SMILES/ConnectivitySMILES) and legacy (CanonicalSMILES/IsomericSMILES) property names via `.get()` — verified live against PubChem returning full property block for Curcumin/Piperine/Withanolide A/Quercetin/Vitamin C.",
+    "Vitamin C synonym resolution works — PubChem name lookup for 'Vitamin C' returns pubchem_cid=54670067 (L-ascorbic acid) with valid SMILES + InChIKey; row.status='standardized'.",
+    "Empty compound_name + no pre-populated data correctly returns status='manual_review'; bogus name (PubChem 404 → LOTUS 0 hits) also returns status='manual_review' with no smiles/inchi_key.",
+    "ResultsContext.jsx auto-triggers standardization ONCE per fresh dataset via meta.standardized guard — verified: navigating /phytonet-ai → /drug-likeness → /phytonet-ai does not re-fire standardize-progress. Cancellation via cancelled flag + stopPolling() correctly clears the 700ms poll interval on unmount/reset.",
+    "standardize-progress-count text format matches 'N of TOTAL completed' as specified; standardize-stats correctly hides 0-count buckets (manual_review / duplicate_removed only appear when > 0).",
+    "Duplicate row status cell has both the grey ring-inset styling AND the 'line-through' Tailwind class — visually verified plus className regex check in test.",
+    "PERFORMANCE observation (non-blocking): full standardization of 241 Curcuma longa rows took ~127s despite PubChem fast-path skipping every row. All time was spent in ChEBI OLS4 calls (241 sequential-ish under concurrency=6). The problem statement claimed '<15s excluding ChEBI' — the excluded part IS the whole runtime here. If large-dataset UX is a concern, consider (a) parallel-batching ChEBI further, (b) caching ChEBI results in Mongo, or (c) skipping ChEBI on rows that already have all identifiers. Not blocking — status stats still resolve to 241 standardized.",
+    "MINOR pre-existing (from iter 1–8): hydration warning '<span> cannot be a child of <option>' still present — unchanged by this iteration.",
+    "server.py file size 1116 lines — approaching the 700-line guideline. When feasible, consider splitting standardization/LC-MS/IMPPAT/LOTUS helpers into modules."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py"],
+  "success_rate": {"backend": "100% (37/37)", "frontend": "100% (13/13 review scenarios)"},
+  "test_credentials": "N/A",
+  "seed_data_creation": "Inline CSV /tmp/lcms_test5.csv with 5 rows (Curcumin, Withanolide A, Piperine, Curcumin duplicate, GarbageCompoundXYZ_9999). Server-side Curcuma longa response was Mongo-cached from prior iterations.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 9 adds Compound Standardization (POST /api/standardize/start + GET /api/standardize/status/{job_id}) auto-fired from ResultsContext whenever a fresh dataset arrives (LC-MS upload or plant search). Fast-path _is_complete() skips PubChem when canonical_smiles+inchi_key+formula+mw are all present — verified working (IMPPAT rows only hit ChEBI). Dedupe uses InChIKey connectivity skeleton, marks duplicates with status='duplicate_removed' + duplicate_of. Frontend renders new STATUS column with badges: Standardized (emerald), Requires Manual Review (amber), Duplicate Removed (grey + line-through). standardize-progress / standardize-stats testids appear in results header. Job GC on TTL=1h. Empty compounds → {job_id: null, total: 0}. Unknown job_id → 404. All 37 backend tests + 13 frontend acceptance scenarios pass. Known LOW-priority issue: React duplicate-key warning on duplicate_removed rows sharing compoundKey with original — cosmetic only.",
+  "rca of the issue": "N/A — feature works end-to-end. Backend job pattern, frontend polling, status badge rendering, dedup logic, fast-path short-circuit, and navigation idempotency all confirmed working on preview URL."
+}
