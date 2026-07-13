@@ -10,7 +10,8 @@ import { toast } from "sonner";
 import { TableToolbar } from "@/components/network/TableToolbar";
 import { DataTable } from "@/components/network/DataTable";
 import { HelpTip } from "@/components/network/HelpTip";
-import { ArrowLeft, ArrowRight, Beaker, Loader2, Download, Play, ExternalLink } from "lucide-react";
+import { requireAuth } from "@/context/AuthContext";
+import { ArrowLeft, ArrowRight, Beaker, Loader2, Download, Play, ExternalLink, Star } from "lucide-react";
 
 const DEFAULT_EXHAUSTIVENESS = 8;
 const DEFAULT_MODES = 9;
@@ -67,6 +68,102 @@ export default function MolecularDocking() {
         pubchem_cid: c.pubchem_cid,
       }));
   }, [selectedCompounds, allCompounds]);
+
+  // ── Docking Priority Matrix (only compound → predicted-target → hub pairs) ──
+  // Build valid pairs from compoundTargets rows (compound_name -> gene_symbol).
+  const priorityRows = useMemo(() => {
+    if (!compoundTargets?.length) return [];
+    // Index compounds by name for ADMET score lookup
+    const admetByName = new Map();
+    for (const c of allCompounds || []) {
+      admetByName.set(c.compound_name || c.imppat_id, c);
+    }
+    // Index disease targets for disease-association score lookup
+    const diseaseByGene = new Map();
+    for (const d of diseaseTargets || []) diseaseByGene.set(d.gene_symbol, d);
+
+    const rows = [];
+    for (const row of compoundTargets) {
+      const comp = row.compound_name;
+      const gene = row.gene_symbol;
+      if (!comp || !gene) continue;
+      // Only include hub genes (intersecting genes = hubs by design)
+      if (!intersectingGenes.includes(gene)) continue;
+
+      const admet = admetByName.get(comp);
+      const admetScore = admet?.admet_score?.percent ?? admet?.admet_score ?? 50;
+      const targetConf = (row.confidence_score ?? row.best_pchembl ?? 5) * 10;   // pChEMBL 5-10 → 50-100
+      const hubScore = 100 * Math.min(1, (row.hub_score || row.degree || 5) / 20); // fallback if missing
+      const diseaseAssoc = (diseaseByGene.get(gene)?.association_score || 0.5) * 100;
+      const priority = Math.round(
+        0.30 * admetScore +
+        0.30 * targetConf +
+        0.25 * hubScore +
+        0.15 * diseaseAssoc
+      );
+      const stars = priority >= 80 ? 5 : priority >= 65 ? 4 : priority >= 50 ? 3 : priority >= 35 ? 2 : 1;
+      const recommendation = ["Very Low","Low","Moderate","Recommended","Highly Recommended"][stars - 1];
+      rows.push({
+        id: `${comp}::${gene}`,
+        compound: comp,
+        gene_symbol: gene,
+        uniprot_id: row.uniprot_id,
+        smiles: admet?.smiles || row.smiles,
+        admet: Math.round(admetScore),
+        target_conf: Math.round(targetConf),
+        hub_score: Math.round(hubScore),
+        disease_assoc: Math.round(diseaseAssoc),
+        priority,
+        stars,
+        recommendation,
+      });
+    }
+    rows.sort((a, b) => b.priority - a.priority);
+    return rows;
+  }, [compoundTargets, diseaseTargets, allCompounds, intersectingGenes]);
+
+  const [selectedPairs, setSelectedPairs] = useState({}); // {"compound::gene": true}
+  // Auto-select ≥80 on first load
+  useEffect(() => {
+    if (Object.keys(selectedPairs).length === 0 && priorityRows.length > 0) {
+      const m = {}; priorityRows.forEach((r) => { if (r.priority >= 80) m[r.id] = true; });
+      setSelectedPairs(m);
+    }
+  }, [priorityRows]); // eslint-disable-line
+
+  const autoSelectPriority = () => {
+    const m = {}; priorityRows.forEach((r) => { if (r.priority >= 80) m[r.id] = true; });
+    setSelectedPairs(m);
+    // Also mirror into compound + target selection sets so run uses them.
+    const cs = {}, ts = {};
+    for (const r of priorityRows) if (m[r.id]) { cs[r.compound] = true; ts[r.gene_symbol] = true; }
+    setSelectedComps((prev) => ({ ...prev, ...cs }));
+    setSelectedTargets((prev) => ({ ...prev, ...ts }));
+    toast.success(`Auto-selected ${Object.keys(m).length} high-priority pairs`);
+  };
+
+  const priorityColumns = [
+    { key: "compound", label: "Compound", filterable: true },
+    { key: "gene_symbol", label: "Hub Gene", filterable: true },
+    { key: "admet", label: "ADMET", format: (v) => <span className="font-mono text-[11px]">{v}</span> },
+    { key: "target_conf", label: "Target Conf.", format: (v) => <span className="font-mono text-[11px]">{v}</span> },
+    { key: "hub_score", label: "Hub Score", format: (v) => <span className="font-mono text-[11px]">{v}</span> },
+    { key: "disease_assoc", label: "Disease Assoc.", format: (v) => <span className="font-mono text-[11px]">{v}</span> },
+    { key: "priority", label: "Priority", format: (v) => (
+        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${v>=80?"bg-[#10B981]/15 text-[#059669]":v>=65?"bg-[#5139ED]/15 text-[#5139ED]":v>=50?"bg-[#F59E0B]/15 text-[#B45309]":"bg-red-100 text-red-700"}`}>{v}</span>
+      ) },
+    { key: "stars", label: "Recommendation", format: (v, r) => (
+        <span className="inline-flex items-center gap-1 text-[10px]">
+          {"★".repeat(v)}<span className="text-[#94A3B8]">{"★".repeat(5-v)}</span>
+          <span className="ml-1 text-[#0B0B18]">{r.recommendation}</span>
+        </span>
+      ) },
+    { key: "select", label: "Include", sortable: false, format: (_, r) => (
+        <input data-testid={`prio-sel-${r.id}`} type="checkbox" checked={!!selectedPairs[r.id]} onChange={(e) => setSelectedPairs((s) => ({ ...s, [r.id]: e.target.checked }))} className="accent-[#5139ED]" />
+      ) },
+  ];
+
+  // ─────────────────────────────────────────────────────────────
 
   const [selectedTargets, setSelectedTargets] = useState({}); // {gene: true}
   const [selectedComps, setSelectedComps] = useState({});     // {name: true}
@@ -143,8 +240,9 @@ export default function MolecularDocking() {
 
   const autoSelectForMD = () => {
     if (!result?.results) return [];
-    return result.results.filter((r) => !r.error && r.best_affinity <= -6.0).slice(0, 5);
+    return result.results.filter((r) => !r.error && r.best_affinity <= mdAffinityThreshold).slice(0, 8);
   };
+  const [mdAffinityThreshold, setMdAffinityThreshold] = useState(-7.0);
 
   const resultRows = (result?.results || []).map((r, i) => ({
     id: r.pair_id + "-" + i,
@@ -203,6 +301,36 @@ export default function MolecularDocking() {
         <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">Module · 06</p>
         <h1 className="mt-3 font-display text-4xl font-bold tracking-tight text-[#0B0B18] sm:text-5xl">Molecular Docking</h1>
         <p className="mt-3 max-w-2xl text-[#64748B]">AutoDock Vina · receptor auto-prep from RCSB PDB · Meeko ligand prep · batch docking · publication-ready output.</p>
+
+        {/* Docking Priority Matrix */}
+        {priorityRows.length > 0 && (
+          <div data-testid="dock-priority-card" className="mt-6 rounded-3xl border border-[#E7E7F3] bg-white p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">Compound × Hub-Gene Docking Priority</p>
+                <h2 className="mt-1 font-display text-lg font-bold tracking-tight text-[#0B0B18]">
+                  {priorityRows.length} biologically relevant pairs
+                  <span className="ml-2 text-xs font-normal text-[#64748B]">Weighted: ADMET 30% · Target Confidence 30% · Hub Score 25% · Disease Association 15%</span>
+                </h2>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button data-testid="dock-priority-auto-select" onClick={autoSelectPriority}
+                  className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#10B981] to-[#5139ED] px-4 py-2 text-xs font-bold uppercase tracking-widest text-white shadow-[0_10px_30px_-10px_rgba(81,57,237,0.6)]">
+                  <Star className="h-3.5 w-3.5" /> Auto Select ≥80
+                </button>
+                <TableToolbar
+                  rows={priorityRows.map(({ id, stars, ...r }) => r)}
+                  columns={priorityColumns.filter((c) => c.key !== "select" && c.key !== "stars").map(({ key, label }) => ({ key, label }))}
+                  basename="docking_priority"
+                  testidPrefix="dock-priority-tbl"
+                />
+              </div>
+            </div>
+            <div className="mt-4">
+              <DataTable rows={priorityRows} columns={priorityColumns} testidPrefix="dock-priority-dt" pageSize={25} />
+            </div>
+          </div>
+        )}
 
         {/* Selection panel */}
         <div data-testid="dock-selection" className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -291,6 +419,24 @@ export default function MolecularDocking() {
         {/* Results */}
         {result?.results && (
           <div data-testid="dock-results-card" className="mt-6 space-y-4">
+            {/* Summary cards */}
+            <div data-testid="dock-summary" className="grid grid-cols-2 gap-3 md:grid-cols-6">
+              {(() => {
+                const rr = result.results; const okr = rr.filter((r) => !r.error);
+                const avg = okr.length ? okr.reduce((s, r) => s + r.best_affinity, 0) / okr.length : 0;
+                const best = okr.length ? okr.reduce((a, b) => a.best_affinity < b.best_affinity ? a : b) : null;
+                return (
+                  <>
+                    <SumCard testid="dock-total" label="Total Jobs" value={rr.length} />
+                    <SumCard testid="dock-ok" label="Successful" value={okr.length} />
+                    <SumCard testid="dock-avg" label="Avg BE (kcal/mol)" value={avg.toFixed(2)} />
+                    <SumCard testid="dock-best-comp" label="Best Ligand" value={best?.ligand_name || "—"} />
+                    <SumCard testid="dock-best-tgt" label="Best Target" value={best?.receptor_pdb || "—"} />
+                    <SumCard testid="dock-best-aff" label="Best BE" value={best ? best.best_affinity.toFixed(2) : "—"} highlight />
+                  </>
+                );
+              })()}
+            </div>
             <div className="rounded-3xl border border-[#E7E7F3] bg-white p-5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
@@ -314,7 +460,11 @@ export default function MolecularDocking() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">Auto Select for MD</p>
-                  <p className="mt-1 text-xs text-[#64748B]">Ligand–target pairs with affinity ≤ −6.0 kcal/mol (top {autoSelectForMD().length})</p>
+                  <p className="mt-1 text-xs text-[#64748B]">
+                    Complexes with affinity ≤
+                    <input data-testid="dock-md-threshold" type="number" step={0.1} value={mdAffinityThreshold} onChange={(e) => setMdAffinityThreshold(Number(e.target.value))} className="mx-1 w-16 rounded-lg border border-[#E7E7F3] bg-white px-2 py-0.5 text-xs text-[#0B0B18]" />
+                    kcal/mol ({autoSelectForMD().length} complexes)
+                  </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {autoSelectForMD().map((r) => (
@@ -326,7 +476,7 @@ export default function MolecularDocking() {
               </div>
               <div className="mt-4 flex justify-end">
                 <Link data-testid="dock-to-md" to="/molecular-dynamics" className="inline-flex items-center gap-2 rounded-full bg-[#5139ED] px-5 py-2.5 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 hover:bg-[#4127c9]">
-                  Prepare MD project<ArrowRight className="h-4 w-4" />
+                  Proceed to Molecular Dynamics<ArrowRight className="h-4 w-4" />
                 </Link>
               </div>
             </div>
@@ -334,5 +484,14 @@ export default function MolecularDocking() {
         )}
       </main>
     </WorkflowLayout>
+  );
+}
+
+function SumCard({ testid, label, value, highlight }) {
+  return (
+    <div data-testid={testid} className={`rounded-2xl border p-3 ${highlight ? "border-[#5139ED]/30 bg-[#5139ED]/[0.04]" : "border-[#F1F1FA] bg-white"}`}>
+      <p className="text-[10px] font-bold uppercase tracking-widest text-[#64748B]">{label}</p>
+      <p className={`mt-1 font-mono text-lg font-bold ${highlight ? "text-[#5139ED]" : "text-[#0B0B18]"}`}>{value}</p>
+    </div>
   );
 }

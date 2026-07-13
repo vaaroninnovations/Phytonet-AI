@@ -306,10 +306,10 @@ export function PCTDPPanel({ intersectingGenes = [], selectedKeggPathways = [], 
       </div>
 
       <div className="flex justify-end">
-        <button data-testid="pctdp-complete" onClick={onComplete}
+        <a data-testid="pctdp-complete" href="/molecular-docking" onClick={(e) => { e.preventDefault(); onComplete?.(); window.location.assign("/molecular-docking"); }}
           className="inline-flex items-center gap-2 rounded-full bg-[#5139ED] px-5 py-2.5 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 hover:bg-[#4127c9]">
-          Complete Network Analysis
-        </button>
+          Proceed to Molecular Docking →
+        </a>
       </div>
     </div>
   );

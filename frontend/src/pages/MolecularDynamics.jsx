@@ -9,6 +9,7 @@ import { mdEstimate, mdBuild } from "@/lib/api";
 import { toast } from "sonner";
 import { saveAs } from "file-saver";
 import { HelpTip } from "@/components/network/HelpTip";
+import { requireAuth } from "@/context/AuthContext";
 import { ArrowLeft, ArrowRight, Atom, Download, Loader2 } from "lucide-react";
 
 const FF_OPTS = [
@@ -80,24 +81,26 @@ export default function MolecularDynamics() {
   const build = async () => {
     if (compoundOptions.length === 0 || targetOptions.length === 0)
       return toast.error("Need at least one compound and one target");
-    setBuilding(true);
-    try {
-      const payload = {
-        compound: compoundOptions[compIdx],
-        target: {
-          uniprot_id: targetOptions[tgtIdx].uniprot_id,
-          gene_symbol: targetOptions[tgtIdx].gene_symbol,
-          pdb_id: pdbId || undefined,
-        },
-        config: cfg,
-      };
-      const blob = await mdBuild(payload);
-      const filename = `md_${compoundOptions[compIdx].name}_x_${targetOptions[tgtIdx].gene_symbol || ""}.zip`.replace(/[^A-Za-z0-9_.-]/g, "_");
-      saveAs(blob, filename);
-      markComplete("molecular-dynamics");
-      toast.success("MD project downloaded");
-    } catch (e) { toast.error("MD build failed: " + (e.message || e)); }
-    finally { setBuilding(false); }
+    requireAuth(async () => {
+      setBuilding(true);
+      try {
+        const payload = {
+          compound: compoundOptions[compIdx],
+          target: {
+            uniprot_id: targetOptions[tgtIdx].uniprot_id,
+            gene_symbol: targetOptions[tgtIdx].gene_symbol,
+            pdb_id: pdbId || undefined,
+          },
+          config: cfg,
+        };
+        const blob = await mdBuild(payload);
+        const filename = `md_${compoundOptions[compIdx].name}_x_${targetOptions[tgtIdx].gene_symbol || ""}.zip`.replace(/[^A-Za-z0-9_.-]/g, "_");
+        saveAs(blob, filename);
+        markComplete("molecular-dynamics");
+        toast.success("MD project downloaded");
+      } catch (e) { toast.error("MD build failed: " + (e.message || e)); }
+      finally { setBuilding(false); }
+    });
   };
 
   const upd = (k) => (e) => setCfg((c) => ({ ...c, [k]: e.target.type === "number" ? Number(e.target.value) : e.target.value }));
@@ -214,8 +217,8 @@ export default function MolecularDynamics() {
         </div>
 
         <div className="mt-6 flex justify-end">
-          <Link data-testid="md-to-report" to="/scientific-report" className="inline-flex items-center gap-2 rounded-full border border-[#E7E7F3] bg-white px-5 py-2.5 text-sm font-semibold text-[#0B0B18] hover:border-[#5139ED]/50 hover:text-[#5139ED]">
-            Next — AI Scientific Report<ArrowRight className="h-4 w-4" />
+          <Link data-testid="md-to-report" to="/scientific-report" className="inline-flex items-center gap-2 rounded-full bg-[#5139ED] px-5 py-2.5 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 hover:bg-[#4127c9]">
+            Generate AI Research Report<ArrowRight className="h-4 w-4" />
           </Link>
         </div>
       </main>

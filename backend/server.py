@@ -1484,6 +1484,15 @@ async def md_build(payload: MDBuildRequest):
 # ---------------------------------------------------------------------------
 app.include_router(api_router)
 
+# ---------------------------------------------------------------------------
+# Auth router (mounted under /api/auth)
+# ---------------------------------------------------------------------------
+import auth_service  # noqa: E402
+_auth_router = auth_service.build_router(db, frontend_url=os.environ.get("FRONTEND_URL", ""))
+api_router_auth = APIRouter(prefix="/api")
+api_router_auth.include_router(_auth_router)
+app.include_router(api_router_auth)
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
@@ -1530,6 +1539,12 @@ async def _startup():
                 logger.info(f"Plant seed insert partial: {e}")
     except Exception as e:
         logger.warning(f"Startup init failed (non-fatal): {e}")
+
+    # Initialize auth (create indexes, seed admin)
+    try:
+        await auth_service.initialize(db)
+    except Exception as e:
+        logger.warning(f"Auth init failed (non-fatal): {e}")
 
 
 @app.on_event("shutdown")

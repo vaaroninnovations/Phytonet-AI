@@ -20,6 +20,7 @@ import {
   cyDownloadPDF,
 } from "@/lib/figureExporters";
 import { downloadGraph } from "@/lib/graphExporters";
+import { requireAuth } from "@/context/AuthContext";
 
 export const CY_LAYOUTS = [
   { key: "fcose", label: "fCoSE (default)" },
@@ -67,9 +68,12 @@ export function CyToolbar({
   const tp = testidPrefix || basename.replace(/\W+/g, "-");
 
   const withBusy = (fn) => async () => {
-    if (busy) return; setBusy(true);
-    try { await fn(); } catch (e) { toast.error(`Failed: ${e.message || e}`); }
-    finally { setBusy(false); }
+    if (busy) return;
+    requireAuth(async () => {
+      setBusy(true);
+      try { await fn(); } catch (e) { toast.error(`Failed: ${e.message || e}`); }
+      finally { setBusy(false); }
+    });
   };
 
   const withCy = (fn) => async () => {
@@ -179,10 +183,10 @@ export function CyToolbar({
       {showExtraExports && graph && (
         <>
           <span className="mx-1 h-4 w-px bg-[#E7E7F3]" />
-          <button data-testid={`${tp}-json`} onClick={() => downloadGraph("json", graph, basename)} className={btn}>JSON (.cyjs)</button>
-          <button data-testid={`${tp}-graphml`} onClick={() => downloadGraph("graphml", graph, basename)} className={btn}>GraphML</button>
-          <button data-testid={`${tp}-gml`} onClick={() => downloadGraph("gml", graph, basename)} className={btn}>GML</button>
-          <button data-testid={`${tp}-xgmml`} onClick={() => downloadGraph("xgmml", graph, basename)} className={btn}>XGMML</button>
+          <button data-testid={`${tp}-json`} onClick={() => requireAuth(() => downloadGraph("json", graph, basename))} className={btn}>JSON (.cyjs)</button>
+          <button data-testid={`${tp}-graphml`} onClick={() => requireAuth(() => downloadGraph("graphml", graph, basename))} className={btn}>GraphML</button>
+          <button data-testid={`${tp}-gml`} onClick={() => requireAuth(() => downloadGraph("gml", graph, basename))} className={btn}>GML</button>
+          <button data-testid={`${tp}-xgmml`} onClick={() => requireAuth(() => downloadGraph("xgmml", graph, basename))} className={btn}>XGMML</button>
         </>
       )}
     </div>

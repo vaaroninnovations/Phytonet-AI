@@ -12,6 +12,7 @@ import {
   downloadTIFF,
   downloadPDF,
 } from "@/lib/figureExporters";
+import { requireAuth } from "@/context/AuthContext";
 
 /**
  * Reusable per-figure toolbar. Wrap the SVG inside a container ref (or pass
@@ -39,9 +40,11 @@ export function FigureToolbar({
 
   const withBusy = (fn) => async () => {
     if (busy) return;
-    setBusy(true);
-    try { await fn(); } catch (e) { toast.error(`Export failed: ${e.message || e}`); }
-    finally { setBusy(false); }
+    requireAuth(async () => {
+      setBusy(true);
+      try { await fn(); } catch (e) { toast.error(`Export failed: ${e.message || e}`); }
+      finally { setBusy(false); }
+    });
   };
 
   const doSVG = withBusy(() => { const el = getSvg(); if (!el) throw new Error("SVG not ready"); downloadSVG(el, `${basename}.svg`, { title }); });
