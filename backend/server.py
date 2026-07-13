@@ -11,7 +11,7 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from pydantic import BaseModel, Field
-from typing import List, Optional, Literal
+from typing import List, Optional, Literal, Dict, Any
 from urllib.parse import quote
 import httpx
 from bs4 import BeautifulSoup
@@ -23,6 +23,7 @@ import disease_service
 import network_service
 import docking_service
 import md_service
+import report_service
 
 
 ROOT_DIR = Path(__file__).parent
@@ -1477,6 +1478,55 @@ async def md_build(payload: MDBuildRequest):
     )
     return Response(content=zip_bytes, media_type="application/zip",
                     headers={"Content-Disposition": f"attachment; filename={project}.zip"})
+
+
+# ---------------------------------------------------------------------------
+# AI Scientific Report generation
+# ---------------------------------------------------------------------------
+class ReportGenerateRequest(BaseModel):
+    workflow: Dict[str, Any]                # everything from previous modules
+    model: str = "claude-sonnet-4-5-20250929"
+
+
+_REPORT_CACHE: Dict[str, Dict[str, Any]] = {}   # id -> {markdown, meta}
+
+
+@api_router.post("/report/generate")
+async def report_generate(payload: ReportGenerateRequest):
+    result = await report_service.generate_report(payload.workflow, model=payload.model)
+    if result.get("error"):
+        raise HTTPException(status_code=500, detail=result["error"])
+    rid = uuid.uuid4().hex
+    _REPORT_CACHE[rid] = result
+    return {"report_id": rid, "markdown": result["markdown"], "meta": result["meta"]}
+
+
+@api_router.get("/report/download/{report_id}")
+async def report_download(report_id: str, fmt: str = "md"):
+    from fastapi.responses import Response
+    rec = _REPORT_CACHE.get(report_id)
+    if not rec:
+        raise HTTPException(status_code=404, detail="Report not found or expired")
+    md = rec["markdown"]
+    title = rec.get("meta", {}).get("plant") or "PhytoNet AI Report"
+    if fmt == "md":
+        return Response(content=md, media_type="text/markdown",
+                        headers={"Content-Disposition": f"attachment; filename=report.md"})
+    if fmt == "html":
+        html = report_service.markdown_to_html(md, title=f"{title} — Research Report")
+        return Response(content=html, media_type="text/html",
+                        headers={"Content-Disposition": f"attachment; filename=report.html"})
+    if fmt == "pdf":
+        html = report_service.markdown_to_html(md, title=f"{title} — Research Report")
+        pdf = report_service.html_to_pdf(html)
+        return Response(content=pdf, media_type="application/pdf",
+                        headers={"Content-Disposition": f"attachment; filename=report.pdf"})
+    if fmt == "docx":
+        docx_bytes = report_service.markdown_to_docx(md)
+        return Response(content=docx_bytes,
+                        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        headers={"Content-Disposition": f"attachment; filename=report.docx"})
+    raise HTTPException(status_code=400, detail=f"Unsupported format {fmt}")
 
 
 # ---------------------------------------------------------------------------

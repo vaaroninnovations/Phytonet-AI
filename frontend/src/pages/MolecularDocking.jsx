@@ -18,16 +18,17 @@ const DEFAULT_MODES = 9;
 const DEFAULT_PADDING = 8;
 
 export default function MolecularDocking() {
-  const { compoundTargets, diseaseTargets, selectedCompounds } = useNetwork();
+  const { compoundTargets, diseaseTargets, selectedCompounds, intersectingGenes: ctxIntersect, hubScores, setDockingResults } = useNetwork();
   const { compounds: allCompounds } = useResults();
   const { markComplete } = useWorkflow();
 
   // Candidate targets = hub genes in intersection (compound × disease)
   const intersectingGenes = useMemo(() => {
+    if (ctxIntersect && ctxIntersect.length > 0) return ctxIntersect;
     const cSet = new Set(compoundTargets.map((r) => r.gene_symbol));
     const dSet = new Set(diseaseTargets.map((r) => r.gene_symbol));
     return [...cSet].filter((g) => dSet.has(g));
-  }, [compoundTargets, diseaseTargets]);
+  }, [ctxIntersect, compoundTargets, diseaseTargets]);
 
   // Merge target metadata (gene, uniprot) from either source
   const targetOptions = useMemo(() => {
@@ -73,54 +74,50 @@ export default function MolecularDocking() {
   // Build valid pairs from compoundTargets rows (compound_name -> gene_symbol).
   const priorityRows = useMemo(() => {
     if (!compoundTargets?.length) return [];
-    // Index compounds by name for ADMET score lookup
     const admetByName = new Map();
-    for (const c of allCompounds || []) {
-      admetByName.set(c.compound_name || c.imppat_id, c);
-    }
-    // Index disease targets for disease-association score lookup
+    for (const c of allCompounds || []) admetByName.set(c.compound_name || c.imppat_id, c);
     const diseaseByGene = new Map();
     for (const d of diseaseTargets || []) diseaseByGene.set(d.gene_symbol, d);
+    // Build hub-score lookup from real CytoHubba results (fallback to degree)
+    const hubByGene = new Map();
+    if (hubScores?.length) {
+      const maxMCC = Math.max(1, ...hubScores.map((s) => s.mcc || 0));
+      const maxDeg = Math.max(1, ...hubScores.map((s) => s.degree || 0));
+      for (const s of hubScores) {
+        // Weighted composite: 60% MCC + 40% degree, both normalised to 0-100
+        const composite = 60 * ((s.mcc || 0) / maxMCC) + 40 * ((s.degree || 0) / maxDeg);
+        hubByGene.set(s.id, composite);
+      }
+    }
 
     const rows = [];
     for (const row of compoundTargets) {
       const comp = row.compound_name;
       const gene = row.gene_symbol;
       if (!comp || !gene) continue;
-      // Only include hub genes (intersecting genes = hubs by design)
       if (!intersectingGenes.includes(gene)) continue;
 
       const admet = admetByName.get(comp);
       const admetScore = admet?.admet_score?.percent ?? admet?.admet_score ?? 50;
-      const targetConf = (row.confidence_score ?? row.best_pchembl ?? 5) * 10;   // pChEMBL 5-10 → 50-100
-      const hubScore = 100 * Math.min(1, (row.hub_score || row.degree || 5) / 20); // fallback if missing
+      const targetConf = (row.confidence_score ?? row.best_pchembl ?? 5) * 10;
+      const hubScore = hubByGene.get(gene) ?? 50;
       const diseaseAssoc = (diseaseByGene.get(gene)?.association_score || 0.5) * 100;
       const priority = Math.round(
-        0.30 * admetScore +
-        0.30 * targetConf +
-        0.25 * hubScore +
-        0.15 * diseaseAssoc
+        0.30 * admetScore + 0.30 * targetConf + 0.25 * hubScore + 0.15 * diseaseAssoc
       );
       const stars = priority >= 80 ? 5 : priority >= 65 ? 4 : priority >= 50 ? 3 : priority >= 35 ? 2 : 1;
       const recommendation = ["Very Low","Low","Moderate","Recommended","Highly Recommended"][stars - 1];
       rows.push({
-        id: `${comp}::${gene}`,
-        compound: comp,
-        gene_symbol: gene,
-        uniprot_id: row.uniprot_id,
-        smiles: admet?.smiles || row.smiles,
-        admet: Math.round(admetScore),
-        target_conf: Math.round(targetConf),
-        hub_score: Math.round(hubScore),
-        disease_assoc: Math.round(diseaseAssoc),
-        priority,
-        stars,
-        recommendation,
+        id: `${comp}::${gene}`, compound: comp, gene_symbol: gene,
+        uniprot_id: row.uniprot_id, smiles: admet?.smiles || row.smiles,
+        admet: Math.round(admetScore), target_conf: Math.round(targetConf),
+        hub_score: Math.round(hubScore), disease_assoc: Math.round(diseaseAssoc),
+        priority, stars, recommendation,
       });
     }
     rows.sort((a, b) => b.priority - a.priority);
     return rows;
-  }, [compoundTargets, diseaseTargets, allCompounds, intersectingGenes]);
+  }, [compoundTargets, diseaseTargets, allCompounds, intersectingGenes, hubScores]);
 
   const [selectedPairs, setSelectedPairs] = useState({}); // {"compound::gene": true}
   // Auto-select ≥80 on first load
@@ -232,6 +229,7 @@ export default function MolecularDocking() {
         exhaustiveness, num_modes: numModes, box_padding: padding,
       });
       setResult(res);
+      setDockingResults(res);   // publish to context for MD + Report
       markComplete("molecular-docking");
       toast.success(`Docking complete · ${res.results.length} pairs`);
     } catch (e) { toast.error("Docking run failed: " + (e.response?.data?.detail || e.message)); }

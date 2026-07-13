@@ -9,9 +9,7 @@ import DiseaseTargets from "@/pages/DiseaseTargets";
 import NetworkAnalysis from "@/pages/NetworkAnalysis";
 import MolecularDocking from "@/pages/MolecularDocking";
 import MolecularDynamics from "@/pages/MolecularDynamics";
-import {
-  AIScientificReport,
-} from "@/pages/WorkflowModules";
+import AIScientificReport from "@/pages/AIScientificReport";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import { SelectionProvider } from "@/context/SelectionContext";

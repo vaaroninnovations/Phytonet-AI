@@ -88,3 +88,9 @@ export async function mdBuild(payload) {
   return res.data;
 }
 
+// AI Scientific Report
+export const reportGenerate = (workflow, model) =>
+  api.post("/report/generate", { workflow, model }, { timeout: 300000 }).then((r) => r.data);
+export const reportDownloadURL = (report_id, fmt) =>
+  `${BACKEND_URL}/api/report/download/${encodeURIComponent(report_id)}?fmt=${fmt}`;
+

@@ -7,28 +7,37 @@ import { createContext, useContext, useMemo, useState } from "react";
 const NetworkContext = createContext(null);
 
 export function NetworkProvider({ children }) {
-  const [selectedCompounds, setSelectedCompounds] = useState([]); // incoming from ADMET
-  const [compoundTargets, setCompoundTargets] = useState([]); // final selected rows
-  const [diseaseTargets, setDiseaseTargets] = useState([]); // final selected rows
-  const [selectedDisease, setSelectedDisease] = useState(null); // {efo_id, name}
-  const [plantName, setPlantName] = useState(""); // set on Plant Database
-  const [selectedKeggPathways, setSelectedKeggPathways] = useState([]); // set on KEGG panel
+  const [selectedCompounds, setSelectedCompounds] = useState([]);
+  const [compoundTargets, setCompoundTargets] = useState([]);
+  const [diseaseTargets, setDiseaseTargets] = useState([]);
+  const [selectedDisease, setSelectedDisease] = useState(null);
+  const [plantName, setPlantName] = useState("");
+  const [selectedKeggPathways, setSelectedKeggPathways] = useState([]);
+  // Additional cross-workflow data used by Docking + MD + Report:
+  const [intersectingGenes, setIntersectingGenes] = useState([]);
+  const [hubScores, setHubScores] = useState([]);        // combinedHubScores() output
+  const [ppiResult, setPpiResult] = useState(null);      // {nodes, edges}
+  const [goTerms, setGoTerms] = useState([]);            // g:Profiler result rows
+  const [dockingResults, setDockingResults] = useState(null); // {job_id, results}
+  const [mdConfig, setMdConfig] = useState(null);
   const value = useMemo(
     () => ({
-      selectedCompounds,
-      setSelectedCompounds,
-      compoundTargets,
-      setCompoundTargets,
-      diseaseTargets,
-      setDiseaseTargets,
-      selectedDisease,
-      setSelectedDisease,
-      plantName,
-      setPlantName,
-      selectedKeggPathways,
-      setSelectedKeggPathways,
+      selectedCompounds, setSelectedCompounds,
+      compoundTargets, setCompoundTargets,
+      diseaseTargets, setDiseaseTargets,
+      selectedDisease, setSelectedDisease,
+      plantName, setPlantName,
+      selectedKeggPathways, setSelectedKeggPathways,
+      intersectingGenes, setIntersectingGenes,
+      hubScores, setHubScores,
+      ppiResult, setPpiResult,
+      goTerms, setGoTerms,
+      dockingResults, setDockingResults,
+      mdConfig, setMdConfig,
     }),
-    [selectedCompounds, compoundTargets, diseaseTargets, selectedDisease, plantName, selectedKeggPathways]
+    [selectedCompounds, compoundTargets, diseaseTargets, selectedDisease, plantName,
+     selectedKeggPathways, intersectingGenes, hubScores, ppiResult, goTerms,
+     dockingResults, mdConfig]
   );
   return <NetworkContext.Provider value={value}>{children}</NetworkContext.Provider>;
 }

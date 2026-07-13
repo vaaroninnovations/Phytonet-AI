@@ -1,0 +1,44 @@
+{
+  "summary": "PhytoNet AI Iteration 19 — verified auth modal + gated downloads + module rename + AI Scientific Report + empty-state renders for Docking/MD. Backend pytest 5/5 pass (test_auth 3/3, test_report 2/2). Frontend: home hero renamed to 'PhytoNet AI', header guest CTAs (Sign In/Sign Up) open auth modal with two tabs, ESC + backdrop close, all 8 signin + 15 signup form fields + 9 purpose checkboxes + role(13)/area(10)/referral(14) dropdowns present. Wrong credentials render signin-error. Correct admin login opens session, header switches to avatar, menu-logout restores guest. Guarded download flow verified via requireAuth() JS shim: as guest guard() defers the action and opens modal; after successful login the queued action fires (__downloadFired=true). Both /scientific-report and /ai-scientific-report routes render Module 08 with all 8 summary cards (rep-plant/rep-disease/rep-comps/rep-ctgt/rep-dtgt/rep-inter/rep-kegg/rep-dock), report-generate CTA, and report-empty. Docking (/molecular-docking) and MD (/molecular-dynamics) render their empty states (dock-empty/md-empty) — populated-state testids (dock-priority-card, dock-summary, dock-md-threshold, dock-to-md, md-to-report) require a complete Plant→Network workflow which is out of scope for this iteration; source verified: 'Proceed to Molecular Dynamics', 'Generate AI Research Report', 'Proceed to Molecular Docking →', dock-to-md/md-to-report testids exist. Route regression from iter18 is fixed — App.js now registers BOTH /scientific-report and /ai-scientific-report.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/report/generate", "issue": "Under exhausted Emergent LLM budget the litellm call HANGS (no fast-fail on budget=exceeded); ingress kills at 60s → HTTP 502 HTML page. Frontend catch surfaces toast.error but message becomes 'Request failed with status code 502' instead of 'Budget has been exceeded' because the JSON detail field is not present on the 502 HTML page. Not a code bug per E1 note — action is to top-up Universal Key. If budget-fast-fail is desired, add a pre-flight budget check or wrap the litellm call with a shorter internal timeout that surfaces {'detail': 'Budget has been exceeded'} explicitly."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Report generation error toast when LLM budget exhausted", "issue": "toast.error fires (button loading state clears back to 'Generate AI Research Report') but the surfaced message is generic ('Request failed with status code 502') because backend times out at ingress instead of returning the expected JSON {'detail': 'Budget has been exceeded'}. Verified: Toaster is mounted in App.js line 60 with sonner richColors. Wiring is correct; message is just non-specific under this failure mode.", "affected_selectors": ["report-generate"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_auth.py",
+    "/app/backend/tests/test_report.py",
+    "/app/test_reports/pytest/iter19_auth_report.xml"
+  ],
+  "action_items": [
+    "Optional: fast-fail /api/report/generate when Emergent LLM budget is exhausted (return HTTP 500/402 with {'detail':'Budget has been exceeded'}) instead of letting litellm hang until the 60s ingress timeout → 502. This will let the frontend toast surface a user-actionable message.",
+    "Top up the Emergent Universal Key so report-card end-to-end (HTML/MD/PDF/DOCX download buttons) can be exercised in the next iteration.",
+    "Populated-state test coverage for dock-priority-card, dock-summary, dock-md-threshold, dock-to-md, md-to-report requires completing a real Plant → ADMET → CT → DT → Network Analysis pipeline whose intersection is non-empty. Provide a seeded plant+disease pair known to intersect (or a debug endpoint that hydrates NetworkContext) so a testing agent can exercise these views without going through 5 preceding modules manually."
+  ],
+  "critical_code_review_comments": [
+    "AIScientificReport.jsx line 60 toast.error uses `e.response?.data?.detail || e.message` — under a 502 HTML page e.response.data will be an HTML string, not JSON, so `.detail` is undefined and it falls back to axios message. Consider `e.response?.data?.detail || (typeof e.response?.data === 'string' && e.response.data.slice(0,120)) || e.message` for better diagnostics.",
+    "MolecularDocking.jsx: `dock-empty` (line 286) and `dock-to-md` (line 476) are correctly branched; but the empty state does NOT show `dock-to-md` — this is by design. Documented so future testing agents don't flag it.",
+    "App.js registers /scientific-report AND /ai-scientific-report as duplicate routes to AIScientificReport (lines 49-50) — this is a defensive fix for the iter18 broken md-to-report Link but leaves two canonical URLs for the same module. Consider consolidating to a single URL and 301-redirecting the other.",
+    "requireAuth in AuthContext.jsx opens the modal via a React state update from a non-React global (window.__phytonet_auth.openModal). The pattern works but does not synchronously flush to DOM — testing agents evaluating `document.querySelector('[data-testid=\"auth-modal\"]')` immediately after guard() may see the modal not yet rendered. This is a testing quirk, not a bug — after a `await page.wait_for_timeout(200)` the modal appears reliably (confirmed).",
+    "Auth cookie flow: /api/auth/login sets HttpOnly Secure SameSite=Lax cookies. On plain HTTP those cookies are stripped by the browser — the test_auth.py comment already documents this. In the browser (HTTPS preview URL) login works end-to-end (verified header switches to header-avatar and __downloadFired queued action ran)."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (5/5: test_auth 3/3, test_report 2/2)",
+    "frontend": "100% for iter19 scoped features (auth modal, hero rename, guarded downloads via requireAuth JS shim, Module 08 render, /scientific-report + /ai-scientific-report routes, PCTDP button rename via source, dock-to-md + md-to-report button texts via source). Populated-state UI for docking priority matrix/summary was not exercised (requires full workflow context)."
+  },
+  "test_credentials": "admin@phytonet.ai / Admin123! — pre-seeded admin verified working end-to-end (login → avatar → menu-logout → guest restored).",
+  "seed_data_creation": "None. Registered ephemeral testuser_<hex>@example.com in test_auth.py (dev verification token consumed). No cleanup needed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "All iter19 features are wired correctly. Backend budget IS exhausted — /api/report/generate hangs to 60s ingress 502 rather than returning a fast 500. To exercise the report-card success branch (report-dl-md/html/pdf/docx + preview <details>), top-up the Emergent Universal Key first, THEN run a full workflow so NetworkContext has intersectingGenes/hubScores/dockingResults populated. The populated Docking priority matrix + summary + dock-md-threshold slider + dock-to-md button also require a completed Plant DB → ADMET → CT → DT → Network Analysis pipeline (guarded downloads on toolbars are wired via requireAuth() — verified via JS shim). Route fix from iter18 (md-to-report → /scientific-report vs /ai-scientific-report mismatch) is resolved by registering both routes in App.js lines 49-50.",
+  "rca of the issue": "Report toast shows generic 502 message instead of 'Budget has been exceeded': Root cause is that the Emergent LLM SDK does not surface a budget-exhausted error synchronously — the LiteLLM call in report_service.py enters retry loop and hangs past the 60s Kubernetes ingress timeout. The ingress then returns an HTML 502 to the browser. AIScientificReport.jsx line 60 tries to read `e.response.data.detail` (which requires a JSON error body from FastAPI) but gets an HTML string instead, so it falls back to e.message = 'Request failed with status code 502'. Mitigation: (a) top-up Universal Key so the LLM call succeeds, OR (b) add a pre-call budget check in report_service that raises HTTPException(500, 'Budget has been exceeded') fast so the frontend toast shows the correct message."
+}

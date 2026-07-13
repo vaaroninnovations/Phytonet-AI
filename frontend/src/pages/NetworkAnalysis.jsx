@@ -68,7 +68,16 @@ export default function NetworkAnalysis() {
   const [ppiResult, setPpiResult] = useState(null); // {nodes, edges}
   const [keggResult, setKeggResult] = useState(null);
   const [selectedKeggPathways, setSelectedKeggPathwaysLocal] = useState([]);
-  const { setSelectedKeggPathways } = useNetwork();
+  const { setSelectedKeggPathways, setIntersectingGenes, setHubScores, setPpiResult: setCtxPpi, setGoTerms } = useNetwork();
+
+  // Push intersecting genes → context so downstream modules can consume them.
+  useEffect(() => {
+    const genes = Object.keys(intersectSel).filter((g) => intersectSel[g]);
+    setIntersectingGenes(genes);
+  }, [intersectSel, setIntersectingGenes]);
+
+  // Push PPI result → context
+  useEffect(() => { if (ppiResult) setCtxPpi(ppiResult); }, [ppiResult, setCtxPpi]);
 
   const hasInputs = compoundTargets.length > 0 && diseaseTargets.length > 0;
 
@@ -1081,15 +1090,16 @@ function HubPanel({ ppiResult, onComplete }) {
   const [metric, setMetric] = useState("degree");
   const [algoLoading, setAlgoLoading] = useState(false);
   const [scores, setScores] = useState(null);
+  const { setHubScores } = useNetwork();
 
   const runHub = () => {
     if (!ppiResult) return toast.error("Run PPI analysis first");
     setAlgoLoading(true);
-    // Yield to the browser so the loading spinner paints before Bron-Kerbosch runs.
     setTimeout(() => {
       try {
         const s = combinedHubScores(ppiResult.nodes, ppiResult.edges);
         setScores(s);
+        setHubScores(s);   // publish to context for Docking/Report
       } catch (e) {
         toast.error("Hub scoring failed");
       } finally {

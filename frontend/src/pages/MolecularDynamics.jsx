@@ -32,7 +32,7 @@ const BOX_OPTS = [
 ];
 
 export default function MolecularDynamics() {
-  const { compoundTargets, diseaseTargets, selectedCompounds } = useNetwork();
+  const { compoundTargets, diseaseTargets, selectedCompounds, setMdConfig } = useNetwork();
   const { compounds: allCompounds } = useResults();
   const { markComplete } = useWorkflow();
 
@@ -97,6 +97,7 @@ export default function MolecularDynamics() {
         const filename = `md_${compoundOptions[compIdx].name}_x_${targetOptions[tgtIdx].gene_symbol || ""}.zip`.replace(/[^A-Za-z0-9_.-]/g, "_");
         saveAs(blob, filename);
         markComplete("molecular-dynamics");
+        setMdConfig(cfg);
         toast.success("MD project downloaded");
       } catch (e) { toast.error("MD build failed: " + (e.message || e)); }
       finally { setBuilding(false); }
