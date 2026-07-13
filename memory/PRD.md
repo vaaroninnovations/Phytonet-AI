@@ -103,11 +103,19 @@ fields; sortable/searchable/paginated results table; export CSV/XLSX/JSON.
   - LC-MS card gets a compact mode (`compact` prop) with a condensed drop-zone, no "Required columns" chip row, and the new helper copy "Upload experimentally identified LC-MS phytochemical data for downstream analysis."
   - All existing functionality unchanged (parse, PubChem/LOTUS enrichment, populate compound table)
 
+## Implemented (2026-02-13 — Iter 16 · Network Analysis feature-complete)
+- **GO Enrichment (g:Profiler)**: `POST /api/go/enrich` in `network_service.py` proxies g:Profiler v2 REST for GO:BP/GO:MF/GO:CC. Robust parsing of `meta.genes_metadata.query.query_1.mapping` → maps ENSG IDs back to human-readable HGNC symbols (no more raw `ensgs`/`mapping` literals). Backend pytest: 3/3 pass.
+- **GO UI (`GOPanel`)**: 3-tab layout (Biological Process / Molecular Function / Cellular Component); custom-rendered SVG bar chart (−log10 P), dot plot (colour = gene ratio, size = overlap), and radial chord plot (term ↔ overlap-genes); Top-N + Max-P controls; CSV export; term-name → AmiGO deep-links.
+- **All 10 CytoHubba algorithms in `hubScoring.js`**: Degree, Betweenness & Stress (Brandes), Closeness (Wasserman-Faust), **MCC** (Bron-Kerbosch cliques + factorial fallback for large graphs), **MNC** (largest CC in N(v)), **DMNC** (|E|/|V|^1.7), **EPC** (Monte-Carlo p=0.5, T=100), **Radiality** (D+1−d), **Bottleneck** (>n/4 threshold). Hub panel shows all 10 columns; metric-of-focus dropdown highlights the active column; full CSV export.
+- **Additional KEGG plots**: `KEGGDotPlot` (gene-ratio × −log10 P × overlap-size), `KEGGLollipopChart` (combined score), `KEGGSankey` (gene→pathway flows for top 8 pathways with top-24 genes). Coexist with the existing bubble plot and table.
+- **PPI network exports**: `/app/frontend/src/lib/graphExporters.js` implements `toGraphML`, `toGML`, `toXGMML`, `toCytoscapeJSON`. New buttons on the PPI panel: CSV · Cytoscape JSON · GraphML · GML · XGMML.
+- **Backend tests**: `/app/backend/tests/test_network.py` covers PPI + KEGG + GO endpoints; all 3 pass.
+
 ## Backlog / Next Actions
-- P2: Step 5 — Network Analysis full graph (cytoscape.js + STRING PPI + hub scoring; transfer/summary scaffold in place)
 - P2: Step 6 — Molecular Docking (AutoDock Vina)
 - P2: Step 7 — Molecular Dynamics (GROMACS)
 - P2: Step 8 — AI Scientific Report generation
 - P3: SaaS auth + billing tiers
-- Refactor: DrugLikeness.jsx (1772 lines) + TargetPrediction.jsx + DiseaseTargets.jsx (~700+ each) → extract shared FilterCard / ResultsTable / AutoSelectCard / ProceedBar into `/components/*`
+- Refactor (HIGH): `NetworkAnalysis.jsx` is now ~2320 lines — split into `/components/network/{IntersectionPanel,PPIPanel,HubPanel,GOPanel,KEGGPanel}.jsx`
+- Refactor: DrugLikeness.jsx (1772 lines) + TargetPrediction.jsx + DiseaseTargets.jsx → extract shared FilterCard / ResultsTable / AutoSelectCard / ProceedBar
 - Refactor: split `server.py` into `/app/backend/routes/*`, models into `/app/backend/models/*`
