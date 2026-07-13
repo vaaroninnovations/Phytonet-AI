@@ -7,9 +7,9 @@ import ComingSoon from "@/pages/ComingSoon";
 import TargetPrediction from "@/pages/TargetPrediction";
 import DiseaseTargets from "@/pages/DiseaseTargets";
 import NetworkAnalysis from "@/pages/NetworkAnalysis";
+import MolecularDocking from "@/pages/MolecularDocking";
+import MolecularDynamics from "@/pages/MolecularDynamics";
 import {
-  MolecularDocking,
-  MolecularDynamics,
   AIScientificReport,
 } from "@/pages/WorkflowModules";
 import SiteHeader from "@/components/SiteHeader";

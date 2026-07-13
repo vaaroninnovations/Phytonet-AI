@@ -1,0 +1,45 @@
+{
+  "summary": "Tested Iteration 18 — PhytoNet AI Steps 6 (Molecular Docking / AutoDock Vina) + 7 (Molecular Dynamics / GROMACS setup-only). All 4 backend tests in test_docking_md.py pass against the public preview URL (RCSB PDB candidates for P04637, real Vina docking of aspirin vs 1EQG/PTGS1, /api/md/estimate scaling, /api/md/build zip contents). Added an additional test (test_docking_pose.py) that verifies the pose download endpoint returns both PDBQT and PDB with proper Content-Disposition attachment header — also passes. Frontend: verified /molecular-docking and /molecular-dynamics both render correct empty states with the expected data-testids ('dock-empty', 'md-empty') when no compounds/targets are in context, and the sidebar shows steps 06 + 07 with a 'NOW' lock behavior (locked until Network Analysis completes). Populated-state end-to-end from Plant DB was out of scope per the agent-to-agent context note (previously blocked by 0-intersection issue); the MD zip download flow is fully covered by the backend test (real zip built with all required files).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "MD → AI Scientific Report navigation",
+        "issue": "md-to-report Link in MolecularDynamics.jsx points to '/scientific-report' but App.js registers the route as '/ai-scientific-report'. Clicking 'Next — AI Scientific Report' from the MD page will land on a 404 / not-found route.",
+        "affected_selectors": ["md-to-report"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_docking_md.py",
+    "/app/backend/tests/test_docking_pose.py",
+    "/app/test_reports/pytest/test_docking_md_iter18.xml"
+  ],
+  "action_items": [
+    "Fix md-to-report Link route in /app/frontend/src/pages/MolecularDynamics.jsx (line ~217): change 'to=\"/scientific-report\"' to 'to=\"/ai-scientific-report\"' to match the registered route in App.js."
+  ],
+  "critical_code_review_comments": [
+    "MolecularDocking.jsx targetOptions memo has a confusing no-op condition '!idx.has(g) === false' (line ~36) — dead code, safe but should be removed.",
+    "docking_service.run_docking_batch DockResult constructor uses keyword arg 'pdb_id' but the DockResult dataclass field is 'receptor_pdb' — the fallback error branch (line ~449) passes 'pdb_id=' which will raise TypeError at runtime whenever a receptor prep fails. Should be receptor_pdb=(rec or {}).get('pdb_id', ''). Not currently hit because tests use valid receptors, but latent bug.",
+    "md-to-report Link points to /scientific-report (broken) — see integration_issues above.",
+    "docking_service.detect_binding_box does not verify HETATM group is likely a druggable ligand — very small groups (e.g., 1-atom heteroatoms) can be selected as reference. Minor; existing large-heteroatom heuristic works for 1EQG."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_docking_pose.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (5/5 tests: 4 in test_docking_md.py + 1 new test_docking_pose.py)",
+    "frontend": "100% for the two requested empty-state renders; populated-state was out of scope per E1 note"
+  },
+  "test_credentials": "N/A — no auth in this module",
+  "seed_data_creation": "None; tests use live RCSB PDB (1EQG for PTGS1) + aspirin SMILES. Vina outputs live under /tmp/phytonet_docking/{job_id}/",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Docking + MD backend endpoints are fully green including pose download. The one latent bug is a broken frontend link (md-to-report → /scientific-report should be /ai-scientific-report). To exercise the populated MD/Docking UI end-to-end you must complete Plant DB → ADMET → Target ID → Disease Target → Network Analysis with a real plant + disease that produces non-empty intersection (previously flagged as 0-intersection blocker in earlier iterations). Real AutoDock Vina 1.2.3 is at /usr/bin/vina; docking a single aspirin×1EQG pair at exhaustiveness=4, num_modes=5 takes ~8-12s on this container.",
+  "rca of the issue": "md-to-report broken-route: MolecularDynamics.jsx line ~217 uses to='/scientific-report' but App.js only registers '/ai-scientific-report'. Reproduction: open /molecular-dynamics with data, click 'Next — AI Scientific Report' → 404. Mitigation: single-line fix in MolecularDynamics.jsx."
+}

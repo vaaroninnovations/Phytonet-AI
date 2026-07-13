@@ -72,3 +72,19 @@ export const keggEnrich = (payload) =>
 export const goEnrich = (payload) =>
   api.post("/go/enrich", payload).then((r) => r.data);
 
+// Docking
+export const dockingPDBCandidates = (payload) =>
+  api.post("/docking/pdb-candidates", payload).then((r) => r.data);
+export const dockingRun = (payload) =>
+  api.post("/docking/run", payload, { timeout: 600000 }).then((r) => r.data);
+export const dockingPoseURL = (job_id, pair_id, fmt = "pdbqt") =>
+  `${BACKEND_URL}/api/docking/pose/${encodeURIComponent(job_id)}/${encodeURIComponent(pair_id)}?fmt=${fmt}`;
+
+// Molecular Dynamics
+export const mdEstimate = (payload) =>
+  api.post("/md/estimate", payload).then((r) => r.data);
+export async function mdBuild(payload) {
+  const res = await api.post("/md/build", payload, { responseType: "blob", timeout: 120000 });
+  return res.data;
+}
+

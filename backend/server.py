@@ -21,6 +21,8 @@ import admet_service
 import target_service
 import disease_service
 import network_service
+import docking_service
+import md_service
 
 
 ROOT_DIR = Path(__file__).parent
@@ -1346,6 +1348,135 @@ async def go_enrich(payload: GoRequest):
         user_threshold=payload.user_threshold,
         significance_method=payload.significance_method,
     )
+
+
+# ---------------------------------------------------------------------------
+# Molecular Docking (AutoDock Vina)
+# ---------------------------------------------------------------------------
+class DockCompound(BaseModel):
+    name: str
+    smiles: str
+
+class DockTarget(BaseModel):
+    uniprot_id: str
+    gene_symbol: Optional[str] = None
+    pdb_id: Optional[str] = None
+
+class DockPDBCandidatesRequest(BaseModel):
+    uniprot_ids: List[str]
+    limit: int = 5
+
+class DockRunRequest(BaseModel):
+    compounds: List[DockCompound]
+    targets: List[DockTarget]
+    exhaustiveness: int = 8
+    num_modes: int = 9
+    box_padding: float = 8.0
+
+
+@api_router.post("/docking/pdb-candidates")
+async def docking_pdb_candidates(payload: DockPDBCandidatesRequest):
+    result: dict = {}
+    for uid in payload.uniprot_ids:
+        try:
+            result[uid] = await docking_service.rcsb_candidates_for_uniprot(uid, limit=payload.limit)
+        except Exception as e:
+            result[uid] = {"error": str(e)}
+    return {"candidates": result}
+
+
+@api_router.post("/docking/run")
+async def docking_run(payload: DockRunRequest):
+    try:
+        res = await docking_service.run_docking_batch(
+            compounds=[c.model_dump() for c in payload.compounds],
+            targets=[t.model_dump() for t in payload.targets],
+            exhaustiveness=payload.exhaustiveness,
+            num_modes=payload.num_modes,
+            box_padding=payload.box_padding,
+        )
+        return res
+    except Exception as e:
+        logging.exception("Docking batch failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/docking/pose/{job_id}/{pair_id}")
+async def docking_pose(job_id: str, pair_id: str, fmt: str = "pdbqt"):
+    from fastapi.responses import Response
+    try:
+        content, mime = docking_service.get_pose_content(job_id, pair_id, fmt=fmt)
+        return Response(content=content, media_type=mime,
+                        headers={"Content-Disposition": f"attachment; filename={pair_id}.{fmt}"})
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Pose not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# Molecular Dynamics — GROMACS project generator (setup-only)
+# ---------------------------------------------------------------------------
+class MDCompound(BaseModel):
+    name: str
+    smiles: str
+
+class MDTarget(BaseModel):
+    uniprot_id: str
+    gene_symbol: Optional[str] = None
+    pdb_id: Optional[str] = None
+
+class MDConfigModel(BaseModel):
+    force_field: str = "amber99sb-ildn"
+    water_model: str = "tip3p"
+    box_type: str = "dodecahedron"
+    box_padding_nm: float = 1.0
+    ion_concentration: float = 0.15
+    positive_ion: str = "NA"
+    negative_ion: str = "CL"
+    temperature_K: float = 300.0
+    pressure_bar: float = 1.0
+    em_steps: int = 50000
+    nvt_ps: int = 100
+    npt_ps: int = 100
+    production_ns: int = 100
+    dt_fs: float = 2.0
+
+class MDBuildRequest(BaseModel):
+    compound: MDCompound
+    target: MDTarget
+    config: MDConfigModel = MDConfigModel()
+    receptor_pdb_content: Optional[str] = None    # if omitted, backend downloads from RCSB
+
+
+@api_router.post("/md/estimate")
+async def md_estimate(payload: MDConfigModel):
+    cfg = md_service.MDConfig(**payload.model_dump())
+    return md_service.estimate_runtime(cfg, atoms=30000)
+
+
+@api_router.post("/md/build")
+async def md_build(payload: MDBuildRequest):
+    from fastapi.responses import Response
+    cfg = md_service.MDConfig(**payload.config.model_dump())
+    receptor_content = payload.receptor_pdb_content
+    if not receptor_content and payload.target.pdb_id:
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                r = await client.get(docking_service.RCSB_FILE.format(pdb=payload.target.pdb_id))
+                r.raise_for_status()
+                receptor_content = r.text
+        except Exception as e:
+            logging.warning(f"MD receptor fetch failed: {e}")
+    project, zip_bytes = md_service.build_md_project(
+        compound=payload.compound.model_dump(),
+        target=payload.target.model_dump(),
+        receptor_pdb_content=receptor_content,
+        ligand_smiles_or_mol2=payload.compound.smiles,
+        cfg=cfg,
+    )
+    return Response(content=zip_bytes, media_type="application/zip",
+                    headers={"Content-Disposition": f"attachment; filename={project}.zip"})
 
 
 # ---------------------------------------------------------------------------
