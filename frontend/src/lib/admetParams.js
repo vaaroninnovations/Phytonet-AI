@@ -307,7 +307,29 @@ export const TOX_PARAMS = [
     dataType: "value",
     unit: "-log(mol/kg)",
     tooltip:
-      "Predicted oral LD50 (Zhu regression) in −log(mol/kg). Higher values indicate lower acute toxicity.",
+      "Predicted oral LD50 (Zhu regression) in −log(mol/kg). Higher values indicate lower acute toxicity — 2.5 is roughly 316 mg/kg for a 100 g/mol compound.",
+  },
+  {
+    id: "ld50_mgkg",
+    label: "LD50 (mg/kg)",
+    fullName: "LD50 (mg/kg body weight)",
+    category: "Acute",
+    section: "tox",
+    filterKey: ["ld50Min", "ld50Max"], // shares filter with LD50
+    kind: "computed",
+    path: null,
+    computed: (r) => {
+      const p = r.admet?.ld50;
+      const mw = r.physchem?.mw ?? r.molecular_weight;
+      if (typeof p !== "number" || typeof mw !== "number") return null;
+      // LD50 (mol/kg) = 10^(-prediction); LD50 (mg/kg) = mol/kg × MW × 1000
+      const molkg = Math.pow(10, -p);
+      return molkg * mw * 1000;
+    },
+    dataType: "value",
+    unit: "mg/kg",
+    tooltip:
+      "LD50 (mg/kg) is automatically calculated from the ADMET-AI prediction using the compound molecular weight: 10^(−prediction) × MW × 1000.",
   },
 ];
 
@@ -503,7 +525,7 @@ export function readPath(row, path) {
 
 // Returns true if the user has activated a filter for this parameter.
 export function isFilterActive(param, filters) {
-  if (param.kind === "range") {
+  if (Array.isArray(param.filterKey)) {
     const [minK, maxK] = param.filterKey;
     return filters[minK] !== "" || filters[maxK] !== "";
   }
@@ -522,4 +544,97 @@ export function activeColumnsFor(params, filters) {
 
 export function anyFilterActive(params, filters) {
   return params.some((p) => isFilterActive(p, filters));
+}
+
+// ---------- Auto-analysis preset ----------
+// Published medicinal-chemistry screening criteria, applied in one click.
+// Only endpoints actually returned by ADMET-AI are addressed; BBB and
+// clearance are intentionally left as "Any" because their preferred value
+// depends on the drug target (CNS vs. peripheral, once-daily vs. bolus).
+export const AUTO_ANALYSIS_FILTERS = {
+  // Drug-Likeness rules — Lipinski, Veber, Ghose, Egan, Muegge, Pfizer, GSK
+  lipinski: true,
+  veber: true,
+  ghose: true,
+  egan: true,
+  muegge: true,
+  pfizer: true,
+  gsk: true,
+  // Numeric physchem thresholds
+  mwMin: "",
+  mwMax: "500",
+  logpMin: "",
+  logpMax: "5",
+  tpsaMin: "",
+  tpsaMax: "140",
+  hbaMin: "",
+  hbaMax: "10",
+  hbdMin: "",
+  hbdMax: "5",
+  rotbMin: "",
+  rotbMax: "10",
+  // ADME — Absorption
+  hia: "high",
+  pampa: "high",
+  pgp_inh: "non-inhibitor",
+  bioavailability: "high",
+  caco2Min: "-5.15", // Caco-2 log(cm/s) > -5.15 → high permeability
+  caco2Max: "",
+  solubilityMin: "-4", // log mol/L ≥ -4 → soluble enough for oral
+  solubilityMax: "",
+  // ADME — Distribution (BBB left "any" — target-dependent)
+  bbb: "any",
+  ppbrMin: "",
+  ppbrMax: "",
+  vdssMin: "",
+  vdssMax: "",
+  // ADME — Metabolism (prefer non-inhibitors)
+  cyp1a2: "non-inhibitor",
+  cyp2c9: "non-inhibitor",
+  cyp2c19: "non-inhibitor",
+  cyp2d6: "non-inhibitor",
+  cyp3a4: "non-inhibitor",
+  // ADME — Excretion (target-dependent — left blank)
+  clearanceHepMin: "",
+  clearanceHepMax: "",
+  clearanceMicMin: "",
+  clearanceMicMax: "",
+  halfLifeMin: "",
+  halfLifeMax: "",
+  // Toxicity — prefer non-toxic
+  ames: "negative",
+  herg: "negative",
+  dili: "negative",
+  carcinogenicity: "negative",
+  skin: "negative",
+  clintox: "negative",
+  ld50Min: "2", // -log(mol/kg) ≥ 2 → LD50 ≥ ~100 mg/kg for a 100 g/mol compound
+  ld50Max: "",
+};
+
+// Assessment-label variants — two flavours used in the Auto Analysis table.
+export const ASSESSMENT_LABELS = {
+  drug: [
+    { min: 95, label: "Excellent Drug Candidate" },
+    { min: 85, label: "Strong Drug Candidate" },
+    { min: 70, label: "Good Drug Candidate" },
+    { min: 55, label: "Moderate Candidate" },
+    { min: 40, label: "Weak Candidate" },
+    { min: 0, label: "Poor Candidate" },
+  ],
+  admet: [
+    { min: 95, label: "Excellent ADMET Profile" },
+    { min: 85, label: "Very Good ADMET Profile" },
+    { min: 70, label: "Acceptable ADMET Profile" },
+    { min: 55, label: "Marginal ADMET Profile" },
+    { min: 40, label: "Weak ADMET Profile" },
+    { min: 0, label: "Poor ADMET Profile" },
+  ],
+};
+
+export function labelFor(score, kind = "drug") {
+  const table = ASSESSMENT_LABELS[kind] || ASSESSMENT_LABELS.drug;
+  if (!Number.isFinite(score)) return "—";
+  for (const t of table) if (score >= t.min) return t.label;
+  return table[table.length - 1].label;
 }

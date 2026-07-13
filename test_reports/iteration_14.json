@@ -1,0 +1,40 @@
+{
+  "summary": "Iteration 14 — Frontend-only verification of the 4 enhancements to /drug-likeness (Toxicity flat filter grid, LD50 mg/kg derived column, Auto Analyse button, Auto Analysis ranked table). Full end-to-end flow executed: /phytonet-ai → search 'Withania somnifera' → select 4 compounds → confirm modal → /drug-likeness → wait for admet-done (~ADMET-AI predictions complete). All 4 features function as designed. One minor testid-naming inconsistency observed for Skin Sensitization (see below). No console errors.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Toxicity FilterCard — Skin Sensitization control",
+        "issue": "Data-testid is 'filter-skin_sensitization' (derived from param.id) but the review-request spec asks for 'filter-skin'. FilterControl builds testid as `filter-${param.id}` while filterKey (state key) is 'skin'. Functionally the filter works, only the testid name diverges from spec.",
+        "selector": "[data-testid='filter-skin']",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "OPTIONAL: rename Skin Sensitization param.id from 'skin_sensitization' to 'skin' (or add an explicit `testid` override in FilterControl) so its data-testid matches the spec 'filter-skin'. Everything else in this iteration passes."
+  ],
+  "critical_code_review_comments": [
+    "DrugLikeness.jsx is now 1772 lines and admetParams.js is 641 lines — well over the 700-line guideline. Recommend extracting AutoAnalysisCard, FilterCard/FilterControl, ResultsTable/RowRender, ScoringConfigPanel and DrugLikenessFilterCard into /components/druglikeness/*. This is a maintainability concern only, not a defect.",
+    "LD50 (mg/kg) computed column uses `Math.pow(10, -p) * mw * 1000` and renders via toFixed(0) — verified integer output for 4 compounds: 980, 1106, 412, 1105 mg/kg. Consistent with the spec formula 10^(-prediction) × MW × 1000.",
+    "The LD50 and LD50 (mg/kg) columns share the same filterKey ['ld50Min','ld50Max']; when the LD50 range filter is activated, activeColumnsFor() correctly returns BOTH columns (isFilterActive picks up both via the shared range). Verified live: ld50Min='2' still shows 2 LD50 headers in tox-results.",
+    "Auto Analyse merges AUTO_ANALYSIS_FILTERS into filters state — 31 parameters activated, Scoring pill switches to 'Scoring active · 31 parameters selected'. Button label toggles Auto Analyse ⇄ Re-run Auto Analyse based on autoActive state. runAutoAnalyse() also resets weights to DEFAULT_WEIGHTS and smooth-scrolls to auto-analysis-card.",
+    "AutoAnalysisCard ranks all 4 test compounds correctly and marks Recommended = score ≥ 55. For 'Withania somnifera' first 4 compounds all scored ≥ 86 (94.0, 90.7, 87.0, 86.2) → all shown as '✓ Recommended'. auto-select-all pushes those into finalSel and updates admet-proceed-count.",
+    "Toxicity FilterCard flatLayout=true drops per-sub-category rows (0 tox-filters-row-* elements) and renders a single 'TOXICITY' banner + 4-col grid — exactly per spec. However, the small internal banner text ('Toxicity') duplicates the card title ('Toxicity Analysis Filters') — cosmetic redundancy only.",
+    "Help tooltip help-col-ld50_mgkg content confirmed: 'LD50 (mg/kg body weight): LD50 (mg/kg) is automatically calculated from the ADMET-AI prediction using the compound molecular weight: 10^(−prediction) × MW × 1000.' Matches spec.",
+    "The auto-row-<key> tr also nests an auto-row-check-<key> Checkbox. When Playwright queries [data-testid^='auto-row-'] it matches BOTH tr and its Checkbox descendant — the test filtered out auto-row-check-* prefixes to get the 4 real rows. Not a bug, just a naming ambiguity worth noting for future test authors.",
+    "AutoAnalysisCard receives filters={filters} prop but does not destructure/use it (the component signature lists filters but the body never reads it). Minor — will trigger 'unused-vars' lint if strict lint is enabled.",
+    "'Compound' column already exists in ResultsTable header AND AutoAnalysisCard uses 'Compound Name' as required. Consistent with the spec column list."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only)", "frontend": "~96% (all 12 review-request checks pass except filter-skin testid naming)"},
+  "test_credentials": "N/A",
+  "seed_data_creation": "Reused the existing IMPPAT 'Withania somnifera' cached response (164 compounds page 1 of 7). Selected 4 compounds (Withanolide Q, Withanolide R, Withanolide M, Hygrine).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 14 verified the four ADMET & Drug-Likeness enhancements. Key confirmed testids on /drug-likeness: auto-analyse-btn, auto-analysis-card, auto-analysis-table, auto-row-<key>, auto-row-check-<key>, auto-score-<key>, auto-reco-<key>, auto-check-all, auto-select-all, auto-analysis-close. Tox filter card uses flatLayout=true (no tox-filters-row-* sub-categories). LD50 (mg/kg) is a client-side derived column that shares the ld50 range filter — displays alongside LD50 when filter is active. IMPORTANT: Skin Sensitization testid is 'filter-skin_sensitization' (not 'filter-skin' as the spec text lists) — this is because FilterControl builds testid from param.id and the param id is 'skin_sensitization'. To bootstrap the flow: on /phytonet-ai, click 'Proceed to Drug-Likeness Screening' which opens a confirmation modal → click 'Continue' inside the modal → wait for admet-done (up to 3 minutes on cold-start Chemprop ensemble).",
+  "rca of the issue": "filter-skin testid mismatch — Root cause: FilterControl in DrugLikeness.jsx line 904 uses `const testid = \\`filter-${param.id}\\`;` while the param registered in admetParams.js has `id: 'skin_sensitization'`. So the DOM emits `data-testid='filter-skin_sensitization'`. Fix (main agent): change either (a) `id: 'skin_sensitization'` → `id: 'skin'` in TOX_PARAMS (keep fullName/label 'Skin Sensitization'), OR (b) add an explicit `testid: 'filter-skin'` override read by FilterControl. Option (a) is cleaner and requires no other changes since filterKey is already 'skin'. Reproduction: on /drug-likeness after admet-done, run `document.querySelector('[data-testid=\"filter-skin\"]')` → null; `document.querySelector('[data-testid=\"filter-skin_sensitization\"]')` → HTMLElement."
+}
