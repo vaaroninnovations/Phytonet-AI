@@ -72,7 +72,9 @@ export default function NetworkAnalysis() {
 
   const hasInputs = compoundTargets.length > 0 && diseaseTargets.length > 0;
 
-  // Compute intersection (auto).
+  // Compute intersection (auto). Matching key = gene_symbol OR uniprot_id when
+  // available — helps when Open Targets and ChEMBL emit different HGNC synonyms
+  // for the same protein (issue flagged during E2E automation in iter 16/17).
   const intersection = useMemo(() => {
     if (!hasInputs) return [];
     const cMap = new Map();
@@ -95,11 +97,21 @@ export default function NetworkAnalysis() {
       if (!slot.uniprot_id) slot.uniprot_id = c.uniprot_id;
       cMap.set(key, slot);
     }
-    const dSet = new Set(diseaseTargets.map((d) => d.gene_symbol));
+    // Build gene-symbol and uniprot-id lookups on the disease side.
+    const dSymSet = new Set(diseaseTargets.map((d) => d.gene_symbol).filter(Boolean));
+    const dUniMap = new Map();
+    for (const d of diseaseTargets) {
+      if (d.uniprot_id) dUniMap.set(d.uniprot_id, d);
+    }
     const out = [];
     for (const [gene, slot] of cMap.entries()) {
-      if (dSet.has(gene)) {
-        const d = diseaseTargets.find((x) => x.gene_symbol === gene) || {};
+      let d = null;
+      if (dSymSet.has(gene)) {
+        d = diseaseTargets.find((x) => x.gene_symbol === gene) || {};
+      } else if (slot.uniprot_id && dUniMap.has(slot.uniprot_id)) {
+        d = dUniMap.get(slot.uniprot_id);
+      }
+      if (d) {
         out.push({
           gene_symbol: gene,
           protein_name: slot.protein_name || d.protein_name,

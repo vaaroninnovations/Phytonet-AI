@@ -103,19 +103,30 @@ fields; sortable/searchable/paginated results table; export CSV/XLSX/JSON.
   - LC-MS card gets a compact mode (`compact` prop) with a condensed drop-zone, no "Required columns" chip row, and the new helper copy "Upload experimentally identified LC-MS phytochemical data for downstream analysis."
   - All existing functionality unchanged (parse, PubChem/LOTUS enrichment, populate compound table)
 
-## Implemented (2026-02-13 — Iter 16 · Network Analysis feature-complete)
-- **GO Enrichment (g:Profiler)**: `POST /api/go/enrich` in `network_service.py` proxies g:Profiler v2 REST for GO:BP/GO:MF/GO:CC. Robust parsing of `meta.genes_metadata.query.query_1.mapping` → maps ENSG IDs back to human-readable HGNC symbols (no more raw `ensgs`/`mapping` literals). Backend pytest: 3/3 pass.
-- **GO UI (`GOPanel`)**: 3-tab layout (Biological Process / Molecular Function / Cellular Component); custom-rendered SVG bar chart (−log10 P), dot plot (colour = gene ratio, size = overlap), and radial chord plot (term ↔ overlap-genes); Top-N + Max-P controls; CSV export; term-name → AmiGO deep-links.
-- **All 10 CytoHubba algorithms in `hubScoring.js`**: Degree, Betweenness & Stress (Brandes), Closeness (Wasserman-Faust), **MCC** (Bron-Kerbosch cliques + factorial fallback for large graphs), **MNC** (largest CC in N(v)), **DMNC** (|E|/|V|^1.7), **EPC** (Monte-Carlo p=0.5, T=100), **Radiality** (D+1−d), **Bottleneck** (>n/4 threshold). Hub panel shows all 10 columns; metric-of-focus dropdown highlights the active column; full CSV export.
-- **Additional KEGG plots**: `KEGGDotPlot` (gene-ratio × −log10 P × overlap-size), `KEGGLollipopChart` (combined score), `KEGGSankey` (gene→pathway flows for top 8 pathways with top-24 genes). Coexist with the existing bubble plot and table.
-- **PPI network exports**: `/app/frontend/src/lib/graphExporters.js` implements `toGraphML`, `toGML`, `toXGMML`, `toCytoscapeJSON`. New buttons on the PPI panel: CSV · Cytoscape JSON · GraphML · GML · XGMML.
-- **Backend tests**: `/app/backend/tests/test_network.py` covers PPI + KEGG + GO endpoints; all 3 pass.
+## Implemented (2026-02-13 — Iter 17 · ShinyGO-style rebuild + PCTDP subsection)
+- **Shared toolbars & utilities** (all in `/app/frontend/src/components/network/` and `/app/frontend/src/lib/`):
+  - `TableToolbar` — universal CSV / XLSX / Copy-to-Clipboard for every table
+  - `FigureToolbar` — universal SVG / PNG (300 & 600 dpi) / TIFF (300 & 600 dpi) / PDF (vector) + Fullscreen + Reset for every SVG figure. Publication-ready: font-family injected, title bar, viewBox preserved.
+  - `CyToolbar` — layout selector (fcose · concentric · circle · breadthfirst · grid · cose-bilkent · dagre), Fit, ZoomIn/Out, Search, Highlight Neighbours, Hide/Show Labels, Fullscreen + full network exports (SVG via cytoscape-svg / PNG(300/600) / TIFF(300/600) / PDF / JPG / GraphML / GML / XGMML / Cytoscape .cyjs JSON)
+  - `DataTable` — search / sort / column-filter / paginate; used across GO, KEGG, PCTDP
+  - `HelpTip` — `?` icon w/ tooltip (used on every filter parameter)
+  - `tableExporters.js`, `figureExporters.js` (UTIF-based TIFF), `enrichmentUtils.js` (BH / Bonferroni / fold enrichment / rich factor / correction methods), `pctdpBuilder.js`, `networkMetrics.js`, `cytoscapeSetup.js` (auto-registers fcose, cose-bilkent, dagre, svg extensions).
+- **GO Enrichment — ShinyGO-style rebuild** (`GOPanel.jsx`): categories (BP/MF/CC), Top-N (10/20/30/Custom), Min Gene Count/Ratio/Fold Enrichment sliders, P-value + adjusted-P cutoffs, Multiple-testing correction (g:SCS / BH-FDR / Bonferroni / None — actually passes through to g:Profiler after the iter-17 `GoRequest` Pydantic fix), Sort-by / Color-by / Bubble-size-by. 7 visualisation checkboxes (Bar / Bubble / Dot / GO Chord / Gene-Term Network / Enrichment Map / Circular Chord) — Gene-Term & Enrichment Map are interactive Cytoscape networks with full CyToolbar. Backend `gprofiler_go()` now returns `fold_enrichment`, `gene_ratio`, `rich_factor` for every term.
+- **KEGG Enrichment — ShinyGO-style rebuild** (`KEGGPanel.jsx`): Top-N + 4 sliders (gene count / ratio / rich factor / fold enrichment) + adjusted-P + raw-P cutoffs, correction method, sort/color/size selectors. 8 visualisation checkboxes (Bubble / Dot / Lollipop / Sankey / Bar / Gene-Pathway Network / Pathway Chord / Heatmap) — Gene-Pathway Network is interactive Cytoscape with full CyToolbar. Pathway selection checkboxes feed the PCTDP integrative graph.
+- **PPI panel**: full CyToolbar with layout selector + all bitmap/vector exports + existing GraphML/GML/XGMML/JSON. Edges table gets TableToolbar (CSV/XLSX/Copy).
+- **Hub panel**: TableToolbar on the 10-metric ranking table + NEW Hub Subgraph interactive network (induced subgraph of top-N by selected metric) with full CyToolbar.
+- **Intersection & Venn**: TableToolbar on intersecting-targets table; Venn diagram continues to export SVG/PNG(300/600)/TIFF(300/600)/PDF.
+- **NEW subsection PCTDP** (`PCTDPPanel.jsx`) — Plant → Compound → Target → Disease → KEGG Pathway integrative network. Auto-builds from NetworkContext (plant name, compounds, compound targets, disease, disease targets, intersecting genes, selected KEGG pathways). Node-type include checkboxes, dagre hierarchical layout by default, editable plant-name input. 8 metric summary cards (nodes / edges / avg degree / density / components / clustering coefficient / avg path length / diameter). Auto-Analyze button re-fits and computes centrality. Node table (id / type / display name / degree / betweenness / closeness / intersecting status) + Edge table (source / target / relationship / confidence / evidence / weight) — both searchable / sortable / filterable / paginated, with TableToolbar. Full CyToolbar on the network (all image + graph exports).
+- **Cross-workflow context**: `NetworkContext` now carries `plantName` (auto-set on Plant Database search) and `selectedKeggPathways` (fed by KEGG panel).
+- **Intersection matching** now falls back to UniProt-ID equality when gene_symbols differ (helps when Open Targets and ChEMBL emit different HGNC synonyms for the same protein).
+- **Backend `GoRequest`** model fixed to accept `significance_method` (silently ignored before iter-17). Backend pytest 5/5 pass (test_ppi_network, test_kegg_enrich, test_go_enrich_all_ontologies, test_go_enrich_has_fold_enrichment_gene_ratio_rich_factor, test_go_enrich_accepts_correction_and_threshold_params).
 
 ## Backlog / Next Actions
 - P2: Step 6 — Molecular Docking (AutoDock Vina)
 - P2: Step 7 — Molecular Dynamics (GROMACS)
 - P2: Step 8 — AI Scientific Report generation
 - P3: SaaS auth + billing tiers
-- Refactor (HIGH): `NetworkAnalysis.jsx` is now ~2320 lines — split into `/components/network/{IntersectionPanel,PPIPanel,HubPanel,GOPanel,KEGGPanel}.jsx`
+- Refactor (HIGH): `NetworkAnalysis.jsx` still contains ~500 lines of unused legacy GOPanel/KEGGPanel functions — dead code, safe to delete
 - Refactor: DrugLikeness.jsx (1772 lines) + TargetPrediction.jsx + DiseaseTargets.jsx → extract shared FilterCard / ResultsTable / AutoSelectCard / ProceedBar
 - Refactor: split `server.py` into `/app/backend/routes/*`, models into `/app/backend/models/*`
+- Optional: seed-via-URL bootstrap for /network-analysis so E2E tests can reach downstream panels without walking the full 5-step workflow
