@@ -10,8 +10,9 @@ import { useNetwork } from "@/context/NetworkContext";
 import { useWorkflow } from "@/context/WorkflowContext";
 import { useSortable, SortableTh } from "@/lib/useSortable";
 import { exportCSV, exportXLSX } from "@/lib/exporters";
-import { ppiNetwork, keggEnrich } from "@/lib/api";
-import { combinedHubScores } from "@/lib/hubScoring";
+import { ppiNetwork, keggEnrich, goEnrich } from "@/lib/api";
+import { combinedHubScores, HUB_METRICS } from "@/lib/hubScoring";
+import { downloadGraph } from "@/lib/graphExporters";
 import { saveAs } from "file-saver";
 import { toast } from "sonner";
 import jsPDF from "jspdf";
@@ -226,11 +227,11 @@ export default function NetworkAnalysis() {
               />
             )}
             {active === "go" && (
-              <PlaceholderPanel
-                icon={<Layers className="h-6 w-6" />}
-                title="GO Enrichment"
-                description="g:Profiler REST integration ships in the next iteration (BP / MF / CC ontologies with bar chart, dot plot, chord plot). PPI genes carry through."
-                gene_count={ppiResult?.nodes?.length || 0}
+              <GOPanel
+                genes={
+                  ppiResult?.nodes?.map((n) => n.id) ||
+                  Object.keys(intersectSel).filter((g) => intersectSel[g])
+                }
                 onComplete={() => {
                   setCompleted((c) => ({ ...c, go: true }));
                   setActive("kegg");
@@ -883,6 +884,12 @@ function PPIPanel({ genes, ppiResult, setPpiResult, onComplete }) {
     exportCSV(flat, fields, "ppi_edges.csv");
   };
 
+  const exportGraph = (kind) => {
+    if (!filteredResult) return;
+    downloadGraph(kind, filteredResult, "ppi_network");
+    toast.success(`PPI network exported as ${kind.toUpperCase()}`);
+  };
+
   return (
     <div className="space-y-6">
       <div
@@ -965,17 +972,43 @@ function PPIPanel({ genes, ppiResult, setPpiResult, onComplete }) {
             data-testid="ppi-network"
             className="rounded-3xl border border-[#E7E7F3] bg-white p-4"
           >
-            <div className="flex items-center justify-between px-2 pb-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-2 pb-2">
               <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">
                 Interaction network · {filteredResult.nodes.length} nodes ·{" "}
                 {filteredResult.edges.length} edges
               </p>
-              <DlBtn
-                onClick={exportEdges}
-                testid="ppi-export-csv"
-                label="CSV"
-                icon={<Download className="h-3.5 w-3.5" />}
-              />
+              <div data-testid="ppi-exports" className="flex flex-wrap items-center gap-2">
+                <DlBtn
+                  onClick={exportEdges}
+                  testid="ppi-export-csv"
+                  label="CSV"
+                  icon={<Download className="h-3.5 w-3.5" />}
+                />
+                <DlBtn
+                  onClick={() => exportGraph("json")}
+                  testid="ppi-export-json"
+                  label="Cytoscape JSON"
+                  icon={<Download className="h-3.5 w-3.5" />}
+                />
+                <DlBtn
+                  onClick={() => exportGraph("graphml")}
+                  testid="ppi-export-graphml"
+                  label="GraphML"
+                  icon={<Download className="h-3.5 w-3.5" />}
+                />
+                <DlBtn
+                  onClick={() => exportGraph("gml")}
+                  testid="ppi-export-gml"
+                  label="GML"
+                  icon={<Download className="h-3.5 w-3.5" />}
+                />
+                <DlBtn
+                  onClick={() => exportGraph("xgmml")}
+                  testid="ppi-export-xgmml"
+                  label="XGMML"
+                  icon={<Download className="h-3.5 w-3.5" />}
+                />
+              </div>
             </div>
             <CytoscapeComponent
               elements={elements}
@@ -1016,10 +1049,16 @@ function HubPanel({ ppiResult, onComplete }) {
   const runHub = () => {
     if (!ppiResult) return toast.error("Run PPI analysis first");
     setAlgoLoading(true);
+    // Yield to the browser so the loading spinner paints before Bron-Kerbosch runs.
     setTimeout(() => {
-      const s = combinedHubScores(ppiResult.nodes, ppiResult.edges);
-      setScores(s);
-      setAlgoLoading(false);
+      try {
+        const s = combinedHubScores(ppiResult.nodes, ppiResult.edges);
+        setScores(s);
+      } catch (e) {
+        toast.error("Hub scoring failed");
+      } finally {
+        setAlgoLoading(false);
+      }
     }, 30);
   };
 
@@ -1034,30 +1073,35 @@ function HubPanel({ ppiResult, onComplete }) {
   }, [scores, metric]);
   const top = ranked.slice(0, topN);
 
-  const accessors = useMemo(
-    () => ({
-      id: (r) => r.id,
-      degree: (r) => r.degree,
-      betweenness: (r) => r.betweenness,
-      closeness: (r) => r.closeness,
-    }),
-    []
-  );
+  const accessors = useMemo(() => {
+    const a = { id: (r) => r.id };
+    for (const m of HUB_METRICS) a[m.key] = (r) => r[m.key] ?? 0;
+    return a;
+  }, []);
   const { sortedRows, sortKey, sortDir, onSort } = useSortable(top, accessors, {
     key: metric,
     dir: "desc",
   });
 
+  const fmt = (v, key) => {
+    if (v == null) return "—";
+    if (key === "degree" || key === "mnc" || key === "bottleneck") return v.toFixed(0);
+    if (Math.abs(v) >= 1e4 || (Math.abs(v) < 1e-3 && v !== 0)) return v.toExponential(2);
+    return v.toFixed(3);
+  };
+
   const exportHubs = () => {
     if (!scores) return;
-    const flat = ranked.map((r, i) => ({
-      Rank: i + 1,
-      Gene: r.id,
-      Degree: r.degree,
-      Betweenness: (r.betweenness || 0).toFixed(3),
-      Closeness: (r.closeness || 0).toFixed(4),
-    }));
-    exportCSV(flat, Object.keys(flat[0]).map((k) => ({ key: k, label: k })), "hub_genes.csv");
+    const flat = ranked.map((r, i) => {
+      const row = { Rank: i + 1, Gene: r.id };
+      for (const m of HUB_METRICS) row[m.label] = r[m.key] ?? 0;
+      return row;
+    });
+    exportCSV(
+      flat,
+      Object.keys(flat[0]).map((k) => ({ key: k, label: k })),
+      "hub_genes.csv"
+    );
   };
 
   if (!ppiResult) {
@@ -1080,10 +1124,11 @@ function HubPanel({ ppiResult, onComplete }) {
               Hub Gene Analysis
             </p>
             <h2 className="mt-1 font-display text-lg font-bold tracking-tight text-[#0B0B18]">
-              CytoHubba-style ranking · 3 algorithms
+              CytoHubba-style ranking · 10 algorithms
             </h2>
             <p className="mt-1 text-xs text-[#64748B]">
-              Degree · Betweenness (Brandes) · Closeness (Wasserman-Faust). MCC / MNC / DMNC / EPC / Stress / Radiality / Bottleneck ship next.
+              Degree · Betweenness (Brandes) · Closeness (Wasserman–Faust) · MCC (Bron–Kerbosch cliques) ·
+              MNC · DMNC (ε=1.7) · EPC (Monte-Carlo p=0.5, 100 trials) · Stress · Radiality · Bottleneck (n/4 threshold)
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -1093,9 +1138,11 @@ function HubPanel({ ppiResult, onComplete }) {
               onChange={(e) => setMetric(e.target.value)}
               className="brand-focus rounded-full border border-[#E7E7F3] bg-white px-3 py-2 text-xs font-semibold text-[#0B0B18]"
             >
-              <option value="degree">Degree</option>
-              <option value="betweenness">Betweenness</option>
-              <option value="closeness">Closeness</option>
+              {HUB_METRICS.map((m) => (
+                <option key={m.key} value={m.key}>
+                  {m.label}
+                </option>
+              ))}
             </select>
             <label className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-[#64748B]">
               Top&nbsp;
@@ -1115,39 +1162,54 @@ function HubPanel({ ppiResult, onComplete }) {
       </div>
 
       {algoLoading ? (
-        <div className="rounded-3xl border border-[#E7E7F3] bg-white p-8 text-center text-sm text-[#64748B]">
-          Computing centrality…
+        <div data-testid="hub-loading" className="rounded-3xl border border-[#E7E7F3] bg-white p-8 text-center text-sm text-[#64748B]">
+          Computing 10 centrality algorithms…
         </div>
       ) : (
         <div data-testid="hub-table-card" className="overflow-hidden rounded-2xl border border-[#F1F1FA] bg-white">
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-[#E7E7F3] bg-[#FAFAFF]">
-                <th className="whitespace-nowrap px-3 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-[#64748B]">
-                  Rank
-                </th>
-                <SortableTh id="id" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Gene</SortableTh>
-                <SortableTh id="degree" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Degree</SortableTh>
-                <SortableTh id="betweenness" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Betweenness</SortableTh>
-                <SortableTh id="closeness" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Closeness</SortableTh>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedRows.map((r, i) => (
-                <tr key={r.id} data-testid={`hub-row-${r.id}`} className="border-b border-[#F1F1FA] hover:bg-[#F8F8FE]">
-                  <td className="px-3 py-3 text-center font-mono text-[12px] font-bold text-[#5139ED]">#{i + 1}</td>
-                  <td className="px-3 py-3 font-mono text-[12px] font-bold text-[#5139ED]">{r.id}</td>
-                  <td className="px-3 py-3 font-mono text-[11px] text-[#0B0B18]">{r.degree}</td>
-                  <td className="px-3 py-3 font-mono text-[11px] text-[#0B0B18]">
-                    {(r.betweenness || 0).toFixed(3)}
-                  </td>
-                  <td className="px-3 py-3 font-mono text-[11px] text-[#0B0B18]">
-                    {(r.closeness || 0).toFixed(4)}
-                  </td>
+          <div className="max-h-[520px] overflow-auto">
+            <table className="w-full min-w-[900px] border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-[#E7E7F3] bg-[#FAFAFF]">
+                  <th className="sticky top-0 z-10 whitespace-nowrap bg-[#FAFAFF] px-3 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-[#64748B]">
+                    Rank
+                  </th>
+                  <SortableTh id="id" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Gene</SortableTh>
+                  {HUB_METRICS.map((m) => (
+                    <SortableTh key={m.key} id={m.key} sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>
+                      {m.label}
+                    </SortableTh>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {sortedRows.map((r, i) => (
+                  <tr
+                    key={r.id}
+                    data-testid={`hub-row-${r.id}`}
+                    className={`border-b border-[#F1F1FA] hover:bg-[#F8F8FE] ${
+                      i < 3 ? "bg-[#5139ED]/[0.03]" : ""
+                    }`}
+                  >
+                    <td className="px-3 py-3 text-center font-mono text-[12px] font-bold text-[#5139ED]">
+                      #{i + 1}
+                    </td>
+                    <td className="px-3 py-3 font-mono text-[12px] font-bold text-[#5139ED]">{r.id}</td>
+                    {HUB_METRICS.map((m) => (
+                      <td
+                        key={m.key}
+                        className={`px-3 py-3 font-mono text-[11px] ${
+                          metric === m.key ? "font-bold text-[#5139ED]" : "text-[#0B0B18]"
+                        }`}
+                      >
+                        {fmt(r[m.key], m.key)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -1163,6 +1225,514 @@ function HubPanel({ ppiResult, onComplete }) {
         </button>
       </div>
     </div>
+  );
+}
+
+// ────────────────────── GO Enrichment Panel ─────────────────────
+function GOPanel({ genes, onComplete }) {
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [topN, setTopN] = useState(10);
+  const [maxP, setMaxP] = useState(0.05);
+  const [activeSource, setActiveSource] = useState("GO:BP");
+
+  const runGO = async () => {
+    if (!genes || genes.length === 0) return toast.error("No genes to enrich");
+    setLoading(true);
+    try {
+      const res = await goEnrich({ genes });
+      if (res.error) toast.error(`g:Profiler: ${res.error}`);
+      setResult(res);
+      toast.success(`g:Profiler returned ${res.terms?.length || 0} GO terms`);
+    } catch (e) {
+      toast.error("GO enrichment failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (genes?.length && !result) runGO();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const bySource = useMemo(() => {
+    const g = { "GO:BP": [], "GO:MF": [], "GO:CC": [] };
+    if (!result?.terms) return g;
+    for (const t of result.terms) {
+      if ((t.p_value ?? 1) > maxP) continue;
+      if (!g[t.source]) g[t.source] = [];
+      g[t.source].push(t);
+    }
+    for (const k of Object.keys(g)) g[k] = g[k].slice(0, topN);
+    return g;
+  }, [result, topN, maxP]);
+
+  const activeTerms = bySource[activeSource] || [];
+
+  const accessors = useMemo(
+    () => ({
+      name: (r) => r.name,
+      native: (r) => r.native,
+      p_value: (r) => r.p_value,
+      term_size: (r) => r.term_size,
+      intersection_size: (r) => r.intersection_size,
+      precision: (r) => r.precision,
+      recall: (r) => r.recall,
+    }),
+    []
+  );
+  const { sortedRows, sortKey, sortDir, onSort } = useSortable(activeTerms, accessors, {
+    key: "p_value",
+    dir: "asc",
+  });
+
+  const exportRows = () => {
+    if (!result?.terms) return;
+    const flat = result.terms.map((r) => ({
+      Source: r.source,
+      Category: r.category,
+      "Term ID": r.native,
+      "Term Name": r.name,
+      "P-value": r.p_value,
+      "Term Size": r.term_size,
+      "Query Size": r.query_size,
+      "Intersection Size": r.intersection_size,
+      Precision: r.precision,
+      Recall: r.recall,
+      "Overlap Genes": (r.overlap_genes || []).join(","),
+    }));
+    exportCSV(
+      flat,
+      Object.keys(flat[0] || { Source: 0 }).map((k) => ({ key: k, label: k })),
+      "go_enrichment.csv"
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+      <div
+        data-testid="go-controls"
+        className="rounded-3xl border border-[#E7E7F3] bg-white p-5 md:p-6"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">
+              <Layers className="mr-1 inline h-3.5 w-3.5" />
+              GO Enrichment · g:Profiler (g:SCS · H. sapiens)
+            </p>
+            <h2 className="mt-1 font-display text-lg font-bold tracking-tight text-[#0B0B18]">
+              {genes?.length || 0} genes → Biological Process · Molecular Function · Cellular Component
+            </h2>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-[#64748B]">
+              Top
+              <input
+                data-testid="go-topn"
+                type="number"
+                min={1}
+                max={100}
+                value={topN}
+                onChange={(e) => setTopN(Number(e.target.value))}
+                className="w-16 rounded-lg border border-[#E7E7F3] bg-white px-2 py-1 text-right text-sm text-[#0B0B18]"
+              />
+            </label>
+            <label className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-[#64748B]">
+              Max P
+              <input
+                data-testid="go-max-p"
+                type="number"
+                min={0}
+                max={1}
+                step={0.01}
+                value={maxP}
+                onChange={(e) => setMaxP(Number(e.target.value))}
+                className="w-20 rounded-lg border border-[#E7E7F3] bg-white px-2 py-1 text-right text-sm text-[#0B0B18]"
+              />
+            </label>
+            <button
+              data-testid="go-run"
+              onClick={runGO}
+              disabled={loading}
+              className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#5139ED] via-[#395AED] to-[#8139ED] px-4 py-2 text-xs font-bold uppercase tracking-widest text-white shadow-[0_10px_30px_-10px_rgba(81,57,237,0.6)] disabled:opacity-40"
+            >
+              {loading ? "Enriching…" : "Re-run"}
+            </button>
+            <DlBtn
+              onClick={exportRows}
+              testid="go-export-csv"
+              label="CSV"
+              icon={<Download className="h-3.5 w-3.5" />}
+            />
+          </div>
+        </div>
+
+        {/* Source tabs */}
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          {["GO:BP", "GO:MF", "GO:CC"].map((s) => (
+            <button
+              key={s}
+              data-testid={`go-tab-${s.replace(":", "-").toLowerCase()}`}
+              onClick={() => setActiveSource(s)}
+              className={`rounded-full px-4 py-1.5 text-xs font-semibold ring-1 ring-inset ${
+                activeSource === s
+                  ? "bg-[#5139ED] text-white ring-[#5139ED]"
+                  : "bg-white text-[#0B0B18] ring-[#E7E7F3] hover:ring-[#5139ED]/40"
+              }`}
+            >
+              {s === "GO:BP"
+                ? "Biological Process"
+                : s === "GO:MF"
+                ? "Molecular Function"
+                : "Cellular Component"}
+              <span className="ml-1.5 text-[10px] opacity-70">({bySource[s]?.length || 0})</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {loading ? (
+        <div data-testid="go-loading" className="rounded-3xl border border-[#E7E7F3] bg-white p-8 text-center text-sm text-[#64748B]">
+          Querying g:Profiler…
+        </div>
+      ) : activeTerms.length === 0 ? (
+        <div className="rounded-3xl border border-[#E7E7F3] bg-white p-8 text-center text-sm text-[#64748B]">
+          No significantly enriched {activeSource} terms at P ≤ {maxP}.
+        </div>
+      ) : (
+        <>
+          {/* Bar chart */}
+          <div
+            data-testid="go-bar-chart"
+            className="rounded-3xl border border-[#E7E7F3] bg-white p-5 md:p-6"
+          >
+            <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">
+              Bar chart · −log10(P) per term · {activeSource}
+            </p>
+            <GOBarChart terms={activeTerms} />
+          </div>
+
+          {/* Dot plot */}
+          <div
+            data-testid="go-dot-plot"
+            className="rounded-3xl border border-[#E7E7F3] bg-white p-5 md:p-6"
+          >
+            <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">
+              Dot plot · gene ratio × −log10(P) · dot size = intersection count
+            </p>
+            <GODotPlot terms={activeTerms} />
+          </div>
+
+          {/* Chord plot */}
+          <div
+            data-testid="go-chord-plot"
+            className="rounded-3xl border border-[#E7E7F3] bg-white p-5 md:p-6"
+          >
+            <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">
+              Chord plot · term–gene relationships · {activeSource}
+            </p>
+            <GOChordPlot terms={activeTerms.slice(0, 10)} />
+          </div>
+
+          {/* Table */}
+          <div
+            data-testid="go-table"
+            className="overflow-hidden rounded-2xl border border-[#F1F1FA] bg-white"
+          >
+            <div className="max-h-[520px] overflow-auto">
+              <table className="w-full min-w-[900px] border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-[#E7E7F3] bg-[#FAFAFF]">
+                    <SortableTh id="native" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Term ID</SortableTh>
+                    <SortableTh id="name" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Term Name</SortableTh>
+                    <SortableTh id="p_value" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>P-value</SortableTh>
+                    <SortableTh id="term_size" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Term Size</SortableTh>
+                    <SortableTh id="intersection_size" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Overlap</SortableTh>
+                    <SortableTh id="precision" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Precision</SortableTh>
+                    <SortableTh id="recall" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Recall</SortableTh>
+                    <th className="whitespace-nowrap px-3 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-[#64748B]">
+                      Genes
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedRows.map((r) => (
+                    <tr key={r.native} data-testid={`go-row-${r.native}`} className="border-b border-[#F1F1FA] hover:bg-[#F8F8FE]">
+                      <td className="px-3 py-3 font-mono text-[11px]">
+                        <a
+                          href={`https://amigo.geneontology.org/amigo/term/${r.native}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[#5139ED] underline decoration-dotted underline-offset-2"
+                        >
+                          {r.native}
+                        </a>
+                      </td>
+                      <td className="px-3 py-3 text-[12px] font-semibold text-[#0B0B18]">{r.name}</td>
+                      <td className="px-3 py-3 font-mono text-[11px] text-[#64748B]">
+                        {r.p_value?.toExponential(2)}
+                      </td>
+                      <td className="px-3 py-3 text-center font-mono text-[11px] text-[#0B0B18]">
+                        {r.term_size}
+                      </td>
+                      <td className="px-3 py-3 text-center font-mono text-[11px] font-bold text-[#5139ED]">
+                        {r.intersection_size}
+                      </td>
+                      <td className="px-3 py-3 font-mono text-[11px] text-[#0B0B18]">
+                        {(r.precision || 0).toFixed(3)}
+                      </td>
+                      <td className="px-3 py-3 font-mono text-[11px] text-[#0B0B18]">
+                        {(r.recall || 0).toFixed(3)}
+                      </td>
+                      <td
+                        className="max-w-[240px] px-3 py-3 text-[10px] font-mono text-[#64748B]"
+                        title={(r.overlap_genes || []).join(", ")}
+                      >
+                        {(r.overlap_genes || []).slice(0, 6).join(", ")}
+                        {r.overlap_genes?.length > 6 && "…"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      <div className="flex justify-end">
+        <button
+          data-testid="go-complete"
+          type="button"
+          onClick={onComplete}
+          className="inline-flex items-center gap-2 rounded-full bg-[#5139ED] px-5 py-2.5 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 hover:bg-[#4127c9]"
+        >
+          Next — KEGG Pathway Enrichment
+          <ArrowRight className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function GOBarChart({ terms }) {
+  const w = 780;
+  const rowH = 26;
+  const h = Math.max(120, terms.length * rowH + 60);
+  const labelW = 260;
+  const maxLog = Math.max(1, ...terms.map((t) => -Math.log10(Math.max(t.p_value || 1, 1e-30))));
+  const barMax = w - labelW - 60;
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} className="mt-3">
+      <rect x="0" y="0" width={w} height={h} fill="#FFFFFF" />
+      {terms.map((t, i) => {
+        const y = 30 + i * rowH;
+        const logp = -Math.log10(Math.max(t.p_value || 1, 1e-30));
+        const bw = (logp / maxLog) * barMax;
+        const label = t.name.length > 34 ? t.name.slice(0, 32) + "…" : t.name;
+        return (
+          <g key={t.native}>
+            <text
+              x={labelW - 8}
+              y={y + rowH / 2 + 3}
+              textAnchor="end"
+              fontSize="11"
+              fill="#0B0B18"
+              fontFamily="Inter"
+            >
+              {label}
+            </text>
+            <rect
+              x={labelW}
+              y={y + 4}
+              width={bw}
+              height={rowH - 8}
+              rx={3}
+              fill="#5139ED"
+              fillOpacity="0.75"
+            />
+            <text
+              x={labelW + bw + 6}
+              y={y + rowH / 2 + 3}
+              fontSize="10"
+              fill="#64748B"
+              fontFamily="Inter"
+            >
+              {logp.toFixed(2)}
+            </text>
+          </g>
+        );
+      })}
+      <text x={labelW + barMax / 2} y={h - 12} textAnchor="middle" fontSize="11" fill="#64748B">
+        −log10(P-value)
+      </text>
+    </svg>
+  );
+}
+
+function GODotPlot({ terms }) {
+  const w = 780;
+  const rowH = 26;
+  const h = Math.max(180, terms.length * rowH + 60);
+  const labelW = 260;
+  const plotL = labelW + 20;
+  const plotW = w - plotL - 60;
+  const maxLog = Math.max(1, ...terms.map((t) => -Math.log10(Math.max(t.p_value || 1, 1e-30))));
+  const maxIS = Math.max(1, ...terms.map((t) => t.intersection_size || 0));
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} className="mt-3">
+      <rect x="0" y="0" width={w} height={h} fill="#FFFFFF" />
+      {/* X-axis grid */}
+      {[0.25, 0.5, 0.75, 1].map((f, i) => (
+        <line
+          key={i}
+          x1={plotL + f * plotW}
+          x2={plotL + f * plotW}
+          y1={20}
+          y2={h - 40}
+          stroke="#F1F1FA"
+          strokeWidth="1"
+        />
+      ))}
+      {terms.map((t, i) => {
+        const y = 30 + i * rowH;
+        const logp = -Math.log10(Math.max(t.p_value || 1, 1e-30));
+        const x = plotL + (logp / maxLog) * plotW;
+        const r = 4 + ((t.intersection_size || 0) / maxIS) * 12;
+        const ratio = t.precision || 0;
+        const label = t.name.length > 34 ? t.name.slice(0, 32) + "…" : t.name;
+        // Colour by gene ratio (precision): low = light blue, high = deep purple
+        const colour = `hsl(${260 - ratio * 40}, 70%, ${55 - ratio * 20}%)`;
+        return (
+          <g key={t.native}>
+            <text
+              x={labelW - 8}
+              y={y + 4}
+              textAnchor="end"
+              fontSize="11"
+              fill="#0B0B18"
+              fontFamily="Inter"
+            >
+              {label}
+            </text>
+            <circle cx={x} cy={y} r={r} fill={colour} fillOpacity="0.85" stroke={colour} strokeWidth="1" />
+            <text x={x + r + 4} y={y + 3} fontSize="9" fill="#64748B">
+              {t.intersection_size}
+            </text>
+          </g>
+        );
+      })}
+      <text x={plotL + plotW / 2} y={h - 12} textAnchor="middle" fontSize="11" fill="#64748B">
+        −log10(P) · dot size ∝ overlap · colour ∝ gene ratio
+      </text>
+    </svg>
+  );
+}
+
+function GOChordPlot({ terms }) {
+  // Simplified radial chord: terms on the top arc, unique overlap genes on the
+  // bottom arc, curved lines connecting each term ↔ gene.
+  const w = 780;
+  const h = 460;
+  const cx = w / 2;
+  const cy = h / 2 + 20;
+  const rIn = 150;
+  const rOut = 180;
+  const genes = useMemo(() => {
+    const s = new Set();
+    for (const t of terms) for (const g of t.overlap_genes || []) s.add(g);
+    return [...s];
+  }, [terms]);
+
+  if (terms.length === 0 || genes.length === 0) {
+    return (
+      <div className="rounded-2xl border border-[#F1F1FA] bg-[#FAFAFF] p-6 text-center text-xs text-[#64748B]">
+        Not enough overlap data to render a chord diagram.
+      </div>
+    );
+  }
+
+  // Terms occupy top hemisphere (π→0), genes occupy bottom (0→−π going through π).
+  // We split the full circle: first half for terms, second half for genes.
+  const termCount = terms.length;
+  const geneCount = genes.length;
+  const total = termCount + geneCount;
+  const angleFor = (i) => (Math.PI * 2 * i) / total - Math.PI / 2;
+
+  const termAngles = terms.map((_, i) => angleFor(i));
+  const geneAngles = {};
+  genes.forEach((g, i) => (geneAngles[g] = angleFor(termCount + i)));
+
+  const point = (r, a) => [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+  const palette = ["#5139ED", "#8139ED", "#395AED", "#ED39A6", "#39C1ED", "#F5B301", "#10B981", "#EF4444", "#0EA5E9", "#7C3AED"];
+
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} className="mt-3">
+      <rect x="0" y="0" width={w} height={h} fill="#FFFFFF" />
+      {/* Term arcs */}
+      {terms.map((t, i) => {
+        const a = termAngles[i];
+        const [x1, y1] = point(rIn, a);
+        const [x2, y2] = point(rOut, a);
+        const [lx, ly] = point(rOut + 10, a);
+        const colour = palette[i % palette.length];
+        const label = t.name.length > 22 ? t.name.slice(0, 20) + "…" : t.name;
+        const anchor = Math.cos(a) > 0 ? "start" : "end";
+        return (
+          <g key={t.native}>
+            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={colour} strokeWidth="4" strokeLinecap="round" />
+            <text
+              x={lx}
+              y={ly}
+              fontSize="10"
+              fill={colour}
+              fontFamily="Inter"
+              fontWeight="700"
+              textAnchor={anchor}
+            >
+              {label}
+            </text>
+          </g>
+        );
+      })}
+      {/* Gene arcs */}
+      {genes.map((g, i) => {
+        const a = geneAngles[g];
+        const [x1, y1] = point(rIn, a);
+        const [x2, y2] = point(rOut, a);
+        const [lx, ly] = point(rOut + 10, a);
+        const anchor = Math.cos(a) > 0 ? "start" : "end";
+        return (
+          <g key={g}>
+            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#64748B" strokeWidth="3" strokeLinecap="round" />
+            <text x={lx} y={ly + 3} fontSize="9" fill="#0B0B18" fontFamily="Inter" textAnchor={anchor}>
+              {g}
+            </text>
+          </g>
+        );
+      })}
+      {/* Chords */}
+      {terms.map((t, i) => {
+        const colour = palette[i % palette.length];
+        const [tx, ty] = point(rIn, termAngles[i]);
+        return (t.overlap_genes || []).map((g) => {
+          if (geneAngles[g] == null) return null;
+          const [gx, gy] = point(rIn, geneAngles[g]);
+          const d = `M ${tx} ${ty} Q ${cx} ${cy} ${gx} ${gy}`;
+          return (
+            <path
+              key={`${t.native}-${g}`}
+              d={d}
+              stroke={colour}
+              strokeWidth="0.8"
+              strokeOpacity="0.45"
+              fill="none"
+            />
+          );
+        });
+      })}
+    </svg>
   );
 }
 
@@ -1353,6 +1923,39 @@ function KeggPanel({ genes, keggResult, setKeggResult, onComplete }) {
             </svg>
           </div>
 
+          {/* Dot plot */}
+          <div
+            data-testid="kegg-dot"
+            className="rounded-3xl border border-[#E7E7F3] bg-white p-5 md:p-6"
+          >
+            <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">
+              Dot plot · gene ratio × −log10(P) · size = overlap
+            </p>
+            <KEGGDotPlot rows={sortedRows} />
+          </div>
+
+          {/* Lollipop chart */}
+          <div
+            data-testid="kegg-lollipop"
+            className="rounded-3xl border border-[#E7E7F3] bg-white p-5 md:p-6"
+          >
+            <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">
+              Lollipop chart · combined score
+            </p>
+            <KEGGLollipopChart rows={sortedRows} />
+          </div>
+
+          {/* Sankey diagram */}
+          <div
+            data-testid="kegg-sankey"
+            className="rounded-3xl border border-[#E7E7F3] bg-white p-5 md:p-6"
+          >
+            <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">
+              Sankey · gene → pathway flows (top {Math.min(8, sortedRows.length)} pathways)
+            </p>
+            <KEGGSankey rows={sortedRows.slice(0, 8)} />
+          </div>
+
           {/* Pathway table */}
           <div
             data-testid="kegg-table"
@@ -1411,6 +2014,192 @@ function KeggPanel({ genes, keggResult, setKeggResult, onComplete }) {
         </>
       )}
     </div>
+  );
+}
+
+// ────────────────────── KEGG additional plots ─────────────────────
+function KEGGDotPlot({ rows }) {
+  const w = 780;
+  const rowH = 28;
+  const h = Math.max(180, rows.length * rowH + 60);
+  const labelW = 300;
+  const plotL = labelW + 20;
+  const plotW = w - plotL - 60;
+  const maxLog = Math.max(1, ...rows.map((r) => -Math.log10(Math.max(r.p_value || 1, 1e-30))));
+  const maxCount = Math.max(1, ...rows.map((r) => r.gene_count || 0));
+
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} className="mt-3">
+      <rect x="0" y="0" width={w} height={h} fill="#FFFFFF" />
+      {[0.25, 0.5, 0.75, 1].map((f, i) => (
+        <line
+          key={i}
+          x1={plotL + f * plotW}
+          x2={plotL + f * plotW}
+          y1={20}
+          y2={h - 40}
+          stroke="#F1F1FA"
+          strokeWidth="1"
+        />
+      ))}
+      {rows.map((r, i) => {
+        const y = 30 + i * rowH;
+        const logp = -Math.log10(Math.max(r.p_value || 1, 1e-30));
+        const x = plotL + (logp / maxLog) * plotW;
+        const dot = 4 + ((r.gene_count || 0) / maxCount) * 12;
+        const ratio = r.overlap_genes?.length && r.gene_count
+          ? (r.gene_count || 0) / Math.max(1, r.overlap_genes.length + r.gene_count)
+          : 0.5;
+        const colour = `hsl(${260 - ratio * 40}, 70%, ${55 - ratio * 15}%)`;
+        const label = r.term.length > 40 ? r.term.slice(0, 38) + "…" : r.term;
+        return (
+          <g key={r.term}>
+            <text x={labelW - 8} y={y + 4} textAnchor="end" fontSize="11" fill="#0B0B18" fontFamily="Inter">
+              {label}
+            </text>
+            <circle cx={x} cy={y} r={dot} fill={colour} fillOpacity="0.85" stroke={colour} strokeWidth="1" />
+            <text x={x + dot + 4} y={y + 3} fontSize="9" fill="#64748B">
+              {r.gene_count}
+            </text>
+          </g>
+        );
+      })}
+      <text x={plotL + plotW / 2} y={h - 12} textAnchor="middle" fontSize="11" fill="#64748B">
+        −log10(P-value) · dot size ∝ overlap
+      </text>
+    </svg>
+  );
+}
+
+function KEGGLollipopChart({ rows }) {
+  const w = 780;
+  const rowH = 28;
+  const h = Math.max(180, rows.length * rowH + 60);
+  const labelW = 300;
+  const plotL = labelW + 20;
+  const plotW = w - plotL - 60;
+  const maxScore = Math.max(1, ...rows.map((r) => r.combined_score || 0));
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} className="mt-3">
+      <rect x="0" y="0" width={w} height={h} fill="#FFFFFF" />
+      <line x1={plotL} x2={plotL} y1={20} y2={h - 40} stroke="#E7E7F3" strokeWidth="1" />
+      {rows.map((r, i) => {
+        const y = 30 + i * rowH;
+        const bw = ((r.combined_score || 0) / maxScore) * plotW;
+        const label = r.term.length > 40 ? r.term.slice(0, 38) + "…" : r.term;
+        return (
+          <g key={r.term}>
+            <text x={labelW - 8} y={y + 4} textAnchor="end" fontSize="11" fill="#0B0B18" fontFamily="Inter">
+              {label}
+            </text>
+            <line
+              x1={plotL}
+              y1={y}
+              x2={plotL + bw}
+              y2={y}
+              stroke="#8139ED"
+              strokeWidth="2"
+              strokeOpacity="0.65"
+            />
+            <circle cx={plotL + bw} cy={y} r={5} fill="#5139ED" stroke="#fff" strokeWidth="1.5" />
+            <text x={plotL + bw + 10} y={y + 3} fontSize="10" fill="#64748B" fontFamily="Inter">
+              {(r.combined_score || 0).toFixed(1)}
+            </text>
+          </g>
+        );
+      })}
+      <text x={plotL + plotW / 2} y={h - 12} textAnchor="middle" fontSize="11" fill="#64748B">
+        Combined score
+      </text>
+    </svg>
+  );
+}
+
+function KEGGSankey({ rows }) {
+  // Simple gene→pathway Sankey. Genes on the left; pathways on the right.
+  const w = 900;
+  const pad = 16;
+  const geneW = 12;
+  const pathW = 12;
+
+  // Collect and count gene appearances.
+  const geneCounts = new Map();
+  for (const r of rows) for (const g of r.overlap_genes || []) {
+    geneCounts.set(g, (geneCounts.get(g) || 0) + 1);
+  }
+  const genes = [...geneCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 24).map(([g]) => g);
+  const geneSet = new Set(genes);
+
+  const filteredRows = rows
+    .map((r) => ({ ...r, overlap_genes: (r.overlap_genes || []).filter((g) => geneSet.has(g)) }))
+    .filter((r) => r.overlap_genes.length > 0);
+
+  const h = Math.max(360, Math.max(genes.length, filteredRows.length) * 22 + 60);
+  const geneStep = (h - 2 * pad) / Math.max(1, genes.length);
+  const pathStep = (h - 2 * pad) / Math.max(1, filteredRows.length);
+  const geneY = (i) => pad + geneStep * (i + 0.5);
+  const pathY = (i) => pad + pathStep * (i + 0.5);
+  const palette = ["#5139ED", "#8139ED", "#395AED", "#ED39A6", "#39C1ED", "#F5B301", "#10B981", "#EF4444"];
+
+  if (filteredRows.length === 0 || genes.length === 0) {
+    return (
+      <div className="rounded-2xl border border-[#F1F1FA] bg-[#FAFAFF] p-6 text-center text-xs text-[#64748B]">
+        Not enough overlap data to render a Sankey diagram.
+      </div>
+    );
+  }
+
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} className="mt-3">
+      <rect x="0" y="0" width={w} height={h} fill="#FFFFFF" />
+      {/* Gene nodes (left) */}
+      {genes.map((g, i) => (
+        <g key={g}>
+          <rect x={140} y={geneY(i) - 6} width={geneW} height={12} rx={2} fill="#5139ED" />
+          <text x={135} y={geneY(i) + 3} fontSize="10" fill="#0B0B18" fontFamily="Inter" textAnchor="end">
+            {g}
+          </text>
+        </g>
+      ))}
+      {/* Pathway nodes (right) */}
+      {filteredRows.map((r, i) => {
+        const color = palette[i % palette.length];
+        const label = r.term.length > 34 ? r.term.slice(0, 32) + "…" : r.term;
+        return (
+          <g key={r.term}>
+            <rect x={w - 140 - pathW} y={pathY(i) - 6} width={pathW} height={12} rx={2} fill={color} />
+            <text x={w - 140 + 6} y={pathY(i) + 3} fontSize="10" fill="#0B0B18" fontFamily="Inter">
+              {label}
+            </text>
+          </g>
+        );
+      })}
+      {/* Flows */}
+      {filteredRows.map((r, pi) => {
+        const color = palette[pi % palette.length];
+        return (r.overlap_genes || []).map((g) => {
+          const gi = genes.indexOf(g);
+          if (gi < 0) return null;
+          const x1 = 140 + geneW;
+          const y1 = geneY(gi);
+          const x2 = w - 140 - pathW;
+          const y2 = pathY(pi);
+          const c1x = x1 + (x2 - x1) * 0.5;
+          const c2x = x1 + (x2 - x1) * 0.5;
+          const d = `M ${x1} ${y1} C ${c1x} ${y1}, ${c2x} ${y2}, ${x2} ${y2}`;
+          return (
+            <path
+              key={`${g}-${r.term}`}
+              d={d}
+              stroke={color}
+              strokeWidth="1.6"
+              strokeOpacity="0.35"
+              fill="none"
+            />
+          );
+        });
+      })}
+    </svg>
   );
 }
 

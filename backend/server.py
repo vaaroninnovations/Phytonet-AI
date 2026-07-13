@@ -1329,6 +1329,23 @@ async def kegg_enrich(payload: KeggRequest):
     return await network_service.enrichr_kegg(payload.genes, payload.library)
 
 
+class GoRequest(BaseModel):
+    genes: List[str]
+    organism: str = "hsapiens"
+    sources: Optional[List[str]] = None
+    user_threshold: float = 0.05
+
+
+@api_router.post("/go/enrich")
+async def go_enrich(payload: GoRequest):
+    return await network_service.gprofiler_go(
+        genes=payload.genes,
+        organism=payload.organism,
+        sources=payload.sources,
+        user_threshold=payload.user_threshold,
+    )
+
+
 # ---------------------------------------------------------------------------
 # App wiring
 # ---------------------------------------------------------------------------

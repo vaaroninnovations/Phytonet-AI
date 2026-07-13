@@ -69,3 +69,6 @@ export const ppiNetwork = (payload) =>
 export const keggEnrich = (payload) =>
   api.post("/kegg/enrich", payload).then((r) => r.data);
 
+export const goEnrich = (payload) =>
+  api.post("/go/enrich", payload).then((r) => r.data);
+

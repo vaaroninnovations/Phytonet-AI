@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 STRING_API = "https://string-db.org/api"
 ENRICHR_API = "https://maayanlab.cloud/Enrichr"
+GPROFILER_API = "https://biit.cs.ut.ee/gprofiler/api/gost/profile/"
 UA = "PhytoNetAI-network/1.0"
 
 
@@ -168,3 +169,116 @@ async def enrichr_kegg(genes: List[str], library: str = "KEGG_2021_Human") -> Di
         except Exception:
             continue
     return {"pathways": pathways, "library": library, "n": len(pathways)}
+
+
+# ---------------------------------------------------------------------------
+# GO enrichment via g:Profiler
+# ---------------------------------------------------------------------------
+_GO_SOURCE_LABELS = {"GO:BP": "Biological Process", "GO:MF": "Molecular Function", "GO:CC": "Cellular Component"}
+
+
+async def gprofiler_go(
+    genes: List[str],
+    organism: str = "hsapiens",
+    sources: Optional[List[str]] = None,
+    user_threshold: float = 0.05,
+    significance_method: str = "g_SCS",
+) -> Dict[str, Any]:
+    """GO enrichment via g:Profiler REST API.
+
+    Returns bar/dot/chord-ready rows keyed by source (GO:BP, GO:MF, GO:CC).
+    """
+    if not genes:
+        return {"terms": [], "n": 0}
+    if not sources:
+        sources = ["GO:BP", "GO:MF", "GO:CC"]
+
+    payload = {
+        "organism": organism,
+        "query": genes,
+        "sources": sources,
+        "user_threshold": user_threshold,
+        "significance_threshold_method": significance_method,
+        "no_evidences": False,
+        "no_iea": False,
+        "ordered": False,
+        "combined": False,
+        "measure_underrepresentation": False,
+        "domain_scope": "annotated",
+    }
+
+    async with httpx.AsyncClient(follow_redirects=True) as client:
+        try:
+            r = await client.post(
+                GPROFILER_API,
+                json=payload,
+                timeout=60.0,
+                headers={
+                    "User-Agent": UA,
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                },
+            )
+            r.raise_for_status()
+            data = r.json()
+        except Exception as e:
+            logger.exception(f"g:Profiler failed: {e}")
+            return {"terms": [], "n": 0, "error": str(e)}
+
+    meta = data.get("meta") or {}
+    query_names_map = (
+        (meta.get("genes_metadata") or {}).get("query") or {}
+    )
+    # g:Profiler v2 shape: {"query_1": {"mapping": {"TP53": ["ENSG..."]}, "ensgs": [...], "failed": [...]}}
+    # Build ordered list of input symbols aligned with each intersection row.
+    input_symbols: List[str] = []
+    if query_names_map:
+        first_key = next(iter(query_names_map))
+        query_val = query_names_map[first_key]
+        if isinstance(query_val, dict):
+            mapping = query_val.get("mapping") or {}
+            ensgs_ordered = query_val.get("ensgs") or []
+            # Reverse mapping: ENSG → input symbol
+            ensg_to_sym = {}
+            for sym, ensgs in mapping.items():
+                for e in (ensgs or []):
+                    ensg_to_sym[e] = sym
+            for ensg in ensgs_ordered:
+                input_symbols.append(ensg_to_sym.get(ensg) or ensg)
+        elif isinstance(query_val, list):
+            # Older/alt shape
+            for gene_meta in query_val:
+                if isinstance(gene_meta, dict):
+                    sym = gene_meta.get("name") or gene_meta.get("input")
+                else:
+                    sym = str(gene_meta) if gene_meta else None
+                if sym:
+                    input_symbols.append(sym)
+    if not input_symbols:
+        input_symbols = list(genes)
+
+    terms = []
+    for row in data.get("result", []) or []:
+        intersections = row.get("intersections") or []  # per-input evidences
+        overlap_genes: List[str] = []
+        for i, evid in enumerate(intersections):
+            if evid and i < len(input_symbols):
+                overlap_genes.append(input_symbols[i])
+        source = row.get("source")
+        terms.append({
+            "source": source,
+            "category": _GO_SOURCE_LABELS.get(source, source),
+            "native": row.get("native"),
+            "name": row.get("name"),
+            "p_value": row.get("p_value"),
+            "term_size": row.get("term_size"),
+            "query_size": row.get("query_size"),
+            "intersection_size": row.get("intersection_size"),
+            "effective_domain_size": row.get("effective_domain_size"),
+            "precision": row.get("precision"),
+            "recall": row.get("recall"),
+            "overlap_genes": overlap_genes,
+        })
+
+    terms.sort(key=lambda t: (t["source"] or "", t["p_value"] or 1.0))
+    return {"terms": terms, "n": len(terms), "sources": sources, "organism": organism}

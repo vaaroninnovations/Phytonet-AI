@@ -1,0 +1,56 @@
+{
+  "summary": "Iteration 16 — Backend for GO Enrichment/PPI/KEGG all pass (3/3 pytest). Frontend code review confirms all NEW data-testids exist (5 PPI exports, 10 hub metrics + HUB_METRICS, 3 GO tabs + 3 chart types, 3 new KEGG plots). Full E2E was PARTIALLY completed — reached Network Analysis page via Plant DB (Curcuma longa) → DrugLikeness (cached) → Compound Target (Curcumin, 18 targets) → Disease Target (diabetes 41, breast cancer 17) → Network Analysis. Intersection Venn + table + Next button render correctly. HOWEVER the tested compound×disease combos (Curcumin×diabetes, Curcumin×breast-cancer) both returned 0 common gene_symbols, so the PPI/Hub/GO/KEGG UI panels could NOT be E2E-driven end-to-end. All required testids for those panels ARE present in code (verified via grep).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Target Intersection",
+        "issue": "For the two auto-selected combinations tested (Curcumin+auto-select ∩ Diabetes-mellitus auto-select, and Curcumin ∩ breast cancer auto-select), the intersection returned 0 gene overlap. This blocks the PPI/Hub/GO/KEGG downstream E2E tests from running because 'Next — Protein–Protein Interaction' requires ≥1 selected intersecting gene. This is likely a valid biological finding (auto-selection picks very high-confidence targets on both sides which may not overlap) rather than a code bug, but it makes E2E automation of downstream panels difficult in a single Playwright session. Consider (a) providing a demo/seed dataset for Step 5 testing, or (b) matching on UniProt ID / broader synonyms in addition to gene_symbol, or (c) lowering the default auto-select threshold on either compound-target or disease-target so overlap is more likely.",
+        "affected_selectors": ["intersection-complete","ppi-network","hub-metric","go-controls","kegg-controls"]
+      }
+    ],
+    "design_issues": [
+      {
+        "screen": "PlantDatabase page-size dropdown",
+        "issues": ["React hydration warning: 'In HTML, <span> cannot be a child of <option>' in /app/frontend/src/pages/PlantDatabase.jsx line 867-868 (page-size <select>). Emitted on every navigation. Non-blocking but should be fixed by replacing the wrapper <span> inside <option> with plain-text children or migrating to shadcn Select. Same issue flagged in iteration 15."]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_network.py",
+    "/app/test_reports/pytest/test_network_iter16.xml"
+  ],
+  "action_items": [
+    "SEED FOR E2E: Provide a canned demo where compoundTargets ∩ diseaseTargets > 0 (e.g., pre-warm cache with Curcumin + specific disease known to overlap such as 'colorectal cancer' or 'osteoarthritis'; or provide a NetworkContext seed via URL query params). This is needed so PPI/Hub/GO/KEGG UI panels can be reliably E2E-tested in a single browser session. Backend endpoints for all four panels have already been verified.",
+    "OPTIONAL: Broaden intersection matching to also consider UniProt ID matches, not only gene_symbol equality, so that data returned from different sources (Open Targets vs. ChEMBL) can still align.",
+    "OPTIONAL: Fix the React hydration warning in /app/frontend/src/pages/PlantDatabase.jsx around line 867-868 — remove <span> inside <option> in the page-size <select>.",
+    "CODE HYGIENE: /app/frontend/src/pages/NetworkAnalysis.jsx is 2319 lines. Split into components/network/{IntersectionPanel,PPIPanel,HubPanel,GOPanel,KEGGPanel}.jsx for maintainability (>700-line guideline)."
+  ],
+  "critical_code_review_comments": [
+    "Backend POST /api/go/enrich verified: returns 210 terms across BP (189), MF (11), CC (10) for the 8-gene test input; sample row: 'mitotic cell cycle phase transition' (GO:0044772), P=1.9e-6, overlap_genes=['TP53','BRCA1','MYC','AKT1','EGFR','PTEN'] — all human-readable HGNC symbols, no 'mapping'/'ensgs' literals leaking through.",
+    "hubScoring.js — all 10 CytoHubba metrics correctly implemented: Degree, Closeness (Wasserman-Faust), Betweenness (Brandes), Stress (Brandes), MCC (Bron-Kerbosch + factorial fallback), MNC (largest CC in N(v)), DMNC (|E|/|V|^1.7), EPC (Monte Carlo p=0.5, T=100), Radiality (D+1-d), Bottleneck (>n/4 threshold). HUB_METRICS export has exactly 10 entries with correct keys. combinedHubScores() correctly aggregates all 10 per node.",
+    "graphExporters.js — toGraphML/toGML/toXGMML/toCytoscapeJSON all properly escape XML, expose id/label/score attributes; downloadGraph() wraps saveAs correctly.",
+    "NetworkAnalysis.jsx testids verified via grep — PPI: ppi-controls, ppi-run, ppi-network, ppi-exports, ppi-export-csv, ppi-export-json, ppi-export-graphml, ppi-export-gml, ppi-export-xgmml, ppi-complete. HUB: hub-controls, hub-metric (with 10 options from HUB_METRICS), hub-topn, hub-loading, hub-table-card, hub-row-*, hub-complete. GO: go-controls, go-topn, go-max-p, go-run, go-export-csv, go-tab-go-bp/mf/cc, go-loading, go-bar-chart, go-dot-plot, go-chord-plot, go-table, go-row-*, go-complete. KEGG: kegg-controls, kegg-topn, kegg-max-p, kegg-run, kegg-export-csv, kegg-bubble, kegg-dot, kegg-lollipop, kegg-sankey, kegg-table, kegg-complete. All spec-compliant.",
+    "The intersection Venn diagram correctly displays: compound-count, disease-count, common-count and disease name label (verified in screenshot; e.g., 'Curcumin 18 · 0 · 17 breast cancer'). PNG/SVG/TIFF/PDF export chips render.",
+    "Auto-selected 18 Curcumin compound-targets did not intersect with 41 diabetes-mellitus targets nor 17 breast-cancer targets. Manual investigation via UI (or lowering the confidence threshold) is needed to obtain a >0 overlap combination for downstream E2E.",
+    "The 5-subsection sidebar (Target Intersection Analysis, Protein–Protein Interaction, Hub Gene Analysis, GO Enrichment, KEGG Pathway Enrichment) locks Steps 2-5 correctly until previous is completed, as expected."
+  ],
+  "updated_files": [
+    "/app/test_reports/iteration_16.json (new)",
+    "/app/test_reports/pytest/test_network_iter16.xml (pytest results)"
+  ],
+  "success_rate": {
+    "backend": "100% (3/3 pytest cases — test_ppi_network, test_kegg_enrich, test_go_enrich_all_ontologies)",
+    "frontend": "~55% — E2E flow verified up to Network Analysis with intersection panel rendering correctly; downstream PPI/Hub/GO/KEGG UI panels not exercised because tested compound/disease combos returned 0 overlap. Code review confirms all required elements exist."
+  },
+  "test_credentials": "N/A (no auth in app)",
+  "seed_data_creation": "Warmed target-prediction cache for beta-Bisabolene (IMPHY000399, 0 targets) and Curcumin (IMPHY007574, 18 targets). Warmed disease-target cache for 'diabetes' (41 auto-selected targets at 4★) and 'breast cancer' (17 auto-selected targets at 4★).",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 16 status: (A) Backend all 3 endpoints /api/go/enrich, /api/ppi/network, /api/kegg/enrich return valid data — pytest passes (3/3). (B) Frontend E2E: successfully drove Plant DB → Curcuma longa → Curcumin (IMPHY007574) → Drug-Likeness (adme-results-row-check-IMPHY007574) → Target Prediction (18 targets @ 4★ auto-select) → Disease Target (breast-cancer or diabetes, 17-41 targets @ 4★) → Network Analysis. All prior-page testids validated. (C) BLOCKER for downstream E2E: at 4★ auto-select on both sides, Curcumin×diabetes and Curcumin×breast-cancer both return 0 gene_symbol overlap. The intersection-complete button is disabled until ≥1 intersecting gene is selected, so PPI/Hub/GO/KEGG panels cannot be reached via automation in these combos. Suggestions to unblock: (i) lower confidence filter to 2★ on target-prediction after auto-select so more targets are retained; (ii) or pick a compound/disease known to have canonical overlapping genes (e.g., Withaferin A / Withania somnifera compounds vs cancer disease sets); (iii) or add a 'demo network' route that seeds compoundTargets + diseaseTargets in NetworkContext for testing purposes. All required data-testids for the downstream panels (5 PPI exports, hub-metric with 10 options, go-bar/dot/chord/table + 3 tabs + go-export-csv, kegg-bubble/dot/lollipop/sankey/table + kegg-complete) have been verified to exist in /app/frontend/src/pages/NetworkAnalysis.jsx via grep. Backend supports them — they were re-verified live via pytest.",
+  "rca_of_the_issue": "The '0 intersection' is not a code bug — it's a downstream effect of the strict 4★ auto-selection default. Curcumin's high-confidence off-targets (18) at 4★ multi-source consensus happen not to overlap with breast-cancer's/diabetes's high-confidence disease genes (17/41) at 4★. Loosening the star threshold on either side, or matching on UniProt in addition to gene_symbol, would resolve this for testing scenarios. Reproduction: launch app → plant-database → 'Curcuma longa' → search Curcumin row → proceed → wait admet-done → select IMPHY007574 → continue → wait target-proceed-bar (~5s cached) → run-auto-select → 18 selected → continue → disease-search 'diabetes' → click first hit → wait table → run-auto-select → 41 selected → continue → /network-analysis shows 'Common Targets: 0'."
+}
