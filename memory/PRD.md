@@ -43,20 +43,27 @@ fields; sortable/searchable/paginated results table; export CSV/XLSX/JSON.
 - Automatic Compound Standardization (PubChem/ChEBI/LOTUS dedupe)
 - Step 2 — ADMET & Drug-Likeness Analysis via local `admet-ai` (async polling)
 - **ADMET Configurable Scoring Engine** (2026-02-12):
-  - Compact `ScoringConfigPanel` above the filter panel — editable weights (Drug-Likeness 35% / ADME 35% / Toxicity 30%) with live total badge; scoring disabled when total ≠ 100
-  - Scoring uses only user-selected filters/rules; equal within-category distribution; per-compound renormalization when data is unavailable
-  - Final Score (0–100) + Star Assessment (5 tiers: Excellent → Poor) columns
-  - Compounds auto-ranked by Final Score descending, still sortable by any column
-  - Expandable per-row breakdown (Parameter · Observed · Threshold · Pass/Fail · Contribution)
-  - CSV + Excel export includes rank, score, assessment, category scores, breakdown, weight config, and selected criteria for full reproducibility
-  - Verified 25/25 by testing agent (iteration_12.json)
+  - Compact `ScoringConfigPanel` — editable weights (Drug-Likeness 35% / ADME 35% / Toxicity 30%) with live total badge; scoring disabled when total ≠ 100
+  - Final Score (0–100) + Star Assessment + Ranking + expandable per-row breakdown
+
+## Implemented (2026-02-13)
+- **ADMET page 3-section reorganization** (no visual redesign):
+  - `ADME Analysis Filters` grouped into Absorption / Distribution / Metabolism / Excretion rows → dynamic `ADME Results` table
+  - `Toxicity Analysis Filters` (Genetic / Cardiac / Hepatic / Dermal / Clinical / Acute) → dynamic `Toxicity Results` table
+  - `Drug-Likeness Assessment Filters` (Rules + Numeric properties, incl. Pfizer 3/75 + GSK 4/400) → `Common Drug-Likeness Criteria` reference card → dynamic `Drug-Likeness Results` table
+  - Every parameter has a (?) tooltip via Radix + shadcn Tooltip explaining meaning, preferred outcome, and acceptable range
+  - Per-section dynamic column logic: no active filter → all columns; any active filter → only selected columns (behaves independently per section)
+  - CYP dropdowns dynamically expose Substrate/Non-substrate only for CYPs with substrate data in ADMET-AI (2C9 / 2D6 / 3A4); others show 3-option (Any / Inhibitor / Non-inhibitor)
+  - Parameter registry at `/app/frontend/src/lib/admetParams.js` — future ADMET endpoints slot in without UI changes
+  - Verified 37/37 by testing agent (iteration_13.json)
 
 ## Backlog / Next Actions
 - P1: Step 3 — Target Prediction (SwissTargetPrediction / STITCH)
 - P1: Step 4 — Disease Target Identification (OMIM / DisGeNET / GeneCards)
-- P2: Step 5 — Network Analysis (cytoscape.js visualization + STRING PPI)
+- P2: Step 5 — Network Analysis (cytoscape.js + STRING PPI)
 - P2: Step 6 — Molecular Docking (AutoDock Vina)
 - P2: Step 7 — Molecular Dynamics (GROMACS)
-- P2: Step 8 — AI Scientific Report generation (Claude / GPT)
+- P2: Step 8 — AI Scientific Report generation
 - P3: SaaS auth + billing tiers
-- Refactor: split `server.py` into `/app/backend/routes/*`, models to `/app/backend/models/*`
+- Refactor: DrugLikeness.jsx (1462 lines) → extract FilterCard/ResultsTable/ScoreBreakdown into `/components/druglikeness/*`
+- Refactor: split `server.py` into `/app/backend/routes/*`, models into `/app/backend/models/*`
