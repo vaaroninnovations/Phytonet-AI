@@ -13,7 +13,7 @@ import {
 export const WORKFLOW_STEPS = [
   { id: "plant-database", label: "Plant Database", route: "/phytonet-ai" },
   { id: "admet-drug-likeness", label: "ADMET & Drug-Likeness Analysis", route: "/drug-likeness" },
-  { id: "target-prediction", label: "Target Prediction", route: "/target-prediction" },
+  { id: "target-prediction", label: "Compound Target Identification", route: "/target-prediction" },
   { id: "disease-target-identification", label: "Disease Target Identification", route: "/disease-target-identification" },
   { id: "network-analysis", label: "Network Analysis", route: "/network-analysis" },
   { id: "molecular-docking", label: "Molecular Docking", route: "/molecular-docking" },

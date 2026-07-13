@@ -18,6 +18,8 @@ from bs4 import BeautifulSoup
 
 from plants_seed import PLANTS_SEED
 import admet_service
+import target_service
+import disease_service
 
 
 ROOT_DIR = Path(__file__).parent
@@ -1163,6 +1165,135 @@ async def plants_popular(limit: int = Query(8, ge=1, le=50)):
 @api_router.get("/")
 async def root():
     return {"message": "Dr. / — Network Pharmacology API"}
+
+
+# ---------------------------------------------------------------------------
+# Target Prediction (Compound → Targets)
+# ---------------------------------------------------------------------------
+class TargetCompound(BaseModel):
+    compound_name: Optional[str] = None
+    canonical_smiles: Optional[str] = None
+    smiles: Optional[str] = None
+    molecular_formula: Optional[str] = None
+    molecular_weight: Optional[float] = None
+
+
+class TargetPredictPayload(BaseModel):
+    compounds: List[TargetCompound]
+
+
+target_cache_col = db["target_cache_v1"]  # smiles → cached rows
+_target_jobs: dict = {}
+
+
+async def _target_cache_lookup(smi: str) -> Optional[List[dict]]:
+    doc = await target_cache_col.find_one({"_id": smi})
+    if not doc:
+        return None
+    if (time.time() - doc.get("cached_at", 0)) > CACHE_TTL_SECONDS:
+        return None
+    return doc.get("rows", [])
+
+
+async def _target_cache_store(smi: str, rows: List[dict]):
+    try:
+        await target_cache_col.replace_one(
+            {"_id": smi},
+            {"_id": smi, "rows": rows, "cached_at": time.time()},
+            upsert=True,
+        )
+    except Exception as e:
+        logging.debug(f"target cache store failed: {e}")
+
+
+async def _run_target_job(job_id: str, compounds: List[dict]):
+    async def on_progress(done: int, total: int):
+        j = _target_jobs.get(job_id)
+        if j:
+            j["done"] = done
+
+    try:
+        rows = await target_service.run_target_prediction_job(
+            compounds,
+            on_progress,
+            cache_lookup=_target_cache_lookup,
+            cache_store=_target_cache_store,
+        )
+        _target_jobs[job_id]["rows"] = rows
+        _target_jobs[job_id]["status"] = "done"
+    except Exception as e:
+        _target_jobs[job_id]["status"] = "failed"
+        _target_jobs[job_id]["error"] = str(e)
+        logging.exception(f"Target job {job_id} failed: {e}")
+
+
+@api_router.post("/target/predict")
+async def target_predict(payload: TargetPredictPayload):
+    if not payload.compounds:
+        return {"job_id": None, "total": 0}
+    job_id = str(uuid.uuid4())
+    total = len(payload.compounds)
+    _target_jobs[job_id] = {
+        "done": 0,
+        "total": total,
+        "status": "running",
+        "rows": None,
+        "started_at": time.time(),
+    }
+    asyncio.create_task(
+        _run_target_job(job_id, [c.dict() for c in payload.compounds])
+    )
+    return {"job_id": job_id, "total": total}
+
+
+@api_router.get("/target/status/{job_id}")
+async def target_status(job_id: str):
+    job = _target_jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    resp = {
+        "job_id": job_id,
+        "done": job.get("done", 0),
+        "total": job.get("total", 0),
+        "status": job.get("status"),
+        "error": job.get("error"),
+    }
+    if job.get("status") == "done":
+        resp["rows"] = job.get("rows", [])
+    return resp
+
+
+# ---------------------------------------------------------------------------
+# Disease Target Identification
+# ---------------------------------------------------------------------------
+disease_cache_col = db["disease_cache_v1"]
+
+
+@api_router.get("/disease/search")
+async def disease_search(q: str = Query(..., min_length=2)):
+    hits = await disease_service.search_diseases(q)
+    return {"query": q, "hits": hits}
+
+
+@api_router.get("/disease/targets")
+async def disease_targets(
+    efo_id: str = Query(...), name: str = Query("")
+):
+    """Return disease → targets, cached in Mongo for CACHE_TTL_SECONDS."""
+    doc = await disease_cache_col.find_one({"_id": efo_id})
+    now = time.time()
+    if doc and (now - doc.get("cached_at", 0)) < CACHE_TTL_SECONDS:
+        return doc.get("payload", {})
+    payload = await disease_service.get_disease_targets(efo_id, name)
+    try:
+        await disease_cache_col.replace_one(
+            {"_id": efo_id},
+            {"_id": efo_id, "payload": payload, "cached_at": now},
+            upsert=True,
+        )
+    except Exception:
+        pass
+    return payload
 
 
 # ---------------------------------------------------------------------------

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useSelection, compoundKey } from "@/context/SelectionContext";
 import { useWorkflow } from "@/context/WorkflowContext";
+import { useNetwork } from "@/context/NetworkContext";
 import WorkflowLayout from "@/components/WorkflowLayout";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -120,6 +121,7 @@ export default function DrugLikeness() {
     sourcePlant,
   } = useSelection();
   const { markComplete } = useWorkflow();
+  const { setSelectedCompounds: setNetworkCompounds } = useNetwork();
 
   const [jobId, setJobId] = useState(null);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
@@ -274,6 +276,8 @@ export default function DrugLikeness() {
 
   const onContinue = () => {
     if (finalCount === 0) return toast.error("Select at least one compound");
+    // Publish the selected compounds so Step 3 (Target Prediction) can pick them up.
+    setNetworkCompounds(Object.values(finalSel));
     markComplete("admet-drug-likeness");
     navigate("/target-prediction");
   };

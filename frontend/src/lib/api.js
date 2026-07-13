@@ -50,3 +50,16 @@ export const admetPredict = (compounds) =>
 
 export const admetStatus = (jobId) =>
   api.get(`/admet/status/${jobId}`).then((r) => r.data);
+
+export const targetPredict = (compounds) =>
+  api.post("/target/predict", { compounds }).then((r) => r.data);
+
+export const targetStatus = (jobId) =>
+  api.get(`/target/status/${jobId}`).then((r) => r.data);
+
+export const diseaseSearch = (q) =>
+  api.get(`/disease/search`, { params: { q } }).then((r) => r.data);
+
+export const diseaseTargets = (efoId, name) =>
+  api.get(`/disease/targets`, { params: { efo_id: efoId, name } }).then((r) => r.data);
+
