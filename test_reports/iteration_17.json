@@ -1,0 +1,58 @@
+{
+  "summary": "Iteration 17 — Backend: 5/5 pytest cases pass for /api/ppi/network, /api/kegg/enrich, /api/go/enrich (including two NEW tests for fold_enrichment/gene_ratio/rich_factor fields and significance_method/user_threshold pass-through). One backend wiring bug was FOUND & FIXED during this iteration: /api/go/enrich's Pydantic GoRequest model did not accept significance_method, so the frontend's choice of correction method (fdr / bonferroni / g_SCS) was silently dropped by the API. Fixed by adding significance_method to GoRequest and passing it through to network_service.gprofiler_go(). Frontend: All required data-testids for GO/KEGG/PCTDP panels + FigureToolbar + TableToolbar + CyToolbar verified to exist in code (comprehensive grep). Live E2E of the NEW panels was NOT completed because the same intersection=0 blocker from iter 16 persists (Curcumin/Withania×disease auto-select at 4★ default yields 0 overlap) and the workflow gates PPI→Hub→GO→KEGG→PCTDP behind intersection-complete.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/go/enrich", "issue": "FIXED in this iteration — GoRequest Pydantic model was missing significance_method field, so frontend's correction method choice was silently ignored. Fix: added significance_method:str='g_SCS' to /app/backend/server.py GoRequest model and passed it through to gprofiler_go()."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Target Intersection Analysis → PPI/Hub/GO/KEGG/PCTDP",
+        "issue": "PERSISTS from iter 16 — the compound×disease intersection remains 0 for Curcumin × diabetes / breast cancer at 4★ auto-select on both sides. Withania somnifera search did not populate the main plant-name input (typed text went into the Results filter box instead). This blocks reliable E2E automation of the NEW GO/KEGG/PCTDP panels because the intersection-complete button won't enable until ≥1 gene is selected. Manual UI ticking of ≥3 genes (per the review-request fallback) is not automatable without knowing which genes overlap in the current cache.",
+        "affected_selectors": ["intersection-complete", "ppi-controls", "go-controls", "kegg-controls", "pctdp-controls"]
+      }
+    ],
+    "design_issues": [
+      {"screen": "PlantDatabase page-size dropdown", "issues": ["React hydration warning still present: '<span> cannot be a child of <option>' at /app/frontend/src/pages/PlantDatabase.jsx line 872. Was flagged in iters 15 and 16 — still not fixed."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_network.py",
+    "/app/test_reports/pytest/test_network_iter17.xml"
+  ],
+  "action_items": [
+    "SEED FOR E2E (RECOMMENDED): Add a NetworkContext bootstrap that lets tests seed compoundTargets + diseaseTargets + selectedDisease + selectedCompounds + plantName via URL query params (e.g., /network-analysis?seed=demo) so the GO/KEGG/PCTDP UI can be exercised without walking the whole 5-step workflow. Alternatively, provide a canned demo compound+disease pair known to overlap (e.g., withaferin-A × 'cancer' broad set), so 4★ auto-select yields ≥5 shared genes.",
+    "OPTIONAL: Broaden intersection matching to include UniProt-ID equality in addition to gene_symbol equality (helps when Open Targets vs. ChEMBL return different symbol synonyms).",
+    "FIX PENDING: /app/frontend/src/pages/PlantDatabase.jsx line 871-872 — replace the <span data-ve-dynamic> inside <option> with plain-text children to eliminate the recurring hydration warning.",
+    "CODE HYGIENE: /app/frontend/src/pages/NetworkAnalysis.jsx is >2000 lines and still contains legacy inline GOPanel/KEGGPanel functions in addition to the new imports from /components/network/{GOPanel,KEGGPanel}.jsx (only new imports are actually used). Recommend deleting the ~500 lines of dead GOPanel/KEGGPanel/GOBarChart/GODotPlot/GOChordPlot/KEGGBubblePlot etc. defined but unused at the bottom of the file."
+  ],
+  "critical_code_review_comments": [
+    "network_service.gprofiler_go() already accepted significance_method + user_threshold; the wire-up gap was in server.py's GoRequest Pydantic model. Fixed. All 5 backend tests now pass.",
+    "GOPanel/KEGGPanel/PCTDPPanel data-testids verified: go-controls, go-cat-{go-bp/mf/cc}, go-topn-{10/20/30/custom}, go-min-{gc/gr/fe}, go-pcut, go-correction, go-sort, go-color, go-size, go-viz-{bar/bubble/dot/chord/gtnetwork/emap/circular}, go-run, go-complete, go-{go-bp/go-mf/go-cc}-{bar/bubble/dot/chord/gtnetwork/emap/circular/table-wrap/tbl-{csv/xlsx/copy}}. FigureToolbar exposes {tp}-svg, {tp}-png-{300/600}, {tp}-tiff-{300/600}, {tp}-pdf. Same completeness verified for KEGG panel and PCTDP panel including 8 metric cards.",
+    "CyToolbar exposes all required testids: {tp}-toolbar, {tp}-layout, {tp}-fit, {tp}-zoom-in, {tp}-zoom-out, {tp}-search, {tp}-highlight, {tp}-labels, {tp}-fullscreen, {tp}-{svg/png-300/png-600/tiff-300/tiff-600/pdf/jpg}, and extra exports {tp}-{json/graphml/gml/xgmml}. Wired into PPI network (testidPrefix='ppi'), Hub subgraph ('hub-net'), GO gene-term & emap networks, KEGG gene-pathway network, and PCTDP network ('pctdp-network').",
+    "TableToolbar exposes {tp}-csv, {tp}-xlsx, {tp}-copy. Attached at intersection (testidPrefix='intersection-tbl'), PPI edges ('ppi-tbl'), Hub table ('hub-tbl'), GO per-source tables ('go-{go-bp/mf/cc}-tbl'), KEGG table ('kegg-tbl'), PCTDP node ('pctdp-node-tbl'), PCTDP edge ('pctdp-edge-tbl').",
+    "Backend GO enrich response: verified 210+ terms across BP/MF/CC with fold_enrichment/gene_ratio/rich_factor as non-null floats; gene_ratio and rich_factor ∈ [0,1] and fold_enrichment ≥ 0 for all sampled rows.",
+    "NetworkAnalysis.jsx still contains ~500 lines of unused legacy GOPanel/KEGGPanel/GOBarChart/GODotPlot/GOChordPlot/KEGGBarChart etc. functions (dead code) — the routing now uses NewGOPanel/NewKEGGPanel/PCTDPPanel imported from /components/network/. File size 2000+ lines exceeds the 700-line guideline. Cleanup recommended.",
+    "Intersection matching still uses gene_symbol only. When Open Targets returns 'MAP2K1' and ChEMBL returns 'MEK1', no overlap despite same UniProt (Q02750). Broadening the match to (gene_symbol OR uniprot_id) would substantially reduce the intersection=0 problem for real drug-disease pairs.",
+    "PCTDPPanel: doAutoAnalyze() correctly sets include=all, layout=dagre, runs cy.layout() and centrality. Metrics are always computed via computeNetworkMetrics(graph.nodes, graph.edges) so 8 cards populate even before Auto-Analyze click; the button is more of a UX helper (fit + centrality) than a data-fetch trigger — this is fine and matches the spec."
+  ],
+  "updated_files": [
+    "/app/backend/server.py (added significance_method to GoRequest, passed through to gprofiler_go)",
+    "/app/backend/tests/test_network.py (added test_go_enrich_has_fold_enrichment_gene_ratio_rich_factor + test_go_enrich_accepts_correction_and_threshold_params)",
+    "/app/test_reports/pytest/test_network_iter17.xml (new pytest results, 5/5 pass)",
+    "/app/test_reports/iteration_17.json (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (5/5 pytest cases — test_ppi_network, test_kegg_enrich, test_go_enrich_all_ontologies, test_go_enrich_has_fold_enrichment_gene_ratio_rich_factor, test_go_enrich_accepts_correction_and_threshold_params)",
+    "frontend": "Code review of all NEW data-testids: 100% present. Live E2E of NEW GO/KEGG/PCTDP panels: 0% (blocked by persistent intersection=0 issue that inherited from iter 16). Empty-state Network Analysis page renders without console errors."
+  },
+  "test_credentials": "N/A (no auth in app)",
+  "seed_data_creation": "None (no server-side seed created because problem is client-side intersection matching, not data availability)",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 17 status: (A) Backend fully verified & one wiring bug fixed — /api/go/enrich now correctly accepts significance_method (in addition to user_threshold) and returns fold_enrichment/gene_ratio/rich_factor for every term. Pytest 5/5. (B) Frontend all data-testids code-verified for GOPanel (categories + top-N + 4 sliders + p-cutoff + correction + sort/color/size + 7 viz checkboxes + per-source figure cards with FigureToolbar {svg/png-300/png-600/tiff-300/tiff-600/pdf} + per-source table toolbar {csv/xlsx/copy}), KEGGPanel (8 viz checkboxes, all controls, kegg-tbl-*), PCTDPPanel (8 metric cards, controls, plant-name input, 5 include-type checkboxes, network-card with CyToolbar 'pctdp-network' prefix, node-table & edge-table with TableToolbar, complete button), plus CyToolbar attached to PPI ('ppi'), Hub subgraph ('hub-net'), PCTDP ('pctdp-network'), GO gene-term & enrichment map networks, KEGG gene-pathway network. (C) UNRESOLVED E2E BLOCKER: 4★ auto-select for both compound-targets and disease-targets consistently yields 0 gene overlap for the tested combos, so intersection-complete stays disabled and downstream panels cannot be reached by automation. Recommended fix: add a seed-via-URL bootstrap on NetworkAnalysis, OR broaden intersection matching to include UniProt-ID equality, OR relax the default star filter on target-prediction/disease-target from 4★ to 2★. (D) Recurring: PlantDatabase.jsx hydration warning at line 872 (span inside option) — flagged in iters 15, 16, and 17.",
+  "rca_of_the_issue": "Backend /api/go/enrich significance_method drop: the underlying network_service.gprofiler_go() function has always supported significance_method, but the FastAPI wrapper's Pydantic model (GoRequest) did not declare it, so FastAPI silently discarded the field from incoming JSON. Frontend's UI toggle for g:SCS/BH-FDR/Bonferroni therefore never reached g:Profiler. Verified via test_go_enrich_accepts_correction_and_threshold_params which now asserts d['significance_method'] == 'fdr' when sent as such. Fixed by adding the field to GoRequest and forwarding it to gprofiler_go(). Frontend E2E blocker: the intersection is computed as {c.gene_symbol for c in compoundTargets} ∩ {d.gene_symbol for d in diseaseTargets}. Because Open Targets and ChEMBL sometimes return different HGNC synonyms for the same UniProt-ID, and because the 4★ multi-source consensus is very strict on both sides, real biological overlap can be 0 in cache. Not a code bug per se, but hostile to E2E automation."
+}

@@ -27,6 +27,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useSelection, compoundKey } from "@/context/SelectionContext";
+import { useNetwork } from "@/context/NetworkContext";
 import { useResults } from "@/context/ResultsContext";
 import { toast } from "sonner";
 import {
@@ -98,6 +99,8 @@ export default function PlantDatabase({ topRightSlot = null }) {
     standardizing,
     stdStats,
   } = useResults();
+  // Feed the current plant name into cross-workflow NetworkContext (used by PCTDP).
+  const networkCtx = useNetwork();
 
   // Plant mode
   const [plant, setPlant] = useState("");
@@ -218,6 +221,7 @@ export default function PlantDatabase({ topRightSlot = null }) {
       if (!p) return toast.error("Enter a plant name");
       if (typeof plantOverride === "string") setPlant(p);
       setSourcePlant(p);
+      try { networkCtx?.setPlantName?.(p); } catch (e) {}
       return runSearch(
         () =>
           searchPlant(p, {

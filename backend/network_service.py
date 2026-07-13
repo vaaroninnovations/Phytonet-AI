@@ -265,20 +265,36 @@ async def gprofiler_go(
             if evid and i < len(input_symbols):
                 overlap_genes.append(input_symbols[i])
         source = row.get("source")
+        term_size = row.get("term_size") or 0
+        query_size = row.get("query_size") or 0
+        eff = row.get("effective_domain_size") or 0
+        isize = row.get("intersection_size") or 0
+        # Fold enrichment = (k/n) / (K/N)
+        fold_enrichment = 0.0
+        if query_size and term_size and eff:
+            gr = isize / query_size
+            bg = term_size / eff
+            fold_enrichment = gr / bg if bg else 0.0
+        gene_ratio = (isize / query_size) if query_size else 0.0
+        rich_factor = (isize / term_size) if term_size else 0.0
         terms.append({
             "source": source,
             "category": _GO_SOURCE_LABELS.get(source, source),
             "native": row.get("native"),
             "name": row.get("name"),
             "p_value": row.get("p_value"),
-            "term_size": row.get("term_size"),
-            "query_size": row.get("query_size"),
-            "intersection_size": row.get("intersection_size"),
-            "effective_domain_size": row.get("effective_domain_size"),
+            "term_size": term_size,
+            "query_size": query_size,
+            "intersection_size": isize,
+            "effective_domain_size": eff,
             "precision": row.get("precision"),
             "recall": row.get("recall"),
             "overlap_genes": overlap_genes,
+            "fold_enrichment": fold_enrichment,
+            "gene_ratio": gene_ratio,
+            "rich_factor": rich_factor,
         })
 
     terms.sort(key=lambda t: (t["source"] or "", t["p_value"] or 1.0))
-    return {"terms": terms, "n": len(terms), "sources": sources, "organism": organism}
+    return {"terms": terms, "n": len(terms), "sources": sources, "organism": organism,
+            "significance_method": significance_method, "user_threshold": user_threshold}

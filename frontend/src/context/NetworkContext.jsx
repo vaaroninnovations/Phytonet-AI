@@ -11,6 +11,8 @@ export function NetworkProvider({ children }) {
   const [compoundTargets, setCompoundTargets] = useState([]); // final selected rows
   const [diseaseTargets, setDiseaseTargets] = useState([]); // final selected rows
   const [selectedDisease, setSelectedDisease] = useState(null); // {efo_id, name}
+  const [plantName, setPlantName] = useState(""); // set on Plant Database
+  const [selectedKeggPathways, setSelectedKeggPathways] = useState([]); // set on KEGG panel
   const value = useMemo(
     () => ({
       selectedCompounds,
@@ -21,8 +23,12 @@ export function NetworkProvider({ children }) {
       setDiseaseTargets,
       selectedDisease,
       setSelectedDisease,
+      plantName,
+      setPlantName,
+      selectedKeggPathways,
+      setSelectedKeggPathways,
     }),
-    [selectedCompounds, compoundTargets, diseaseTargets, selectedDisease]
+    [selectedCompounds, compoundTargets, diseaseTargets, selectedDisease, plantName, selectedKeggPathways]
   );
   return <NetworkContext.Provider value={value}>{children}</NetworkContext.Provider>;
 }

@@ -18,6 +18,13 @@ import { toast } from "sonner";
 import jsPDF from "jspdf";
 import UTIF from "utif";
 import CytoscapeComponent from "react-cytoscapejs";
+import "@/lib/cytoscapeSetup";
+import { GOPanel as NewGOPanel } from "@/components/network/GOPanel";
+import { KEGGPanel as NewKEGGPanel } from "@/components/network/KEGGPanel";
+import { PCTDPPanel } from "@/components/network/PCTDPPanel";
+import { TableToolbar } from "@/components/network/TableToolbar";
+import { FigureToolbar } from "@/components/network/FigureToolbar";
+import { CyToolbar } from "@/components/network/CyToolbar";
 import {
   ArrowLeft,
   ArrowRight,
@@ -42,6 +49,7 @@ const SUBSECTIONS = [
   { id: "hubs", label: "Hub Gene Analysis", icon: Waypoints },
   { id: "go", label: "GO Enrichment", icon: Layers },
   { id: "kegg", label: "KEGG Pathway Enrichment", icon: Activity },
+  { id: "pctdp", label: "PCTDP Integrative Network", icon: Sparkles },
 ];
 
 export default function NetworkAnalysis() {
@@ -59,6 +67,8 @@ export default function NetworkAnalysis() {
   const [intersectDone, setIntersectDone] = useState(false);
   const [ppiResult, setPpiResult] = useState(null); // {nodes, edges}
   const [keggResult, setKeggResult] = useState(null);
+  const [selectedKeggPathways, setSelectedKeggPathwaysLocal] = useState([]);
+  const { setSelectedKeggPathways } = useNetwork();
 
   const hasInputs = compoundTargets.length > 0 && diseaseTargets.length > 0;
 
@@ -227,7 +237,7 @@ export default function NetworkAnalysis() {
               />
             )}
             {active === "go" && (
-              <GOPanel
+              <NewGOPanel
                 genes={
                   ppiResult?.nodes?.map((n) => n.id) ||
                   Object.keys(intersectSel).filter((g) => intersectSel[g])
@@ -239,14 +249,26 @@ export default function NetworkAnalysis() {
               />
             )}
             {active === "kegg" && (
-              <KeggPanel
+              <NewKEGGPanel
                 genes={
                   ppiResult?.nodes?.map((n) => n.id) ||
                   Object.keys(intersectSel).filter((g) => intersectSel[g])
                 }
-                keggResult={keggResult}
-                setKeggResult={setKeggResult}
-                onComplete={() => setCompleted((c) => ({ ...c, kegg: true }))}
+                onPathwaysUpdate={(pathways) => {
+                  setSelectedKeggPathwaysLocal(pathways);
+                  setSelectedKeggPathways(pathways);
+                }}
+                onComplete={() => {
+                  setCompleted((c) => ({ ...c, kegg: true }));
+                  setActive("pctdp");
+                }}
+              />
+            )}
+            {active === "pctdp" && (
+              <PCTDPPanel
+                intersectingGenes={Object.keys(intersectSel).filter((g) => intersectSel[g])}
+                selectedKeggPathways={selectedKeggPathways}
+                onComplete={() => setCompleted((c) => ({ ...c, pctdp: true }))}
               />
             )}
           </div>
@@ -540,17 +562,20 @@ function IntersectionPanel({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <DlBtn
-              onClick={() => doExport(exportCSV, "intersection_targets.csv")}
-              testid="intersection-export-csv"
-              label="CSV"
-              icon={<Download className="h-3.5 w-3.5" />}
-            />
-            <DlBtn
-              onClick={() => doExport(exportXLSX, "intersection_targets.xlsx")}
-              testid="intersection-export-xlsx"
-              label="Excel"
-              icon={<Download className="h-3.5 w-3.5" />}
+            <TableToolbar
+              rows={sortedRows}
+              columns={[
+                { key: "gene_symbol", label: "Gene" },
+                { key: "protein_name", label: "Protein" },
+                { key: "uniprot_id", label: "UniProt" },
+                { key: "supporting_compounds", label: "Supporting Compounds" },
+                { key: "n_compounds", label: "N Compounds" },
+                { key: "best_pchembl", label: "Best pChEMBL" },
+                { key: "association_score", label: "Assoc. Score" },
+                { key: "supporting_databases", label: "Databases" },
+              ]}
+              basename="intersection_targets"
+              testidPrefix="intersection-tbl"
             />
           </div>
         </div>
@@ -780,6 +805,9 @@ function PPIPanel({ genes, ppiResult, setPpiResult, onComplete }) {
   const [addNodes, setAddNodes] = useState(0);
   const [removeIsolated, setRemoveIsolated] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [ppiLayout, setPpiLayout] = useState("fcose");
+  const ppiCardRef = useRef(null);
+  const ppiCyRef = useRef(null);
 
   const runPPI = async () => {
     if (!genes || genes.length === 0)
@@ -969,6 +997,7 @@ function PPIPanel({ genes, ppiResult, setPpiResult, onComplete }) {
       {filteredResult && (
         <>
           <div
+            ref={ppiCardRef}
             data-testid="ppi-network"
             className="rounded-3xl border border-[#E7E7F3] bg-white p-4"
           >
@@ -978,44 +1007,39 @@ function PPIPanel({ genes, ppiResult, setPpiResult, onComplete }) {
                 {filteredResult.edges.length} edges
               </p>
               <div data-testid="ppi-exports" className="flex flex-wrap items-center gap-2">
-                <DlBtn
-                  onClick={exportEdges}
-                  testid="ppi-export-csv"
-                  label="CSV"
-                  icon={<Download className="h-3.5 w-3.5" />}
+                <TableToolbar
+                  rows={filteredResult.edges.map((e) => ({
+                    source: e.source, target: e.target, score: e.score, ...(e.channels || {}),
+                  }))}
+                  columns={[
+                    { key: "source", label: "Source" },
+                    { key: "target", label: "Target" },
+                    { key: "score", label: "Score" },
+                  ]}
+                  basename="ppi_edges"
+                  testidPrefix="ppi-tbl"
                 />
-                <DlBtn
-                  onClick={() => exportGraph("json")}
-                  testid="ppi-export-json"
-                  label="Cytoscape JSON"
-                  icon={<Download className="h-3.5 w-3.5" />}
-                />
-                <DlBtn
-                  onClick={() => exportGraph("graphml")}
-                  testid="ppi-export-graphml"
-                  label="GraphML"
-                  icon={<Download className="h-3.5 w-3.5" />}
-                />
-                <DlBtn
-                  onClick={() => exportGraph("gml")}
-                  testid="ppi-export-gml"
-                  label="GML"
-                  icon={<Download className="h-3.5 w-3.5" />}
-                />
-                <DlBtn
-                  onClick={() => exportGraph("xgmml")}
-                  testid="ppi-export-xgmml"
-                  label="XGMML"
-                  icon={<Download className="h-3.5 w-3.5" />}
+                <CyToolbar
+                  getCy={() => ppiCyRef.current}
+                  containerRef={ppiCardRef}
+                  basename="ppi_network"
+                  graph={filteredResult}
+                  title={`PPI Network · ${filteredResult.nodes.length} nodes`}
+                  layout={ppiLayout}
+                  onLayoutChange={setPpiLayout}
+                  onResetLayout={() => { const cy = ppiCyRef.current; if (cy) cy.layout({ name: ppiLayout, animate: false, fit: true, padding: 30 }).run(); }}
+                  testidPrefix="ppi"
                 />
               </div>
             </div>
             <CytoscapeComponent
+              key={`ppi-${elements.length}`}
               elements={elements}
               style={{ width: "100%", height: "520px" }}
-              layout={{ name: "cose", animate: false }}
+              layout={{ name: ppiLayout, animate: false, fit: true, padding: 30 }}
               stylesheet={stylesheet}
               cy={(cy) => {
+                ppiCyRef.current = cy;
                 cy.userZoomingEnabled(true);
                 cy.userPanningEnabled(true);
               }}
@@ -1166,7 +1190,17 @@ function HubPanel({ ppiResult, onComplete }) {
           Computing 10 centrality algorithms…
         </div>
       ) : (
+        <>
         <div data-testid="hub-table-card" className="overflow-hidden rounded-2xl border border-[#F1F1FA] bg-white">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#F1F1FA] bg-[#FAFAFF] px-3 py-2">
+            <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">Hub Gene Ranking</p>
+            <TableToolbar
+              rows={sortedRows.map((r, i) => ({ Rank: i + 1, Gene: r.id, ...Object.fromEntries(HUB_METRICS.map((m) => [m.label, r[m.key] ?? 0])) }))}
+              columns={[{ key: "Rank", label: "Rank" }, { key: "Gene", label: "Gene" }, ...HUB_METRICS.map((m) => ({ key: m.label, label: m.label }))]}
+              basename="hub_genes"
+              testidPrefix="hub-tbl"
+            />
+          </div>
           <div className="max-h-[520px] overflow-auto">
             <table className="w-full min-w-[900px] border-collapse text-sm">
               <thead>
@@ -1211,6 +1245,8 @@ function HubPanel({ ppiResult, onComplete }) {
             </table>
           </div>
         </div>
+        <HubSubgraphNetwork ppiResult={ppiResult} scores={scores} metric={metric} topN={topN} />
+        </>
       )}
 
       <div className="flex justify-end">
@@ -1224,6 +1260,80 @@ function HubPanel({ ppiResult, onComplete }) {
           <ArrowRight className="h-4 w-4" />
         </button>
       </div>
+    </div>
+  );
+}
+
+// Hub subgraph network view — induced subgraph of top-N hub genes.
+function HubSubgraphNetwork({ ppiResult, scores, metric, topN }) {
+  const [layout, setLayout] = useState("concentric");
+  const cardRef = useRef(null);
+  const cyRef = useRef(null);
+  const subgraph = useMemo(() => {
+    if (!ppiResult || !scores) return { nodes: [], edges: [] };
+    const ranked = [...scores].sort((a, b) => (b[metric] || 0) - (a[metric] || 0)).slice(0, topN);
+    const idSet = new Set(ranked.map((r) => r.id));
+    const nodes = ppiResult.nodes.filter((n) => idSet.has(n.id))
+      .map((n) => ({ ...n, score: (scores.find((s) => s.id === n.id) || {})[metric] || 0 }));
+    const edges = ppiResult.edges.filter((e) => idSet.has(e.source) && idSet.has(e.target));
+    return { nodes, edges };
+  }, [ppiResult, scores, metric, topN]);
+
+  const elements = useMemo(() => {
+    const els = [];
+    const maxScore = Math.max(1, ...subgraph.nodes.map((n) => n.score || 0));
+    for (const n of subgraph.nodes) {
+      els.push({ group: "nodes", data: { id: n.id, label: n.id, score: n.score, scoreNorm: (n.score || 0) / maxScore } });
+    }
+    for (const e of subgraph.edges) {
+      els.push({ group: "edges", data: { source: e.source, target: e.target, weight: e.score || 0.5 } });
+    }
+    return els;
+  }, [subgraph]);
+
+  useEffect(() => {
+    const cy = cyRef.current; if (!cy) return;
+    try { cy.layout({ name: layout, animate: false, fit: true, padding: 30, concentric: (n) => n.data("scoreNorm") || 0.1, levelWidth: () => 2, minNodeSpacing: 30 }).run(); } catch (e) {}
+  }, [layout, elements]);
+
+  const stylesheet = useMemo(() => [
+    { selector: "node", style: {
+      "background-color": "mapData(scoreNorm, 0, 1, #B2AFE8, #5139ED)",
+      "label": "data(label)", "font-size": 10, "color": "#0B0B18", "text-valign": "center", "text-halign": "center",
+      "width": "mapData(scoreNorm, 0, 1, 30, 70)",
+      "height": "mapData(scoreNorm, 0, 1, 30, 70)",
+      "border-width": 1, "border-color": "#FFFFFF", "shape": "ellipse",
+    }},
+    { selector: "edge", style: { "width": "mapData(weight, 0, 1, 0.5, 3)", "line-color": "#B2AFE8", "curve-style": "bezier", "opacity": 0.6 } },
+  ], []);
+
+  if (subgraph.nodes.length === 0) return null;
+  return (
+    <div ref={cardRef} data-testid="hub-subgraph-card" className="rounded-3xl border border-[#E7E7F3] bg-white p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-2 pb-2">
+        <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">
+          Hub Subgraph · Top {subgraph.nodes.length} by {metric} · {subgraph.edges.length} edges
+        </p>
+        <CyToolbar
+          getCy={() => cyRef.current}
+          containerRef={cardRef}
+          basename="hub_network"
+          graph={subgraph}
+          title={`Hub Subgraph · Top ${subgraph.nodes.length} by ${metric}`}
+          layout={layout}
+          onLayoutChange={setLayout}
+          onResetLayout={() => { const cy = cyRef.current; if (cy) cy.layout({ name: layout, animate: false, fit: true, padding: 30 }).run(); }}
+          testidPrefix="hub-net"
+        />
+      </div>
+      <CytoscapeComponent
+        key={`hub-${elements.length}`}
+        elements={elements}
+        style={{ width: "100%", height: "500px" }}
+        layout={{ name: layout, animate: false, fit: true, padding: 30 }}
+        stylesheet={stylesheet}
+        cy={(cy) => { cyRef.current = cy; cy.userZoomingEnabled(true); cy.userPanningEnabled(true); }}
+      />
     </div>
   );
 }

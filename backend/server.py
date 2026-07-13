@@ -1334,6 +1334,7 @@ class GoRequest(BaseModel):
     organism: str = "hsapiens"
     sources: Optional[List[str]] = None
     user_threshold: float = 0.05
+    significance_method: str = "g_SCS"
 
 
 @api_router.post("/go/enrich")
@@ -1343,6 +1344,7 @@ async def go_enrich(payload: GoRequest):
         organism=payload.organism,
         sources=payload.sources,
         user_threshold=payload.user_threshold,
+        significance_method=payload.significance_method,
     )
 
 
