@@ -1,0 +1,31 @@
+{
+  "summary": "Iteration 13 — ADMET & Drug-Likeness page reorganization into THREE independent sections (ADME / Toxicity / Drug-Likeness) fully verified. Full end-to-end flow executed: /phytonet-ai → 'Withania somnifera' search → selected 4 compounds → Proceed → ADMET predictions completed → all reorganization behaviours tested → CSV + XLSX exports downloaded. 37/37 assertions passed. No console errors.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "DrugLikeness.jsx is 1462 lines — approaching the 700-line guideline threshold. Consider extracting FilterCard/FilterControl, ResultsTable/RowRender, and Score/Breakdown into their own modules under /components/druglikeness/* for maintainability. Not a functional defect.",
+    "activeColumnsFor() in admetParams.js correctly falls back to ALL params when no filter in a section is active — verified live: ADME=17, TOX=7, DL=14 param columns (+5 fixed = 22/12/19 header cells respectively).",
+    "DrugLikenessFilterCard renders the shared bioavailability control only in the ADME → Absorption group (not in the DL numeric grid) — correct de-duplication of the filter control. However the DL Results table STILL includes bioavailability_dl as a column (via DL_NUMERIC spread) — this yields 14 DL param columns instead of 13. Behaviour is consistent with the shared-control model but may surprise users who expect DL Results to mirror the DL filter card. Consider filtering out kind==='shared_bioavailability' from the DL Results params list too, or documenting the intent.",
+    "isFilterActive returns false for kind==='shared_bioavailability' when bioavailability==='any' — good — so the shared column only appears in DL Results when the user actually activates the bioavailability filter. No bug.",
+    "help-<param-id> tooltips render on hover with full descriptive text (verified for help-hia). shadcn Tooltip via TooltipProvider(delayDuration=150) is responsive.",
+    "CYP metabolism dropdowns render exactly as specified — CYP2C9 / CYP2D6 / CYP3A4 have 5 options (Any / Inhibitor / Non-inhibitor / Substrate / Non-substrate); CYP1A2 / CYP2C19 have 3 (Any / Inhibitor / Non-inhibitor). Aligns with ADMET-AI FIELD_MAP substrate availability.",
+    "Row expand button (adme-results-row-expand-<key>) correctly disables when scoring is off (disabled + opacity-30). Enabling any rule/filter re-enables the chevron and the breakdown row shows Category · Parameter · Observed · Threshold · Pass/Fail · Contribution columns as required.",
+    "Scoring engine behaves correctly with the new filter values: weight-druglikeness=50 flips total→115% and toggles the badge to red 'must equal 100%', scores collapse to '—'; scoring-reset restores 35/35/30 and scores repopulate.",
+    "PRE-EXISTING (unchanged since iteration 10): '<span> cannot be a child of <option>' hydration warning on PlantDatabase.jsx (Emergent visual-editor annotation) — not visible on the DrugLikeness page and not caused by this iteration.",
+    "Compound selection is unified across all three tables — clicking a row checkbox in adme-results also updates the shared finalSel state used by tox-results / dl-results and the sticky proceed bar (2 of 4 compounds selected → Proceed to Target Prediction enabled)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only review)", "frontend": "100% (37/37 assertions)"},
+  "test_credentials": "N/A",
+  "seed_data_creation": "Live IMPPAT/LOTUS 'Withania somnifera' Mongo-cached response reused (25 first-page rows, 4 selected).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The three-section ADMET & Drug-Likeness page (/drug-likeness) is fully verified. Key testids: adme-filters + adme-filters-row-{absorption|distribution|metabolism|excretion}; tox-filters; dl-filters; dl-criteria-card (7 rule rows); adme-results / tox-results / dl-results with {name}-row-count, {name}-select-all, {name}-row-<key>, {name}-row-check-<key>, {name}-row-expand-<key>; help-<param-id> (e.g. help-hia, help-mw); help-col-<param-id> in table headers; filter-<param-id> selects / filter-<param-id>-min|max range inputs; filter-lipinski (rule checkbox); reset-all-filters; scoring-reset; weight-druglikeness / weight-adme / weight-toxicity; admet-weight-total; admet-scoring-status; admet-score-<key>; admet-stars-<key>; admet-breakdown-<key>; admet-export-csv / admet-export-xlsx. Baseline column counts: ADME=22, TOX=12, DL=19 (5 fixed + params). Dynamic-column behaviour is per-section independent: any active filter in a section restricts that section's table to only the active filter columns. CYP2C9/D6/3A4 select_cyp5 = 5 options incl. substrate/non-substrate; CYP1A2/2C19 = 3 options only. First ADMET run may take 20-40s to warm the Chemprop ensemble — watch for 'admet-done' testid.",
+  "rca of the issue": "N/A — no defects found. All 37 checks pass end-to-end. Every requirement in the review request is satisfied: three filter cards present with correct titles/testids, four ADME sub-category rows present, three result tables with row-count testids, dynamic columns behave per-section independently (verified with HIA=high, AMES=negative, Lipinski rule combinations), reset-all-filters restores baseline, help-* tooltips render on hover with full descriptive text, dl-criteria-card renders between dl-filters and dl-results with 7 rows, scoring engine + weight validation + expandable breakdown work, CSV/XLSX exports (admet_scored.csv / admet_scored.xlsx) download successfully, and CYP dropdown option counts match the underlying ADMET-AI substrate availability. No console errors during the entire session."
+}

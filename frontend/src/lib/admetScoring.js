@@ -31,7 +31,6 @@ const prob = (v, cutoff = 0.5) => {
   return n == null ? null : n >= cutoff;
 };
 
-// Build a threshold description string for a range filter.
 const rangeStr = (min, max, unit = "") => {
   const lo = min !== "" && min != null ? Number(min) : null;
   const hi = max !== "" && max != null ? Number(max) : null;
@@ -49,190 +48,229 @@ const inRange = (v, min, max) => {
   return true;
 };
 
+// Convenience wrapper for prob-select filters.
+const probParam = (id, label, threshold, field, want) => ({
+  id,
+  label,
+  threshold,
+  getValue: (r) => r.admet?.[field],
+  evaluate: (r) => {
+    const p = prob(r.admet?.[field]);
+    return p == null ? null : want ? p : !p;
+  },
+});
+
+const rangeParam = (id, label, path, min, max, unit = "") => ({
+  id,
+  label,
+  threshold: rangeStr(min, max, unit),
+  getValue: (r) => path.reduce((o, k) => (o == null ? undefined : o[k]), r),
+  evaluate: (r) => {
+    const v = path.reduce((o, k) => (o == null ? undefined : o[k]), r);
+    return inRange(v, min, max);
+  },
+});
+
 // Build the list of "selected parameters" per category from the current
-// filter state. Each entry describes how to evaluate pass/fail on a row.
+// filter state.
 export function selectedParameters(filters) {
   const dl = [];
   const adme = [];
   const tox = [];
 
-  // ---- Drug-Likeness ----
-  const rules = [
-    ["lipinski", "Lipinski", "Pass"],
-    ["veber", "Veber", "Pass"],
-    ["ghose", "Ghose", "Pass"],
-    ["egan", "Egan", "Pass"],
-    ["muegge", "Muegge", "Pass"],
+  // ---- Drug-Likeness rules ----
+  const ruleDefs = [
+    ["lipinski", "Lipinski", "lipinski_pass"],
+    ["veber", "Veber", "veber_pass"],
+    ["ghose", "Ghose", "ghose_pass"],
+    ["egan", "Egan", "egan_pass"],
+    ["muegge", "Muegge", "muegge_pass"],
   ];
-  for (const [k, label, thr] of rules) {
+  for (const [k, label, field] of ruleDefs) {
     if (filters[k]) {
       dl.push({
         id: k,
         label,
-        threshold: thr,
-        getValue: (r) => r.druglikeness?.[`${k}_pass`],
+        threshold: "Pass",
+        getValue: (r) => r.druglikeness?.[field],
         evaluate: (r) => {
-          const v = r.druglikeness?.[`${k}_pass`];
+          const v = r.druglikeness?.[field];
           return v == null ? null : v === true;
         },
       });
     }
   }
+  if (filters.pfizer) {
+    dl.push({
+      id: "pfizer",
+      label: "Pfizer 3/75",
+      threshold: "Not (LogP>3 & TPSA<75)",
+      getValue: (r) =>
+        r.physchem?.logp != null && r.physchem?.tpsa != null
+          ? `LogP=${r.physchem.logp.toFixed(2)}, TPSA=${r.physchem.tpsa.toFixed(1)}`
+          : null,
+      evaluate: (r) => {
+        const l = r.physchem?.logp,
+          t = r.physchem?.tpsa;
+        if (l == null || t == null) return null;
+        return !(l > 3 && t < 75);
+      },
+    });
+  }
+  if (filters.gsk) {
+    dl.push({
+      id: "gsk",
+      label: "GSK 4/400",
+      threshold: "LogP≤4 & MW≤400",
+      getValue: (r) =>
+        r.physchem?.logp != null && r.physchem?.mw != null
+          ? `LogP=${r.physchem.logp.toFixed(2)}, MW=${r.physchem.mw.toFixed(1)}`
+          : null,
+      evaluate: (r) => {
+        const l = r.physchem?.logp,
+          m = r.physchem?.mw;
+        if (l == null || m == null) return null;
+        return l <= 4 && m <= 400;
+      },
+    });
+  }
+  // DL numeric ranges
+  const dlRanges = [
+    ["mw", "Molecular weight", ["physchem", "mw"], "mwMin", "mwMax", "Da"],
+    ["logp", "LogP", ["physchem", "logp"], "logpMin", "logpMax", ""],
+    ["tpsa", "TPSA", ["physchem", "tpsa"], "tpsaMin", "tpsaMax", "Å²"],
+    ["hba", "HBA", ["physchem", "hba"], "hbaMin", "hbaMax", ""],
+    ["hbd", "HBD", ["physchem", "hbd"], "hbdMin", "hbdMax", ""],
+    ["rotb", "Rotatable Bonds", ["druglikeness", "rotatable_bonds"], "rotbMin", "rotbMax", ""],
+  ];
+  for (const [id, label, path, minK, maxK, unit] of dlRanges) {
+    if (filters[minK] !== "" || filters[maxK] !== "") {
+      dl.push(rangeParam(id, label, path, filters[minK], filters[maxK], unit));
+    }
+  }
+  // Bioavailability score (shared, but treated in DL — matches user spec's
+  // Drug-Likeness numeric list. If also set, it counts once here.)
   if (filters.bioavailability !== "any") {
-    const want = filters.bioavailability; // 'high' | 'low'
+    const want = filters.bioavailability === "high";
     dl.push({
       id: "bioavailability_score",
       label: "Bioavailability score",
-      threshold: want === "high" ? "≥ 0.55" : "< 0.55",
+      threshold: want ? "≥ 0.55" : "< 0.55",
       getValue: (r) => r.admet?.bioavailability,
       evaluate: (r) => {
         const n = num(r.admet?.bioavailability);
         if (n == null) return null;
-        return want === "high" ? n >= 0.55 : n < 0.55;
+        return want ? n >= 0.55 : n < 0.55;
       },
-    });
-  }
-  if (filters.logpMin !== "" || filters.logpMax !== "") {
-    dl.push({
-      id: "logp",
-      label: "LogP",
-      threshold: rangeStr(filters.logpMin, filters.logpMax),
-      getValue: (r) => r.physchem?.logp,
-      evaluate: (r) => inRange(r.physchem?.logp, filters.logpMin, filters.logpMax),
-    });
-  }
-  if (filters.mwMin !== "" || filters.mwMax !== "") {
-    dl.push({
-      id: "mw",
-      label: "Molecular weight",
-      threshold: rangeStr(filters.mwMin, filters.mwMax, "Da"),
-      getValue: (r) => r.physchem?.mw,
-      evaluate: (r) => inRange(r.physchem?.mw, filters.mwMin, filters.mwMax),
-    });
-  }
-  if (filters.tpsaMin !== "" || filters.tpsaMax !== "") {
-    dl.push({
-      id: "tpsa",
-      label: "TPSA",
-      threshold: rangeStr(filters.tpsaMin, filters.tpsaMax, "Å²"),
-      getValue: (r) => r.physchem?.tpsa,
-      evaluate: (r) => inRange(r.physchem?.tpsa, filters.tpsaMin, filters.tpsaMax),
     });
   }
 
   // ---- ADME (Absorption + Distribution + Metabolism + Excretion) ----
+  // Absorption
   if (filters.hia !== "any") {
-    const want = filters.hia; // 'high' | 'low'
-    adme.push({
-      id: "hia",
-      label: "HIA (Absorption)",
-      threshold: want === "high" ? "≥ 0.5" : "< 0.5",
-      getValue: (r) => r.admet?.hia,
-      evaluate: (r) => {
-        const p = prob(r.admet?.hia);
-        return p == null ? null : want === "high" ? p : !p;
-      },
-    });
+    const want = filters.hia === "high";
+    adme.push(probParam("hia", "HIA", want ? "≥ 0.5" : "< 0.5", "hia", want));
   }
-  if (filters.pgp !== "any") {
-    const want = filters.pgp; // 'substrate' | 'non-substrate'
-    adme.push({
-      id: "pgp",
-      label: "P-gp inhibitor",
-      threshold: want === "substrate" ? "≥ 0.5" : "< 0.5",
-      getValue: (r) => r.admet?.pgp_inhibitor,
-      evaluate: (r) => {
-        const p = prob(r.admet?.pgp_inhibitor);
-        return p == null ? null : want === "substrate" ? p : !p;
-      },
-    });
+  if (filters.pampa !== "any") {
+    const want = filters.pampa === "high";
+    adme.push(probParam("pampa", "PAMPA", want ? "≥ 0.5" : "< 0.5", "pampa", want));
   }
-  if (filters.bbb !== "any") {
-    const want = filters.bbb; // 'yes' | 'no'
-    adme.push({
-      id: "bbb",
-      label: "BBB permeability",
-      threshold: want === "yes" ? "≥ 0.5" : "< 0.5",
-      getValue: (r) => r.admet?.bbb,
-      evaluate: (r) => {
-        const p = prob(r.admet?.bbb);
-        return p == null ? null : want === "yes" ? p : !p;
-      },
-    });
+  if (filters.pgp_inh !== "any") {
+    const want = filters.pgp_inh === "inhibitor";
+    adme.push(
+      probParam(
+        "pgp_inh",
+        "P-gp inhibitor",
+        want ? "≥ 0.5" : "< 0.5",
+        "pgp_inhibitor",
+        want
+      )
+    );
   }
-  const cyps = [
-    ["cyp1a2", "CYP1A2 inhibitor", "cyp1a2_inhibitor"],
-    ["cyp2c9", "CYP2C9 inhibitor", "cyp2c9_inhibitor"],
-    ["cyp2c19", "CYP2C19 inhibitor", "cyp2c19_inhibitor"],
-    ["cyp2d6", "CYP2D6 inhibitor", "cyp2d6_inhibitor"],
-    ["cyp3a4", "CYP3A4 inhibitor", "cyp3a4_inhibitor"],
+  const admeRangeDefs = [
+    ["caco2", "Caco-2 permeability", ["admet", "caco2"], "caco2Min", "caco2Max", "log(cm/s)"],
+    ["solubility", "Solubility", ["admet", "solubility"], "solubilityMin", "solubilityMax", "log mol/L"],
+    ["ppbr", "Plasma protein binding", ["admet", "ppbr"], "ppbrMin", "ppbrMax", "%"],
+    ["vdss", "Volume of distribution", ["admet", "vdss"], "vdssMin", "vdssMax", "L/kg"],
+    ["clearance_hep", "Clearance (hepatocyte)", ["admet", "clearance_hepatocyte"], "clearanceHepMin", "clearanceHepMax", ""],
+    ["clearance_mic", "Clearance (microsome)", ["admet", "clearance_microsome"], "clearanceMicMin", "clearanceMicMax", ""],
+    ["half_life", "Half-life", ["admet", "half_life"], "halfLifeMin", "halfLifeMax", "h"],
   ];
-  for (const [k, label, field] of cyps) {
-    if (filters[k] !== "any") {
-      const want = filters[k]; // 'yes' | 'no'
-      adme.push({
-        id: k,
-        label,
-        threshold: want === "yes" ? "≥ 0.5" : "< 0.5",
-        getValue: (r) => r.admet?.[field],
-        evaluate: (r) => {
-          const p = prob(r.admet?.[field]);
-          return p == null ? null : want === "yes" ? p : !p;
-        },
-      });
+  for (const [id, label, path, minK, maxK, unit] of admeRangeDefs) {
+    if (filters[minK] !== "" || filters[maxK] !== "") {
+      adme.push(rangeParam(id, label, path, filters[minK], filters[maxK], unit));
     }
   }
-  // Excretion ranges
-  if (filters.halfLifeMin !== "" || filters.halfLifeMax !== "") {
-    adme.push({
-      id: "half_life",
-      label: "Half-life",
-      threshold: rangeStr(filters.halfLifeMin, filters.halfLifeMax, "h"),
-      getValue: (r) => r.admet?.half_life,
-      evaluate: (r) => inRange(r.admet?.half_life, filters.halfLifeMin, filters.halfLifeMax),
-    });
+  // Distribution — BBB
+  if (filters.bbb !== "any") {
+    const want = filters.bbb === "yes";
+    adme.push(probParam("bbb", "BBB permeability", want ? "≥ 0.5" : "< 0.5", "bbb", want));
   }
-  if (filters.clearanceMin !== "" || filters.clearanceMax !== "") {
-    adme.push({
-      id: "clearance_hepatocyte",
-      label: "Clearance (hepatocyte)",
-      threshold: rangeStr(filters.clearanceMin, filters.clearanceMax),
-      getValue: (r) => r.admet?.clearance_hepatocyte,
-      evaluate: (r) =>
-        inRange(r.admet?.clearance_hepatocyte, filters.clearanceMin, filters.clearanceMax),
-    });
+  // Metabolism — CYPs (5-way for 2c9/2d6/3a4, 3-way for 1a2/2c19)
+  const cypDefs = [
+    ["cyp1a2", "CYP1A2", "cyp1a2_inhibitor", null],
+    ["cyp2c9", "CYP2C9", "cyp2c9_inhibitor", "cyp2c9_substrate"],
+    ["cyp2c19", "CYP2C19", "cyp2c19_inhibitor", null],
+    ["cyp2d6", "CYP2D6", "cyp2d6_inhibitor", "cyp2d6_substrate"],
+    ["cyp3a4", "CYP3A4", "cyp3a4_inhibitor", "cyp3a4_substrate"],
+  ];
+  for (const [k, label, inhField, subField] of cypDefs) {
+    const v = filters[k];
+    if (!v || v === "any") continue;
+    if (v === "inhibitor" || v === "non-inhibitor") {
+      const want = v === "inhibitor";
+      adme.push(
+        probParam(k, `${label} — ${v}`, want ? "≥ 0.5" : "< 0.5", inhField, want)
+      );
+    } else if (subField && (v === "substrate" || v === "non-substrate")) {
+      const want = v === "substrate";
+      adme.push(
+        probParam(k, `${label} — ${v}`, want ? "≥ 0.5" : "< 0.5", subField, want)
+      );
+    }
   }
 
-  // ---- Toxicity ---- (all endpoints treated as "prefer safer" when selected)
+  // ---- Toxicity ----
   const toxEndpoints = [
-    ["ames", "Non-AMES", "ames"],
-    ["herg", "Non-hERG", "herg"],
-    ["dili", "Non-DILI", "dili"],
-    ["carcinogenicity", "Non-Carcinogenic", "carcinogenicity"],
-    ["skin", "Non-Skin Sensitizer", "skin_sensitization"],
-    ["clintox", "Non-ClinTox", "clintox"],
+    ["ames", "AMES", "ames"],
+    ["herg", "hERG", "herg"],
+    ["dili", "DILI", "dili"],
+    ["carcinogenicity", "Carcinogenicity", "carcinogenicity"],
+    ["skin", "Skin sensitization", "skin_sensitization"],
+    ["clintox", "ClinTox", "clintox"],
   ];
   for (const [fkey, label, field] of toxEndpoints) {
     const v = filters[fkey];
-    if (v && v !== "any") {
-      const want = v; // 'yes' | 'no'
-      tox.push({
-        id: fkey,
-        label,
-        threshold: want === "no" ? "< 0.5 (non-toxic)" : "≥ 0.5",
-        getValue: (r) => r.admet?.[field],
-        evaluate: (r) => {
-          const p = prob(r.admet?.[field]);
-          return p == null ? null : want === "yes" ? p : !p;
-        },
-      });
-    }
+    if (!v || v === "any") continue;
+    // "positive" = compound IS mutagenic/blocker (want prob >= 0.5)
+    // "negative" = compound is NOT (want prob < 0.5) — preferred
+    const want = v === "positive";
+    tox.push(
+      probParam(
+        fkey,
+        want ? label : `Non-${label}`,
+        want ? "≥ 0.5" : "< 0.5",
+        field,
+        want
+      )
+    );
+  }
+  if (filters.ld50Min !== "" || filters.ld50Max !== "") {
+    tox.push(
+      rangeParam(
+        "ld50",
+        "LD50",
+        ["admet", "ld50"],
+        filters.ld50Min,
+        filters.ld50Max,
+        "-log(mol/kg)"
+      )
+    );
   }
 
   return { druglikeness: dl, adme, toxicity: tox };
 }
 
-// Total selected parameter count across all categories.
 export function totalSelected(selMap) {
   return (
     (selMap.druglikeness?.length || 0) +
@@ -241,14 +279,12 @@ export function totalSelected(selMap) {
   );
 }
 
-// Compute a single compound's Final Score and full transparency breakdown.
 export function scoreCompound(row, selMap, weights) {
   const catKeys = ["druglikeness", "adme", "toxicity"];
-  const catScores = {}; // 0–100 per category (or null if no data / no params)
-  const breakdown = []; // list of {category, parameter, value, threshold, pass, contribution}
+  const catScores = {};
+  const breakdown = [];
   const activeCatWeights = {};
 
-  // First pass: compute per-category pass ratios ignoring unavailable data.
   for (const cat of catKeys) {
     const params = selMap[cat] || [];
     if (params.length === 0) {
@@ -266,7 +302,7 @@ export function scoreCompound(row, selMap, weights) {
           parameter: p.label,
           value,
           threshold: p.threshold,
-          pass: null, // unavailable
+          pass: null,
           contribution: null,
         });
         continue;
@@ -279,13 +315,12 @@ export function scoreCompound(row, selMap, weights) {
         value,
         threshold: p.threshold,
         pass: res,
-        contribution: null, // filled below once category weight is known
+        contribution: null,
       });
     }
     catScores[cat] = evaluated > 0 ? (passed / evaluated) * 100 : null;
   }
 
-  // Renormalize category weights: drop categories with no evaluable params.
   const totalUserWeight = Math.max(
     1,
     (weights.druglikeness || 0) + (weights.adme || 0) + (weights.toxicity || 0)
@@ -297,11 +332,10 @@ export function scoreCompound(row, selMap, weights) {
   for (const cat of catKeys) {
     activeCatWeights[cat] =
       catScores[cat] != null && activeSum > 0
-        ? ((weights[cat] || 0) / activeSum) * 100 // % of active total
+        ? ((weights[cat] || 0) / activeSum) * 100
         : 0;
   }
 
-  // Weighted final.
   let final = 0;
   for (const cat of catKeys) {
     if (catScores[cat] != null) {
@@ -310,15 +344,12 @@ export function scoreCompound(row, selMap, weights) {
   }
   const scoreValid = activeSum > 0;
 
-  // Fill per-parameter contribution: within a category each param contributes
-  // equally to that category's share of the final score.
   for (const b of breakdown) {
     if (b.pass == null) {
       b.contribution = 0;
       continue;
     }
     const catParams = selMap[b.category] || [];
-    // Only "evaluated" params share the category weight.
     const evaluableCount = catParams.filter((p) => p.evaluate(row) != null).length || 1;
     const perParam = activeCatWeights[b.category] / evaluableCount;
     b.contribution = b.pass ? perParam : 0;
