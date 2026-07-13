@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/tooltip";
 import { targetPredict, targetStatus } from "@/lib/api";
 import { exportCSV, exportXLSX } from "@/lib/exporters";
+import { useSortable, SortableTh } from "@/lib/useSortable";
 import { useNetwork } from "@/context/NetworkContext";
 import { useWorkflow } from "@/context/WorkflowContext";
 import { toast } from "sonner";
@@ -671,7 +672,27 @@ function StarRow({ n }) {
 }
 
 function ResultsTable({ rows, selected, toggle, setSelected, rowId, status }) {
-  const allSelected = rows.length > 0 && rows.every((r) => selected[rowId(r)]);
+  const accessors = useMemo(
+    () => ({
+      compound_name: (r) => r.compound_name,
+      gene_symbol: (r) => r.gene_symbol,
+      protein_name: (r) => r.protein_name,
+      uniprot_id: (r) => r.uniprot_id,
+      protein_class: (r) => r.protein_class,
+      prediction_score: (r) => r.prediction_score,
+      confidence: (r) => r.confidence,
+      supporting_databases: (r) => (r.supporting_databases || []).join(","),
+      experimental_evidence: (r) => (r.experimental_evidence ? 1 : 0),
+    }),
+    []
+  );
+  const { sortedRows, sortKey, sortDir, onSort } = useSortable(
+    rows,
+    accessors,
+    { key: "prediction_score", dir: "desc" }
+  );
+  const allSelected =
+    sortedRows.length > 0 && sortedRows.every((r) => selected[rowId(r)]);
   return (
     <div className="mt-6">
       <div className="flex items-center justify-between">
@@ -684,7 +705,7 @@ function ResultsTable({ rows, selected, toggle, setSelected, rowId, status }) {
               data-testid="target-row-count"
               className="font-display text-xl font-bold text-[#0B0B18]"
             >
-              {rows.length}
+              {sortedRows.length}
             </span>
             <span className="text-xs text-[#64748B]">rows shown</span>
           </div>
@@ -706,29 +727,23 @@ function ResultsTable({ rows, selected, toggle, setSelected, rowId, status }) {
                       if (allSelected) setSelected({});
                       else {
                         const m = {};
-                        rows.forEach((r) => (m[rowId(r)] = true));
+                        sortedRows.forEach((r) => (m[rowId(r)] = true));
                         setSelected(m);
                       }
                     }}
-                    disabled={rows.length === 0}
+                    disabled={sortedRows.length === 0}
                     className="h-4 w-4 border-[#5139ED] data-[state=checked]:bg-[#5139ED] data-[state=checked]:text-white"
                   />
                 </Th>
-                {[
-                  "Compound",
-                  "Gene",
-                  "Protein",
-                  "UniProt",
-                  "Class",
-                  "Score",
-                  "Confidence",
-                  "Databases",
-                  "Evidence",
-                ].map((h) => (
-                  <Th key={h} sticky>
-                    {h}
-                  </Th>
-                ))}
+                <SortableTh id="compound_name" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Compound</SortableTh>
+                <SortableTh id="gene_symbol" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Gene</SortableTh>
+                <SortableTh id="protein_name" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Protein</SortableTh>
+                <SortableTh id="uniprot_id" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>UniProt</SortableTh>
+                <SortableTh id="protein_class" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Class</SortableTh>
+                <SortableTh id="prediction_score" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Score</SortableTh>
+                <SortableTh id="confidence" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Confidence</SortableTh>
+                <SortableTh id="supporting_databases" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Databases</SortableTh>
+                <SortableTh id="experimental_evidence" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Evidence</SortableTh>
               </tr>
             </thead>
             <tbody>
@@ -738,14 +753,14 @@ function ResultsTable({ rows, selected, toggle, setSelected, rowId, status }) {
                     Running target prediction…
                   </td>
                 </tr>
-              ) : rows.length === 0 ? (
+              ) : sortedRows.length === 0 ? (
                 <tr>
                   <td colSpan={10} className="px-4 py-10 text-center text-sm text-[#64748B]">
                     No targets match the current filters.
                   </td>
                 </tr>
               ) : (
-                rows.map((r) => {
+                sortedRows.map((r) => {
                   const k = rowId(r);
                   const isSel = !!selected[k];
                   return (

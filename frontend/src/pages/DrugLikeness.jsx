@@ -33,6 +33,7 @@ import {
   isFilterActive,
   readPath,
 } from "@/lib/admetParams";
+import { useSortable, SortableTh } from "@/lib/useSortable";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -1112,13 +1113,32 @@ function ResultsTable({
   const activeCols = activeColumnsFor(params, filters);
   const hasActive = anyFilterActive(params, filters);
 
-  const allInViewSelected =
-    rows.length > 0 && rows.every((r) => finalSel[compoundKey(r)]);
-  const someInViewSelected =
-    rows.some((r) => finalSel[compoundKey(r)]) && !allInViewSelected;
+  // Build column accessors for sortable headers.
+  const accessors = useMemo(() => {
+    const map = {
+      "_rank": (r) => r._rank,
+      "_score": (r) => r._score?.score,
+      "_stars": (r) => (r._score?.score != null ? r._score.score : null),
+      "compound_name": (r) => r.compound_name,
+    };
+    for (const p of activeCols) {
+      map[p.id] =
+        p.kind === "computed"
+          ? (r) => p.computed?.(r)
+          : (r) => readPath(r, p.path);
+    }
+    return map;
+  }, [activeCols]);
 
-  const filteredCount = rows.length;
-  const selectedInView = rows.filter((r) => finalSel[compoundKey(r)]).length;
+  const { sortedRows, sortKey, sortDir, onSort } = useSortable(rows, accessors);
+
+  const allInViewSelected =
+    sortedRows.length > 0 && sortedRows.every((r) => finalSel[compoundKey(r)]);
+  const someInViewSelected =
+    sortedRows.some((r) => finalSel[compoundKey(r)]) && !allInViewSelected;
+
+  const filteredCount = sortedRows.length;
+  const selectedInView = sortedRows.filter((r) => finalSel[compoundKey(r)]).length;
 
   return (
     <div className="mt-6">
@@ -1162,17 +1182,26 @@ function ResultsTable({
                         ? "indeterminate"
                         : false
                     }
-                    onCheckedChange={() => setManyFinal(rows, !allInViewSelected)}
-                    disabled={rows.length === 0}
+                    onCheckedChange={() =>
+                      setManyFinal(sortedRows, !allInViewSelected)
+                    }
+                    disabled={sortedRows.length === 0}
                     className="h-4 w-4 border-[#5139ED] data-[state=checked]:bg-[#5139ED] data-[state=indeterminate]:bg-[#5139ED] data-[state=checked]:text-white data-[state=indeterminate]:text-white"
                   />
                 </Th>
-                <Th sticky>#</Th>
-                <Th sticky>Final Score</Th>
-                <Th sticky>Assessment</Th>
-                <Th sticky>Compound</Th>
+                <SortableTh id="_rank" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>#</SortableTh>
+                <SortableTh id="_score" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Final Score</SortableTh>
+                <SortableTh id="_stars" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Assessment</SortableTh>
+                <SortableTh id="compound_name" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Compound</SortableTh>
                 {activeCols.map((p) => (
-                  <Th key={p.id} sticky>
+                  <SortableTh
+                    key={p.id}
+                    id={p.id}
+                    sortKey={sortKey}
+                    sortDir={sortDir}
+                    onSort={onSort}
+                    sticky
+                  >
                     <span className="inline-flex items-center gap-1">
                       {p.label}
                       <HelpTip
@@ -1180,7 +1209,7 @@ function ResultsTable({
                         testid={`help-col-${p.id}`}
                       />
                     </span>
-                  </Th>
+                  </SortableTh>
                 ))}
               </tr>
             </thead>
@@ -1194,7 +1223,7 @@ function ResultsTable({
                     Running ADMET prediction…
                   </td>
                 </tr>
-              ) : rows.length === 0 ? (
+              ) : sortedRows.length === 0 ? (
                 <tr>
                   <td
                     colSpan={activeCols.length + 5}
@@ -1204,7 +1233,7 @@ function ResultsTable({
                   </td>
                 </tr>
               ) : (
-                rows.map((r) => (
+                sortedRows.map((r) => (
                   <RowRender
                     key={compoundKey(r)}
                     row={r}

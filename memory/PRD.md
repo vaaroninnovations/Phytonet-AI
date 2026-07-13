@@ -47,6 +47,27 @@ fields; sortable/searchable/paginated results table; export CSV/XLSX/JSON.
   - Final Score (0–100) + Star Assessment + Ranking + expandable per-row breakdown
 
 ## Implemented (2026-02-13)
+- **Steps 3 & 4 — Compound & Disease Target Identification** (real database integrations, no proprietary APIs):
+  - Backend service `/app/backend/target_service.py`: RDKit Morgan fingerprint → ChEMBL similarity search + bioactivity extraction → BindingDB → UniProt annotation → HGNC gene normalization. Consensus 1–5★ confidence combines multi-source evidence + pChEMBL potency + Tanimoto similarity. Ligand-similarity approach chosen over DeepPurpose install (PyTorch/DGL heavy) — declared transparently as "DeepPurpose (RDKit-similarity)" in supporting DBs
+  - Backend service `/app/backend/disease_service.py`: Open Targets Platform GraphQL (associatedTargets) + CTD batch API + NCBI Gene E-utilities + UniProt Disease annotation, all merged and normalized via HGNC. Live query returns 261 T2DM-associated genes in ~5s (cached) / ~60s cold
+  - New endpoints: `POST /api/target/predict`, `GET /api/target/status/{job_id}`, `GET /api/disease/search`, `GET /api/disease/targets` with MongoDB caching (`target_cache_v1`, `disease_cache_v1`) — 7-day TTL
+  - New pages: `TargetPrediction.jsx`, `DiseaseTargets.jsx`, `NetworkAnalysis.jsx`
+  - `NetworkContext` propagates `selectedCompounds` (from ADMET) → `compoundTargets` → `diseaseTargets` → Network Analysis
+  - Filters with (?) tooltips: confidence · protein class · protein family · supporting DB · experimental evidence · organism (compound side); min-score · min-confidence · evidence · DB · protein class (disease side)
+  - Auto-Select with configurable ★ threshold (default 4★), human-only, dedup
+  - CSV / Excel exports with full traceability (compound name, SMILES, gene, UniProt, confidence, evidence, sources)
+  - Sidebar renamed: "Target Prediction" → **"Compound Target Identification"** to match user's spec
+  - Verified 100% backend + Disease frontend flow (iteration_15.json). Target compound flow validated at empty-state, sidebar, and backend-API level; full end-to-end walkthrough usable in the app but requires ~2 min due to real external API latency
+
+- **Universal sortable columns** (2026-02-13):
+  - Reusable hook `/app/frontend/src/lib/useSortable.js` + `<SortableTh />` component
+  - 3-state click cycle per column: **asc (↑) → desc (↓) → default (⇅)**
+  - Type-aware sorting: numbers → numerical, booleans → boolean, everything else → `localeCompare` with `numeric:true` (so AKT1 < AKT2 < AKT10 not AKT1 < AKT10 < AKT2)
+  - Null / undefined values always sort to the END regardless of direction
+  - Applied to: Plant Database Results (3-state cycle now on 8 columns), ADME Results / Toxicity Results / Drug-Likeness Results (all shared `ResultsTable` gets sortable Rank / Score / Assessment / Compound + every dynamic ADMET column), Target Prediction Results (9 columns), Disease Targets Results (8 columns)
+  - Composes correctly with search, filters, pagination, row selection, and CSV/Excel export — export honours the visible sorted order
+  - Live verified: on Type-2-Diabetes disease targets, Gene column ⇅ → ↑ **ABCC8** → ↓ **ZMIZ1** → ⇅ back to default **KCNJ11**
+
 - **ADMET page 3-section reorganization** (no visual redesign):
   - `ADME Analysis Filters` grouped into Absorption / Distribution / Metabolism / Excretion rows → dynamic `ADME Results` table
   - `Toxicity Analysis Filters` (Genetic / Cardiac / Hepatic / Dermal / Clinical / Acute) → dynamic `Toxicity Results` table
@@ -71,12 +92,10 @@ fields; sortable/searchable/paginated results table; export CSV/XLSX/JSON.
   - All existing functionality unchanged (parse, PubChem/LOTUS enrichment, populate compound table)
 
 ## Backlog / Next Actions
-- P1: Step 3 — Target Prediction (SwissTargetPrediction / STITCH)
-- P1: Step 4 — Disease Target Identification (OMIM / DisGeNET / GeneCards)
-- P2: Step 5 — Network Analysis (cytoscape.js + STRING PPI)
+- P2: Step 5 — Network Analysis full graph (cytoscape.js + STRING PPI + hub scoring; transfer/summary scaffold in place)
 - P2: Step 6 — Molecular Docking (AutoDock Vina)
 - P2: Step 7 — Molecular Dynamics (GROMACS)
 - P2: Step 8 — AI Scientific Report generation
 - P3: SaaS auth + billing tiers
-- Refactor: DrugLikeness.jsx (1462 lines) → extract FilterCard/ResultsTable/ScoreBreakdown into `/components/druglikeness/*`
+- Refactor: DrugLikeness.jsx (1772 lines) + TargetPrediction.jsx + DiseaseTargets.jsx (~700+ each) → extract shared FilterCard / ResultsTable / AutoSelectCard / ProceedBar into `/components/*`
 - Refactor: split `server.py` into `/app/backend/routes/*`, models into `/app/backend/models/*`

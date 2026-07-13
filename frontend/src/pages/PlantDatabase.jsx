@@ -288,9 +288,14 @@ export default function PlantDatabase({ topRightSlot = null }) {
   };
 
   const onSort = (key) => {
-    if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
-    else {
+    // 3-state cycle: asc → desc → default (null)
+    if (sortKey !== key) {
       setSortKey(key);
+      setSortDir("asc");
+    } else if (sortDir === "asc") {
+      setSortDir("desc");
+    } else {
+      setSortKey(null);
       setSortDir("asc");
     }
   };
@@ -715,20 +720,48 @@ export default function PlantDatabase({ topRightSlot = null }) {
                     <th className="sticky top-0 z-10 w-10 bg-[#FAFAFF] px-3 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-[#64748B]">
                       #
                     </th>
-                    {activeFields.map((f) => (
-                      <th
-                        key={f.key}
-                        onClick={() => f.key !== "structure" && onSort(f.key)}
-                        className="sticky top-0 z-10 cursor-pointer whitespace-nowrap bg-[#FAFAFF] px-4 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-[#64748B] hover:text-[#5139ED]"
-                      >
-                        <span className="inline-flex items-center gap-1">
-                          {f.label}
-                          {f.key !== "structure" && (
-                            <ArrowUpDown className="h-3 w-3 opacity-60" />
-                          )}
-                        </span>
-                      </th>
-                    ))}
+                    {activeFields.map((f) => {
+                      const isSortable = f.key !== "structure";
+                      const isActive = sortKey === f.key;
+                      const arrow = isActive
+                        ? sortDir === "asc"
+                          ? "↑"
+                          : "↓"
+                        : "⇅";
+                      return (
+                        <th
+                          key={f.key}
+                          data-testid={`sortable-${f.key}`}
+                          onClick={() => isSortable && onSort(f.key)}
+                          className={`sticky top-0 z-10 whitespace-nowrap bg-[#FAFAFF] px-4 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-[#64748B] ${
+                            isSortable ? "cursor-pointer hover:text-[#5139ED]" : ""
+                          }`}
+                          aria-sort={
+                            isActive
+                              ? sortDir === "asc"
+                                ? "ascending"
+                                : "descending"
+                              : "none"
+                          }
+                        >
+                          <span className="inline-flex items-center gap-1">
+                            {f.label}
+                            {isSortable && (
+                              <span
+                                data-testid={`sort-arrow-${f.key}`}
+                                className={`inline-block min-w-[10px] text-[10px] leading-none ${
+                                  isActive
+                                    ? "font-bold text-[#5139ED]"
+                                    : "text-[#B4B4CD] opacity-60"
+                                }`}
+                              >
+                                {arrow}
+                              </span>
+                            )}
+                          </span>
+                        </th>
+                      );
+                    })}
                     <th className="sticky top-0 z-10 bg-[#FAFAFF] px-3 py-3" />
                   </tr>
                 </thead>

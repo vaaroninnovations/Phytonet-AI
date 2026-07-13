@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/tooltip";
 import { diseaseSearch, diseaseTargets as apiDiseaseTargets } from "@/lib/api";
 import { exportCSV, exportXLSX } from "@/lib/exporters";
+import { useSortable, SortableTh } from "@/lib/useSortable";
 import { useNetwork } from "@/context/NetworkContext";
 import { useWorkflow } from "@/context/WorkflowContext";
 import { toast } from "sonner";
@@ -147,6 +148,27 @@ export default function DiseaseTargets() {
     return out.sort((a, b) => (b.association_score || 0) - (a.association_score || 0));
   }, [rows, filters, tableQuery]);
 
+  // Sortable column overlay on top of the filtered/search-scoped rows.
+  const sortAccessors = useMemo(
+    () => ({
+      gene_symbol: (r) => r.gene_symbol,
+      protein_name: (r) => r.protein_name,
+      uniprot_id: (r) => r.uniprot_id,
+      ncbi_gene_id: (r) => r.ncbi_gene_id,
+      association_score: (r) => r.association_score,
+      confidence: (r) => r.confidence,
+      evidence_level: (r) => r.evidence_level,
+      sources: (r) => (r.sources || []).join(","),
+    }),
+    []
+  );
+  const {
+    sortedRows: displayed,
+    sortKey,
+    sortDir,
+    onSort,
+  } = useSortable(filtered, sortAccessors);
+
   const selectedCount = Object.keys(selected).length;
 
   const toggle = (r) =>
@@ -173,7 +195,7 @@ export default function DiseaseTargets() {
   };
 
   const doExport = (fn, filename) => {
-    const list = filtered.filter((r) => selected[rowId(r)]);
+    const list = displayed.filter((r) => selected[rowId(r)]);
     if (list.length === 0) return toast.error("Select targets to export");
     const flat = list.map((r) => ({
       Disease: chosen?.name || "",
@@ -194,7 +216,7 @@ export default function DiseaseTargets() {
   };
 
   const onContinue = () => {
-    const list = filtered.filter((r) => selected[rowId(r)]);
+    const list = displayed.filter((r) => selected[rowId(r)]);
     if (list.length === 0) return toast.error("Select at least one disease target");
     setNetworkTargets(list);
     markComplete("disease-target-identification");
@@ -474,7 +496,7 @@ export default function DiseaseTargets() {
                     data-testid="disease-row-count"
                     className="font-display text-xl font-bold text-[#0B0B18]"
                   >
-                    {filtered.length}
+                    {displayed.length}
                   </span>
                   <span className="text-xs text-[#64748B]">
                     rows shown · {selectedCount} selected
@@ -492,46 +514,40 @@ export default function DiseaseTargets() {
                             <Checkbox
                               data-testid="disease-select-all"
                               checked={
-                                filtered.length > 0 &&
-                                filtered.every((r) => selected[rowId(r)])
+                                displayed.length > 0 &&
+                                displayed.every((r) => selected[rowId(r)])
                               }
                               onCheckedChange={() => {
-                                const all = filtered.every((r) => selected[rowId(r)]);
+                                const all = displayed.every((r) => selected[rowId(r)]);
                                 if (all) setSelected({});
                                 else {
                                   const m = {};
-                                  filtered.forEach((r) => (m[rowId(r)] = true));
+                                  displayed.forEach((r) => (m[rowId(r)] = true));
                                   setSelected(m);
                                 }
                               }}
                               className="h-4 w-4 border-[#5139ED] data-[state=checked]:bg-[#5139ED] data-[state=checked]:text-white"
                             />
                           </Th>
-                          {[
-                            "Gene",
-                            "Protein",
-                            "UniProt",
-                            "NCBI Gene",
-                            "Association",
-                            "Confidence",
-                            "Evidence",
-                            "Sources",
-                          ].map((h) => (
-                            <Th key={h} sticky>
-                              {h}
-                            </Th>
-                          ))}
+                          <SortableTh id="gene_symbol" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Gene</SortableTh>
+                          <SortableTh id="protein_name" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Protein</SortableTh>
+                          <SortableTh id="uniprot_id" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>UniProt</SortableTh>
+                          <SortableTh id="ncbi_gene_id" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>NCBI Gene</SortableTh>
+                          <SortableTh id="association_score" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Association</SortableTh>
+                          <SortableTh id="confidence" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Confidence</SortableTh>
+                          <SortableTh id="evidence_level" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Evidence</SortableTh>
+                          <SortableTh id="sources" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Sources</SortableTh>
                         </tr>
                       </thead>
                       <tbody>
-                        {filtered.length === 0 ? (
+                        {displayed.length === 0 ? (
                           <tr>
                             <td colSpan={9} className="px-4 py-10 text-center text-sm text-[#64748B]">
                               No targets match the current filters.
                             </td>
                           </tr>
                         ) : (
-                          filtered.map((r) => {
+                          displayed.map((r) => {
                             const k = rowId(r);
                             const isSel = !!selected[k];
                             return (
