@@ -103,7 +103,25 @@ fields; sortable/searchable/paginated results table; export CSV/XLSX/JSON.
   - LC-MS card gets a compact mode (`compact` prop) with a condensed drop-zone, no "Required columns" chip row, and the new helper copy "Upload experimentally identified LC-MS phytochemical data for downstream analysis."
   - All existing functionality unchanged (parse, PubChem/LOTUS enrichment, populate compound table)
 
-## Implemented (2026-02-13 — Iter 17 · ShinyGO-style rebuild + PCTDP subsection)
+## Implemented (2026-02-13 — Iter 19 · Auth + Priority Matrix + AI Report)
+
+- **Modal-based JWT auth** (bcrypt + PyJWT + HttpOnly cookies + rate-limited login + email verification with dev-mode token in logs). Admin seeded from env (`ADMIN_EMAIL` / `ADMIN_PASSWORD`). `SiteHeader` shows Sign In / Sign Up buttons for guests and a user avatar dropdown (Dashboard / My Projects / Downloads / Profile / Settings / Logout) when logged in. **Guarded downloads**: every `TableToolbar`, `FigureToolbar`, `CyToolbar` action + MD build + Report download passes through `requireAuth()` — a guest click opens the modal and the queued download resumes automatically after login. Sign-Up form covers all requested fields (role dropdown w/ 13 options, research-area 10, purpose-of-use 9 checkboxes, referral 14, plus ORCID + website).
+- **Home hero CTA** renamed **"Plant Database" → "PhytoNet AI"**.
+- **Cross-workflow context**: `NetworkContext` now carries `intersectingGenes`, `hubScores` (real CytoHubba output), `ppiResult`, `goTerms`, `dockingResults`, `mdConfig`. Every module publishes to context; downstream modules consume automatically — no re-uploads.
+- **Docking Priority Matrix**: compound × hub-gene pairs (filtered to compound-target relationships that hit an intersecting hub gene). Weighted priority (ADMET 30 % · Target Confidence 30 % · Hub 25 % · Disease Assoc 15 %) with 5-star recommendation + `dock-priority-auto-select` (≥ 80). Hub score now uses **real CytoHubba MCC + Degree composite** from context (not a fallback).
+- **Docking Summary cards** (6 metrics) + **user-editable MD affinity threshold** (`dock-md-threshold`, default −7 kcal/mol) + button rename **"Proceed to Molecular Dynamics"**.
+- **MD page button** renamed **"Generate AI Research Report"**. MD config now published to context on build.
+- **NEW Module 8 — AI Manuscript Generator** (`/scientific-report`). Aggregates every context field into an IMRAD workflow payload → Claude Sonnet 4.5 (via Emergent LLM key) generates a publication-ready manuscript. Downloads: **Markdown / HTML / PDF (weasyprint w/ reportlab fallback) / DOCX (python-docx)**. Backend routes `POST /api/report/generate` + `GET /api/report/download/{id}?fmt=md|html|pdf|docx`.
+- **PCTDPPanel button** renamed **"Proceed to Molecular Docking →"** (auto-navigates on click).
+- **Backend tests**: 14 new tests all pass (auth 3 + report 2 + network 5 + docking/MD 4). Report generation endpoint fully wired but LLM budget currently exhausted — user must top-up in Profile → Universal Key → Add Balance to actually generate manuscripts.
+
+## Backlog / Next Actions
+- **[BLOCKER for AI report]** Emergent LLM key budget exhausted ($1.55 / $1.16). User action: Profile → Universal Key → Add Balance.
+- P2: Molecular Docking / Dynamics improvements — save projects, resume state, ExecutionEngine abstraction for local / HPC / cloud
+- P3: SaaS billing tier integration (Stripe) — gate deep computation behind paid plans
+- Refactor: delete dead legacy GO/KEGG code (~500 lines) inside `NetworkAnalysis.jsx`
+- Refactor: split `NetworkAnalysis.jsx` and `server.py` into module-level files
+- Real email transport (SendGrid/Resend) so `email_verification` sends real emails instead of only logging the URL
 - **Shared toolbars & utilities** (all in `/app/frontend/src/components/network/` and `/app/frontend/src/lib/`):
   - `TableToolbar` — universal CSV / XLSX / Copy-to-Clipboard for every table
   - `FigureToolbar` — universal SVG / PNG (300 & 600 dpi) / TIFF (300 & 600 dpi) / PDF (vector) + Fullscreen + Reset for every SVG figure. Publication-ready: font-family injected, title bar, viewBox preserved.
