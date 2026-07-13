@@ -68,16 +68,17 @@ fields; sortable/searchable/paginated results table; export CSV/XLSX/JSON.
   - Composes correctly with search, filters, pagination, row selection, and CSV/Excel export — export honours the visible sorted order
   - Live verified: on Type-2-Diabetes disease targets, Gene column ⇅ → ↑ **ABCC8** → ↓ **ZMIZ1** → ⇅ back to default **KCNJ11**
 
-- **Network Analysis — Subsection 1 shipped, 2-5 scaffolded** (2026-02-13):
-  - New page structure: left sub-navigation with 5 gated subsections (Intersection → PPI → Hub Genes → GO → KEGG); active is highlighted, completed shows green ✓, future steps are locked
+- **Network Analysis — Subsections 1, 2, 3, 5 shipped; 4 (GO) scaffolded** (2026-02-13):
+  - New page structure: left sub-navigation with 5 gated subsections; active is highlighted, completed shows green ✓, future steps are locked
   - **Target Intersection Analysis — FULLY IMPLEMENTED**:
     - Auto-computes compound-targets ∩ disease-targets from upstream `NetworkContext`
     - Publication-quality **SVG Venn diagram** (2-set, purple/violet fills, plant/disease labels)
-    - Native downloads: SVG (vector), PNG @ 300 dpi, PNG @ 600 dpi (via canvas serialization — no library required)
-    - Intersecting Targets table: Gene / Protein / UniProt / Supporting Compounds / N Compounds / Association / Evidence — with 3-state sortable columns, checkboxes, select-all, CSV + Excel export
-    - "Next → PPI" gate enables after user confirms selection
-  - **Subsections 2-5 (PPI / Hub / GO / KEGG)** — placeholder cards with clear "Coming next" state; upstream gene counts already carried through; roadmap documented per subsection (STRING REST for PPI, CytoHubba-style algorithms for hubs, g:Profiler for GO, KEGG REST + Enrichr for KEGG)
-  - Data transfer verified end-to-end: Withania → 4 compounds → ADMET → target identification → T2DM disease → Network Analysis auto-populates with real intersection
+    - Native downloads: **SVG · PNG 300/600 dpi · TIFF 300/600 dpi · PDF** (jsPDF + UTIF, all client-side)
+    - Intersecting Targets table with 3-state sortable columns, checkboxes, CSV + Excel export
+  - **PPI Analysis — FULLY IMPLEMENTED**: `POST /api/ppi/network` proxies STRING REST (`https://string-db.org/api/tsv-no-header/network`). Interactive Cytoscape.js graph with force-directed cose layout, zoom/pan/drag/select. Controls for min score (150/400/700/900), network type (functional/physical), first-shell interactors, remove-isolated toggle. CSV export of edge list with per-channel scores. Live test: 5 seeds → 8 edges (AKT1-MAPK1 0.988, TP53-MAPK1 0.998)
+  - **Hub Gene Analysis — 3 of 10 algorithms shipped**: Degree, Betweenness (Brandes O(V·E)), Closeness (Wasserman-Faust) — all client-side in `/app/frontend/src/lib/hubScoring.js`. Metric picker, Top-N configurable, sortable table, CSV export. Remaining 7 algorithms (MCC / MNC / DMNC / EPC / Stress / Radiality / Bottleneck) roadmapped
+  - **GO Enrichment**: placeholder card (g:Profiler REST wiring next)
+  - **KEGG Enrichment — FULLY IMPLEMENTED**: `POST /api/kegg/enrich` proxies Enrichr (KEGG_2021_Human library). Pathway table + bubble plot (−log10 P × pathway, size = gene count). Filters: Top-N + Max adj-P. CSV export. Live test: 8-gene query → 155 enriched pathways (top: Pancreatic cancer p=6.9e-17, 7 overlap genes)
 
 - **ADMET page 3-section reorganization** (no visual redesign):
   - `ADME Analysis Filters` grouped into Absorption / Distribution / Metabolism / Excretion rows → dynamic `ADME Results` table

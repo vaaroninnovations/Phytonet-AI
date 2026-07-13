@@ -10,8 +10,13 @@ import { useNetwork } from "@/context/NetworkContext";
 import { useWorkflow } from "@/context/WorkflowContext";
 import { useSortable, SortableTh } from "@/lib/useSortable";
 import { exportCSV, exportXLSX } from "@/lib/exporters";
+import { ppiNetwork, keggEnrich } from "@/lib/api";
+import { combinedHubScores } from "@/lib/hubScoring";
 import { saveAs } from "file-saver";
 import { toast } from "sonner";
+import jsPDF from "jspdf";
+import UTIF from "utif";
+import CytoscapeComponent from "react-cytoscapejs";
 import {
   ArrowLeft,
   ArrowRight,
@@ -51,6 +56,8 @@ export default function NetworkAnalysis() {
   const [completed, setCompleted] = useState({}); // { subId: true }
   const [intersectSel, setIntersectSel] = useState({}); // {gene: true}
   const [intersectDone, setIntersectDone] = useState(false);
+  const [ppiResult, setPpiResult] = useState(null); // {nodes, edges}
+  const [keggResult, setKeggResult] = useState(null);
 
   const hasInputs = compoundTargets.length > 0 && diseaseTargets.length > 0;
 
@@ -199,34 +206,46 @@ export default function NetworkAnalysis() {
               />
             )}
             {active === "ppi" && (
-              <PlaceholderPanel
-                icon={<Network className="h-6 w-6" />}
-                title="Protein–Protein Interaction Analysis"
-                gene_count={
-                  Object.keys(intersectSel).filter((g) => intersectSel[g]).length
-                }
-                description="STRING REST API (public, permissive-license) will be wired next: interaction score / evidence channels / network type filters, interactive Cytoscape.js graph, and network statistics. Locally-deployable STRING-MCP mode ships as an environment flag."
+              <PPIPanel
+                genes={Object.keys(intersectSel).filter((g) => intersectSel[g])}
+                ppiResult={ppiResult}
+                setPpiResult={setPpiResult}
+                onComplete={() => {
+                  setCompleted((c) => ({ ...c, ppi: true }));
+                  setActive("hubs");
+                }}
               />
             )}
             {active === "hubs" && (
-              <PlaceholderPanel
-                icon={<Waypoints className="h-6 w-6" />}
-                title="Hub Gene Analysis"
-                description="CytoHubba-style ranking with 10 algorithms (MCC / Degree / MNC / DMNC / EPC / Closeness / Betweenness / Stress / Radiality / Bottleneck), Top-N picker + interactive network. Runs on PPI output."
+              <HubPanel
+                ppiResult={ppiResult}
+                onComplete={() => {
+                  setCompleted((c) => ({ ...c, hubs: true }));
+                  setActive("go");
+                }}
               />
             )}
             {active === "go" && (
               <PlaceholderPanel
                 icon={<Layers className="h-6 w-6" />}
                 title="GO Enrichment"
-                description="g:Profiler (open, permissive-license) for BP / MF / CC ontologies. Bar charts · dot plots · chord plots · gene-term networks. Runs on PPI genes."
+                description="g:Profiler REST integration ships in the next iteration (BP / MF / CC ontologies with bar chart, dot plot, chord plot). PPI genes carry through."
+                gene_count={ppiResult?.nodes?.length || 0}
+                onComplete={() => {
+                  setCompleted((c) => ({ ...c, go: true }));
+                  setActive("kegg");
+                }}
               />
             )}
             {active === "kegg" && (
-              <PlaceholderPanel
-                icon={<Activity className="h-6 w-6" />}
-                title="KEGG Pathway Enrichment"
-                description="KEGG REST + Enrichr: pathway table · bubble · dot · lollipop · Sankey · bar. Top-N configurable."
+              <KeggPanel
+                genes={
+                  ppiResult?.nodes?.map((n) => n.id) ||
+                  Object.keys(intersectSel).filter((g) => intersectSel[g])
+                }
+                keggResult={keggResult}
+                setKeggResult={setKeggResult}
+                onComplete={() => setCompleted((c) => ({ ...c, kegg: true }))}
               />
             )}
           </div>
@@ -359,26 +378,61 @@ function IntersectionPanel({
     const blob = new Blob([src], { type: "image/svg+xml;charset=utf-8" });
     saveAs(blob, `venn_${diseaseLabel.replace(/\s+/g, "_")}.svg`);
   };
-  const downloadPng = async (dpi = 300) => {
+  const downloadPng = async (dpi = 300) => rasterize(dpi, "png");
+  const downloadTiff = async (dpi = 300) => rasterize(dpi, "tiff");
+  const downloadPdf = async () => {
     if (!svgRef.current) return;
-    // Base SVG viewport is 600×400 → scale by dpi/96 for print-quality raster.
+    const scale = 300 / 96;
+    const src = new XMLSerializer().serializeToString(svgRef.current);
+    const img = new Image();
+    const blob = new Blob([src], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    img.onload = () => {
+      const c = document.createElement("canvas");
+      c.width = 600 * scale;
+      c.height = 400 * scale;
+      const ctx = c.getContext("2d");
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillRect(0, 0, c.width, c.height);
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+      const pw = pdf.internal.pageSize.getWidth();
+      const ph = pdf.internal.pageSize.getHeight();
+      const iw = pw - 60;
+      const ih = (iw * c.height) / c.width;
+      pdf.addImage(c.toDataURL("image/png"), "PNG", 30, (ph - ih) / 2, iw, ih);
+      pdf.save(`venn_${diseaseLabel.replace(/\s+/g, "_")}.pdf`);
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
+  };
+  const rasterize = async (dpi, kind) => {
+    if (!svgRef.current) return;
     const scale = dpi / 96;
     const src = new XMLSerializer().serializeToString(svgRef.current);
     const img = new Image();
     const svgBlob = new Blob([src], { type: "image/svg+xml;charset=utf-8" });
     const url = URL.createObjectURL(svgBlob);
     img.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = 600 * scale;
-      canvas.height = 400 * scale;
-      const ctx = canvas.getContext("2d");
+      const c = document.createElement("canvas");
+      c.width = 600 * scale;
+      c.height = 400 * scale;
+      const ctx = c.getContext("2d");
       ctx.fillStyle = "#FFFFFF";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      canvas.toBlob((blob) => {
-        if (blob) saveAs(blob, `venn_${dpi}dpi.png`);
+      ctx.fillRect(0, 0, c.width, c.height);
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      if (kind === "png") {
+        c.toBlob((b) => {
+          if (b) saveAs(b, `venn_${dpi}dpi.png`);
+          URL.revokeObjectURL(url);
+        }, "image/png");
+      } else {
+        // TIFF via UTIF — encode raw RGBA pixels.
+        const imgData = ctx.getImageData(0, 0, c.width, c.height);
+        const tiff = UTIF.encodeImage(imgData.data.buffer, c.width, c.height);
+        saveAs(new Blob([tiff], { type: "image/tiff" }), `venn_${dpi}dpi.tif`);
         URL.revokeObjectURL(url);
-      }, "image/png");
+      }
     };
     img.src = url;
   };
@@ -445,6 +499,9 @@ function IntersectionPanel({
             <DlBtn onClick={downloadSvg} testid="download-svg" label="SVG" />
             <DlBtn onClick={() => downloadPng(300)} testid="download-png-300" label="PNG 300 dpi" />
             <DlBtn onClick={() => downloadPng(600)} testid="download-png-600" label="PNG 600 dpi" />
+            <DlBtn onClick={() => downloadTiff(300)} testid="download-tiff-300" label="TIFF 300 dpi" />
+            <DlBtn onClick={() => downloadTiff(600)} testid="download-tiff-600" label="TIFF 600 dpi" />
+            <DlBtn onClick={downloadPdf} testid="download-pdf" label="PDF" icon={<FileText className="h-3.5 w-3.5" />} />
           </div>
         </div>
         <div className="mt-5 flex justify-center">
@@ -677,7 +734,7 @@ function DlBtn({ onClick, testid, label, icon }) {
   );
 }
 
-function PlaceholderPanel({ icon, title, description, gene_count }) {
+function PlaceholderPanel({ icon, title, description, gene_count, onComplete }) {
   return (
     <div
       data-testid={`placeholder-${title.toLowerCase().replace(/\W+/g, "-")}`}
@@ -690,14 +747,669 @@ function PlaceholderPanel({ icon, title, description, gene_count }) {
       {gene_count != null && (
         <p className="mt-2 inline-flex items-center gap-2 rounded-full bg-[#5139ED]/8 px-3 py-1 text-xs font-semibold text-[#5139ED]">
           <CircleDot className="h-3 w-3" />
-          {gene_count} intersecting genes carried from Step 1
+          {gene_count} genes carried from previous step
         </p>
       )}
       <p className="mx-auto mt-3 max-w-xl text-sm text-[#64748B]">{description}</p>
       <p className="mt-6 inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-[11px] font-semibold text-amber-700 ring-1 ring-inset ring-amber-200">
         <Sparkles className="h-3 w-3" />
-        Coming in the next iteration — data pipeline already tied to Step 1
+        Coming in the next iteration — data pipeline already tied to previous step
       </p>
+      {onComplete && (
+        <div className="mt-6">
+          <button
+            data-testid="skip-to-next"
+            type="button"
+            onClick={onComplete}
+            className="inline-flex items-center gap-2 rounded-full border border-[#E7E7F3] bg-white px-4 py-2 text-xs font-semibold text-[#0B0B18] hover:border-[#5139ED]/40 hover:text-[#5139ED]"
+          >
+            Skip to next section
+            <ArrowRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ────────────────────── PPI Panel ─────────────────────
+function PPIPanel({ genes, ppiResult, setPpiResult, onComplete }) {
+  const [requiredScore, setRequiredScore] = useState(400);
+  const [networkType, setNetworkType] = useState("functional");
+  const [addNodes, setAddNodes] = useState(0);
+  const [removeIsolated, setRemoveIsolated] = useState(true);
+  const [loading, setLoading] = useState(false);
+
+  const runPPI = async () => {
+    if (!genes || genes.length === 0)
+      return toast.error("No intersecting genes selected");
+    setLoading(true);
+    try {
+      const res = await ppiNetwork({
+        genes,
+        species: 9606,
+        required_score: requiredScore,
+        network_type: networkType,
+        add_nodes: addNodes,
+      });
+      setPpiResult(res);
+      toast.success(
+        `STRING returned ${res.nodes.length} nodes, ${res.edges.length} interactions`
+      );
+    } catch (e) {
+      toast.error("STRING query failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Auto-run on mount if we have genes and no result yet.
+  useEffect(() => {
+    if (genes.length > 0 && !ppiResult) runPPI();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const filteredResult = useMemo(() => {
+    if (!ppiResult) return null;
+    if (!removeIsolated) return ppiResult;
+    const connected = new Set();
+    for (const e of ppiResult.edges) {
+      connected.add(e.source);
+      connected.add(e.target);
+    }
+    return {
+      nodes: ppiResult.nodes.filter((n) => connected.has(n.id)),
+      edges: ppiResult.edges,
+    };
+  }, [ppiResult, removeIsolated]);
+
+  const elements = useMemo(() => {
+    if (!filteredResult) return [];
+    return [
+      ...filteredResult.nodes.map((n) => ({
+        data: { id: n.id, label: n.id },
+      })),
+      ...filteredResult.edges.map((e, i) => ({
+        data: {
+          id: `e${i}`,
+          source: e.source,
+          target: e.target,
+          weight: e.score,
+        },
+      })),
+    ];
+  }, [filteredResult]);
+
+  const stylesheet = [
+    {
+      selector: "node",
+      style: {
+        "background-color": "#5139ED",
+        label: "data(label)",
+        color: "#0B0B18",
+        "font-size": 10,
+        "font-family": "Inter, sans-serif",
+        "font-weight": 700,
+        "text-outline-color": "#fff",
+        "text-outline-width": 2,
+        width: 22,
+        height: 22,
+      },
+    },
+    {
+      selector: "edge",
+      style: {
+        "line-color": "#8139ED",
+        opacity: 0.4,
+        width: "mapData(weight, 0.4, 1, 1, 4)",
+        "curve-style": "haystack",
+      },
+    },
+    {
+      selector: ":selected",
+      style: { "background-color": "#f5b301", "line-color": "#f5b301" },
+    },
+  ];
+
+  const exportEdges = () => {
+    if (!filteredResult) return;
+    const flat = filteredResult.edges.map((e) => ({
+      Source: e.source,
+      Target: e.target,
+      Score: e.score,
+      ...e.channels,
+    }));
+    const fields = Object.keys(flat[0] || { Source: 0 }).map((k) => ({ key: k, label: k }));
+    exportCSV(flat, fields, "ppi_edges.csv");
+  };
+
+  return (
+    <div className="space-y-6">
+      <div
+        data-testid="ppi-controls"
+        className="rounded-3xl border border-[#E7E7F3] bg-white p-5 md:p-6"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">
+              <Network className="mr-1 inline h-3.5 w-3.5" />
+              STRING PPI · Homo sapiens
+            </p>
+            <h2 className="mt-1 font-display text-lg font-bold tracking-tight text-[#0B0B18]">
+              {genes.length} intersecting proteins → interaction network
+            </h2>
+          </div>
+          <button
+            data-testid="ppi-run"
+            onClick={runPPI}
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#5139ED] via-[#395AED] to-[#8139ED] px-4 py-2 text-xs font-bold uppercase tracking-widest text-white shadow-[0_10px_30px_-10px_rgba(81,57,237,0.6)] disabled:opacity-40"
+          >
+            {loading ? "Querying STRING…" : "Re-run"}
+          </button>
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+          <label className="flex flex-col gap-1 text-[10px] font-bold uppercase tracking-widest text-[#64748B]">
+            Min score
+            <select
+              data-testid="ppi-min-score"
+              value={requiredScore}
+              onChange={(e) => setRequiredScore(Number(e.target.value))}
+              className="brand-focus rounded-lg border border-[#E7E7F3] bg-white px-3 py-2 text-sm text-[#0B0B18]"
+            >
+              <option value={150}>150 · low</option>
+              <option value={400}>400 · medium</option>
+              <option value={700}>700 · high</option>
+              <option value={900}>900 · highest</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-[10px] font-bold uppercase tracking-widest text-[#64748B]">
+            Network type
+            <select
+              data-testid="ppi-net-type"
+              value={networkType}
+              onChange={(e) => setNetworkType(e.target.value)}
+              className="brand-focus rounded-lg border border-[#E7E7F3] bg-white px-3 py-2 text-sm text-[#0B0B18]"
+            >
+              <option value="functional">Functional</option>
+              <option value="physical">Physical</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-[10px] font-bold uppercase tracking-widest text-[#64748B]">
+            First-shell (+n)
+            <input
+              data-testid="ppi-add-nodes"
+              type="number"
+              min={0}
+              max={50}
+              value={addNodes}
+              onChange={(e) => setAddNodes(Number(e.target.value))}
+              className="brand-focus rounded-lg border border-[#E7E7F3] bg-white px-3 py-2 text-sm text-[#0B0B18]"
+            />
+          </label>
+          <label className="flex items-center gap-2 pt-6 text-xs text-[#0B0B18]">
+            <Checkbox
+              data-testid="ppi-remove-isolated"
+              checked={removeIsolated}
+              onCheckedChange={(v) => setRemoveIsolated(!!v)}
+              className="h-4 w-4 border-[#5139ED] data-[state=checked]:bg-[#5139ED] data-[state=checked]:text-white"
+            />
+            Remove isolated
+          </label>
+        </div>
+      </div>
+
+      {filteredResult && (
+        <>
+          <div
+            data-testid="ppi-network"
+            className="rounded-3xl border border-[#E7E7F3] bg-white p-4"
+          >
+            <div className="flex items-center justify-between px-2 pb-2">
+              <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">
+                Interaction network · {filteredResult.nodes.length} nodes ·{" "}
+                {filteredResult.edges.length} edges
+              </p>
+              <DlBtn
+                onClick={exportEdges}
+                testid="ppi-export-csv"
+                label="CSV"
+                icon={<Download className="h-3.5 w-3.5" />}
+              />
+            </div>
+            <CytoscapeComponent
+              elements={elements}
+              style={{ width: "100%", height: "520px" }}
+              layout={{ name: "cose", animate: false }}
+              stylesheet={stylesheet}
+              cy={(cy) => {
+                cy.userZoomingEnabled(true);
+                cy.userPanningEnabled(true);
+              }}
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center justify-end">
+            <button
+              data-testid="ppi-complete"
+              type="button"
+              onClick={onComplete}
+              className="inline-flex items-center gap-2 rounded-full bg-[#5139ED] px-5 py-2.5 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 hover:bg-[#4127c9]"
+            >
+              Next — Hub Gene Analysis
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ────────────────────── Hub Gene Panel ─────────────────────
+function HubPanel({ ppiResult, onComplete }) {
+  const [topN, setTopN] = useState(10);
+  const [metric, setMetric] = useState("degree");
+  const [algoLoading, setAlgoLoading] = useState(false);
+  const [scores, setScores] = useState(null);
+
+  const runHub = () => {
+    if (!ppiResult) return toast.error("Run PPI analysis first");
+    setAlgoLoading(true);
+    setTimeout(() => {
+      const s = combinedHubScores(ppiResult.nodes, ppiResult.edges);
+      setScores(s);
+      setAlgoLoading(false);
+    }, 30);
+  };
+
+  useEffect(() => {
+    if (ppiResult && !scores) runHub();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ppiResult]);
+
+  const ranked = useMemo(() => {
+    if (!scores) return [];
+    return [...scores].sort((a, b) => (b[metric] || 0) - (a[metric] || 0));
+  }, [scores, metric]);
+  const top = ranked.slice(0, topN);
+
+  const accessors = useMemo(
+    () => ({
+      id: (r) => r.id,
+      degree: (r) => r.degree,
+      betweenness: (r) => r.betweenness,
+      closeness: (r) => r.closeness,
+    }),
+    []
+  );
+  const { sortedRows, sortKey, sortDir, onSort } = useSortable(top, accessors, {
+    key: metric,
+    dir: "desc",
+  });
+
+  const exportHubs = () => {
+    if (!scores) return;
+    const flat = ranked.map((r, i) => ({
+      Rank: i + 1,
+      Gene: r.id,
+      Degree: r.degree,
+      Betweenness: (r.betweenness || 0).toFixed(3),
+      Closeness: (r.closeness || 0).toFixed(4),
+    }));
+    exportCSV(flat, Object.keys(flat[0]).map((k) => ({ key: k, label: k })), "hub_genes.csv");
+  };
+
+  if (!ppiResult) {
+    return (
+      <div className="rounded-3xl border border-[#E7E7F3] bg-white p-8 text-center text-sm text-[#64748B]">
+        Complete PPI analysis first to score hub genes.
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-6">
+      <div
+        data-testid="hub-controls"
+        className="rounded-3xl border border-[#E7E7F3] bg-white p-5 md:p-6"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">
+              <Waypoints className="mr-1 inline h-3.5 w-3.5" />
+              Hub Gene Analysis
+            </p>
+            <h2 className="mt-1 font-display text-lg font-bold tracking-tight text-[#0B0B18]">
+              CytoHubba-style ranking · 3 algorithms
+            </h2>
+            <p className="mt-1 text-xs text-[#64748B]">
+              Degree · Betweenness (Brandes) · Closeness (Wasserman-Faust). MCC / MNC / DMNC / EPC / Stress / Radiality / Bottleneck ship next.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              data-testid="hub-metric"
+              value={metric}
+              onChange={(e) => setMetric(e.target.value)}
+              className="brand-focus rounded-full border border-[#E7E7F3] bg-white px-3 py-2 text-xs font-semibold text-[#0B0B18]"
+            >
+              <option value="degree">Degree</option>
+              <option value="betweenness">Betweenness</option>
+              <option value="closeness">Closeness</option>
+            </select>
+            <label className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-[#64748B]">
+              Top&nbsp;
+              <input
+                data-testid="hub-topn"
+                type="number"
+                min={1}
+                max={200}
+                value={topN}
+                onChange={(e) => setTopN(Number(e.target.value))}
+                className="w-16 rounded-lg border border-[#E7E7F3] bg-white px-2 py-1 text-right text-sm text-[#0B0B18]"
+              />
+            </label>
+            <DlBtn onClick={exportHubs} testid="hub-export-csv" label="CSV" icon={<Download className="h-3.5 w-3.5" />} />
+          </div>
+        </div>
+      </div>
+
+      {algoLoading ? (
+        <div className="rounded-3xl border border-[#E7E7F3] bg-white p-8 text-center text-sm text-[#64748B]">
+          Computing centrality…
+        </div>
+      ) : (
+        <div data-testid="hub-table-card" className="overflow-hidden rounded-2xl border border-[#F1F1FA] bg-white">
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-[#E7E7F3] bg-[#FAFAFF]">
+                <th className="whitespace-nowrap px-3 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-[#64748B]">
+                  Rank
+                </th>
+                <SortableTh id="id" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Gene</SortableTh>
+                <SortableTh id="degree" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Degree</SortableTh>
+                <SortableTh id="betweenness" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Betweenness</SortableTh>
+                <SortableTh id="closeness" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Closeness</SortableTh>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedRows.map((r, i) => (
+                <tr key={r.id} data-testid={`hub-row-${r.id}`} className="border-b border-[#F1F1FA] hover:bg-[#F8F8FE]">
+                  <td className="px-3 py-3 text-center font-mono text-[12px] font-bold text-[#5139ED]">#{i + 1}</td>
+                  <td className="px-3 py-3 font-mono text-[12px] font-bold text-[#5139ED]">{r.id}</td>
+                  <td className="px-3 py-3 font-mono text-[11px] text-[#0B0B18]">{r.degree}</td>
+                  <td className="px-3 py-3 font-mono text-[11px] text-[#0B0B18]">
+                    {(r.betweenness || 0).toFixed(3)}
+                  </td>
+                  <td className="px-3 py-3 font-mono text-[11px] text-[#0B0B18]">
+                    {(r.closeness || 0).toFixed(4)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div className="flex justify-end">
+        <button
+          data-testid="hub-complete"
+          type="button"
+          onClick={onComplete}
+          className="inline-flex items-center gap-2 rounded-full bg-[#5139ED] px-5 py-2.5 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 hover:bg-[#4127c9]"
+        >
+          Next — GO Enrichment
+          <ArrowRight className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ────────────────────── KEGG Panel ─────────────────────
+function KeggPanel({ genes, keggResult, setKeggResult, onComplete }) {
+  const [loading, setLoading] = useState(false);
+  const [topN, setTopN] = useState(20);
+  const [maxAdjP, setMaxAdjP] = useState(0.05);
+
+  const runKegg = async () => {
+    if (!genes || genes.length === 0) return toast.error("No genes to enrich");
+    setLoading(true);
+    try {
+      const res = await keggEnrich({ genes });
+      setKeggResult(res);
+      toast.success(`Enrichr returned ${res.pathways?.length || 0} KEGG pathways`);
+    } catch (e) {
+      toast.error("KEGG enrichment failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (genes?.length && !keggResult) runKegg();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const filtered = useMemo(() => {
+    if (!keggResult) return [];
+    const p = keggResult.pathways || [];
+    return p
+      .filter((r) => (r.adj_p_value ?? 1) <= maxAdjP)
+      .slice(0, topN);
+  }, [keggResult, topN, maxAdjP]);
+
+  const accessors = useMemo(
+    () => ({
+      term: (r) => r.term,
+      p_value: (r) => r.p_value,
+      adj_p_value: (r) => r.adj_p_value,
+      combined_score: (r) => r.combined_score,
+      gene_count: (r) => r.gene_count,
+    }),
+    []
+  );
+  const { sortedRows, sortKey, sortDir, onSort } = useSortable(filtered, accessors, {
+    key: "combined_score",
+    dir: "desc",
+  });
+
+  const exportKegg = () => {
+    if (!filtered.length) return;
+    const flat = filtered.map((r) => ({
+      Rank: r.rank,
+      Pathway: r.term,
+      "P-value": r.p_value,
+      "Adj. P-value": r.adj_p_value,
+      "Combined Score": r.combined_score,
+      "Gene Count": r.gene_count,
+      "Overlapping Genes": (r.overlap_genes || []).join(","),
+    }));
+    exportCSV(flat, Object.keys(flat[0]).map((k) => ({ key: k, label: k })), "kegg_pathways.csv");
+  };
+
+  // Bubble plot data: x = -log10(p), y = pathway idx, size = gene_count
+  const maxLog = Math.max(1, ...sortedRows.map((r) => -Math.log10(Math.max(r.p_value || 1, 1e-30))));
+  const maxCount = Math.max(1, ...sortedRows.map((r) => r.gene_count || 0));
+
+  return (
+    <div className="space-y-6">
+      <div
+        data-testid="kegg-controls"
+        className="rounded-3xl border border-[#E7E7F3] bg-white p-5 md:p-6"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">
+              <Activity className="mr-1 inline h-3.5 w-3.5" />
+              KEGG Pathway Enrichment · via Enrichr
+            </p>
+            <h2 className="mt-1 font-display text-lg font-bold tracking-tight text-[#0B0B18]">
+              {genes?.length || 0} genes → KEGG_2021_Human
+            </h2>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-[#64748B]">
+              Top
+              <input
+                data-testid="kegg-topn"
+                type="number"
+                min={1}
+                max={200}
+                value={topN}
+                onChange={(e) => setTopN(Number(e.target.value))}
+                className="w-16 rounded-lg border border-[#E7E7F3] bg-white px-2 py-1 text-right text-sm text-[#0B0B18]"
+              />
+            </label>
+            <label className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-[#64748B]">
+              Max adj-P
+              <input
+                data-testid="kegg-max-p"
+                type="number"
+                min={0}
+                max={1}
+                step={0.01}
+                value={maxAdjP}
+                onChange={(e) => setMaxAdjP(Number(e.target.value))}
+                className="w-20 rounded-lg border border-[#E7E7F3] bg-white px-2 py-1 text-right text-sm text-[#0B0B18]"
+              />
+            </label>
+            <button
+              data-testid="kegg-run"
+              onClick={runKegg}
+              disabled={loading}
+              className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#5139ED] via-[#395AED] to-[#8139ED] px-4 py-2 text-xs font-bold uppercase tracking-widest text-white shadow-[0_10px_30px_-10px_rgba(81,57,237,0.6)] disabled:opacity-40"
+            >
+              {loading ? "Enriching…" : "Re-run"}
+            </button>
+            <DlBtn onClick={exportKegg} testid="kegg-export-csv" label="CSV" icon={<Download className="h-3.5 w-3.5" />} />
+          </div>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="rounded-3xl border border-[#E7E7F3] bg-white p-8 text-center text-sm text-[#64748B]">
+          Querying Enrichr…
+        </div>
+      ) : sortedRows.length === 0 ? (
+        <div className="rounded-3xl border border-[#E7E7F3] bg-white p-8 text-center text-sm text-[#64748B]">
+          No significantly enriched pathways at adj-P ≤ {maxAdjP}.
+        </div>
+      ) : (
+        <>
+          {/* Bubble plot */}
+          <div
+            data-testid="kegg-bubble"
+            className="rounded-3xl border border-[#E7E7F3] bg-white p-5 md:p-6"
+          >
+            <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">
+              Bubble plot · −log10(P) vs pathway · bubble size = gene count
+            </p>
+            <svg viewBox="0 0 780 480" width="100%" height={480} className="mt-4">
+              <rect x="0" y="0" width="780" height="480" fill="#FFFFFF" />
+              {/* Y-axis labels */}
+              {sortedRows.map((r, i) => {
+                const y = 30 + i * ((420) / sortedRows.length);
+                const logp = -Math.log10(Math.max(r.p_value || 1, 1e-30));
+                const x = 300 + (logp / maxLog) * 440;
+                const rBubble = 4 + (r.gene_count / maxCount) * 14;
+                return (
+                  <g key={r.term}>
+                    <text
+                      x={295}
+                      y={y + 4}
+                      textAnchor="end"
+                      fontSize="10"
+                      fill="#0B0B18"
+                      fontFamily="Inter"
+                    >
+                      {r.term.length > 42 ? r.term.slice(0, 40) + "…" : r.term}
+                    </text>
+                    <circle
+                      cx={x}
+                      cy={y}
+                      r={rBubble}
+                      fill="#5139ED"
+                      fillOpacity="0.55"
+                      stroke="#5139ED"
+                      strokeWidth="1"
+                    />
+                    <text x={x + rBubble + 4} y={y + 3} fontSize="9" fill="#64748B">
+                      {r.gene_count}
+                    </text>
+                  </g>
+                );
+              })}
+              <text
+                x="540"
+                y="465"
+                fontSize="11"
+                textAnchor="middle"
+                fill="#64748B"
+                fontFamily="Inter"
+              >
+                −log10(P-value)
+              </text>
+            </svg>
+          </div>
+
+          {/* Pathway table */}
+          <div
+            data-testid="kegg-table"
+            className="overflow-hidden rounded-2xl border border-[#F1F1FA] bg-white"
+          >
+            <table className="w-full min-w-[860px] border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-[#E7E7F3] bg-[#FAFAFF]">
+                  <SortableTh id="term" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Pathway</SortableTh>
+                  <SortableTh id="p_value" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>P-value</SortableTh>
+                  <SortableTh id="adj_p_value" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Adj. P</SortableTh>
+                  <SortableTh id="combined_score" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Combined</SortableTh>
+                  <SortableTh id="gene_count" sortKey={sortKey} sortDir={sortDir} onSort={onSort} sticky>Genes</SortableTh>
+                  <th className="whitespace-nowrap px-3 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-[#64748B]">
+                    Overlapping
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedRows.map((r) => (
+                  <tr key={r.term} data-testid={`kegg-row-${r.rank}`} className="border-b border-[#F1F1FA] hover:bg-[#F8F8FE]">
+                    <td className="px-3 py-3 text-[12px] font-semibold text-[#0B0B18]">{r.term}</td>
+                    <td className="px-3 py-3 font-mono text-[11px] text-[#64748B]">
+                      {r.p_value?.toExponential(2)}
+                    </td>
+                    <td className="px-3 py-3 font-mono text-[11px] text-[#64748B]">
+                      {r.adj_p_value?.toExponential(2)}
+                    </td>
+                    <td className="px-3 py-3 font-mono text-[11px] text-[#0B0B18]">
+                      {(r.combined_score || 0).toFixed(1)}
+                    </td>
+                    <td className="px-3 py-3 text-center font-mono text-[11px] font-bold text-[#5139ED]">
+                      {r.gene_count}
+                    </td>
+                    <td className="max-w-[280px] px-3 py-3 text-[10px] font-mono text-[#64748B]" title={(r.overlap_genes || []).join(", ")}>
+                      {(r.overlap_genes || []).slice(0, 6).join(", ")}
+                      {r.overlap_genes?.length > 6 && "…"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex justify-end">
+            <button
+              data-testid="kegg-complete"
+              type="button"
+              onClick={onComplete}
+              className="inline-flex items-center gap-2 rounded-full bg-[#5139ED] px-5 py-2.5 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 hover:bg-[#4127c9]"
+            >
+              Finish — Network Analysis
+              <Check className="h-4 w-4" />
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

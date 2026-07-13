@@ -63,3 +63,9 @@ export const diseaseSearch = (q) =>
 export const diseaseTargets = (efoId, name) =>
   api.get(`/disease/targets`, { params: { efo_id: efoId, name } }).then((r) => r.data);
 
+export const ppiNetwork = (payload) =>
+  api.post("/ppi/network", payload).then((r) => r.data);
+
+export const keggEnrich = (payload) =>
+  api.post("/kegg/enrich", payload).then((r) => r.data);
+
