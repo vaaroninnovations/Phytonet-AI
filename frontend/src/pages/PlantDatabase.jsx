@@ -73,7 +73,7 @@ const SOURCE_OPTIONS = [
   { id: "IMPPAT+LOTUS", label: "Both databases" },
 ];
 
-export default function PlantDatabase() {
+export default function PlantDatabase({ topRightSlot = null }) {
   const navigate = useNavigate();
   const {
     isSelected,
@@ -337,9 +337,19 @@ export default function PlantDatabase() {
           </p>
         </div>
 
-        {/* Search panel */}
-        <div className="mt-10 rounded-3xl border border-[#E7E7F3] bg-white p-5 shadow-[0_20px_60px_-40px_rgba(81,57,237,0.35)] md:p-7">
-          <Tabs value={mode} onValueChange={setMode} data-testid="mode-tabs">
+        {/* Top row: 75/25 grid — Search panel + optional LC-MS slot */}
+        <div
+          className={`mt-10 grid grid-cols-1 gap-6 ${
+            topRightSlot ? "md:grid-cols-4" : ""
+          } items-stretch`}
+        >
+          {/* Search panel */}
+          <div
+            className={`rounded-3xl border border-[#E7E7F3] bg-white p-5 shadow-[0_20px_60px_-40px_rgba(81,57,237,0.35)] md:p-7 ${
+              topRightSlot ? "md:col-span-3" : ""
+            } flex h-full flex-col`}
+          >
+            <Tabs value={mode} onValueChange={setMode} data-testid="mode-tabs">
             <TabsList className="mb-6 flex h-auto flex-wrap justify-start gap-1 rounded-full bg-[#F5F5FC] p-1">
               {MODES.map((m) => (
                 <TabsTrigger
@@ -514,6 +524,14 @@ export default function PlantDatabase() {
               })}
             </div>
           </div>
+        </div>
+
+          {/* Right slot — LC-MS upload (25%) */}
+          {topRightSlot && (
+            <div className="md:col-span-1 flex h-full flex-col">
+              {topRightSlot}
+            </div>
+          )}
         </div>
       </section>
 

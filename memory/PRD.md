@@ -57,6 +57,19 @@ fields; sortable/searchable/paginated results table; export CSV/XLSX/JSON.
   - Parameter registry at `/app/frontend/src/lib/admetParams.js` — future ADMET endpoints slot in without UI changes
   - Verified 37/37 by testing agent (iteration_13.json)
 
+- **ADMET module enhancements** (iteration_14, 2026-02-13):
+  - Toxicity filter card converted to a flat horizontal grid layout (no sub-categories)
+  - LD50 (mg/kg) derived column added to Toxicity Results — computed client-side as 10^(-prediction) × MW × 1000; shares LD50 filter key
+  - **Auto Analyse** button in the Scoring Configuration card — one-click applies published medicinal-chemistry criteria (Lipinski/Veber/Ghose/Egan/Muegge/Pfizer/GSK + numeric thresholds; high HIA/PAMPA/bioavailability; CYP non-inhibitor; non-AMES/hERG/DILI/carcinogenicity/skin/clintox; LD50 ≥ ~100 mg/kg-equivalent)
+  - Final Auto Analysis ranked table showing Rank / Compound / Final Score / Drug-Likeness Assessment / Overall ADMET Assessment / ★ Recommendation + "Recommended for Downstream: Yes/No"
+  - Export now includes DL Assessment, Overall ADMET Assessment, Final Recommendation, and Recommended-for-Downstream flag
+
+- **Plant Database top-row layout** (2026-02-13):
+  - Plant Database Search card (75% width, `md:col-span-3`) + Experimental LC-MS Data card (25% width, `md:col-span-1`) sit side-by-side on desktop with matching heights (grid `items-stretch` + inner `h-full flex-col`)
+  - Mobile: stacks vertically (search first, LC-MS second) via `grid-cols-1`
+  - LC-MS card gets a compact mode (`compact` prop) with a condensed drop-zone, no "Required columns" chip row, and the new helper copy "Upload experimentally identified LC-MS phytochemical data for downstream analysis."
+  - All existing functionality unchanged (parse, PubChem/LOTUS enrichment, populate compound table)
+
 ## Backlog / Next Actions
 - P1: Step 3 — Target Prediction (SwissTargetPrediction / STITCH)
 - P1: Step 4 — Disease Target Identification (OMIM / DisGeNET / GeneCards)

@@ -26,8 +26,7 @@ export default function PhytoNetAI() {
 
   return (
     <WorkflowLayout>
-      <PlantDatabase />
-      <LCMSUpload onLoaded={setLcmsFile} />
+      <PlantDatabase topRightSlot={<LCMSUpload compact onLoaded={setLcmsFile} />} />
     </WorkflowLayout>
   );
 }

@@ -270,7 +270,7 @@ export const TOX_PARAMS = [
       "Rodent carcinogenicity probability. Non-carcinogens are required for chronic-use drugs.",
   },
   {
-    id: "skin_sensitization",
+    id: "skin",
     label: "Skin Sens.",
     fullName: "Skin Sensitization",
     category: "Dermal",
