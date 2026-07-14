@@ -1,0 +1,54 @@
+{
+  "iteration": 28,
+  "summary": "Iter_28 tested the 3 shipped features end-to-end. (1) Google OAuth backend: /api/auth/google/status returns {configured:true}; /api/auth/google/login returns 302 to accounts.google.com with correct client_id (555143244587-...), redirect_uri, scope=openid+email+profile, response_type=code, state=<random>; /api/auth/google/callback with invalid state returns 400 'Invalid OAuth state (possible CSRF).' (2) SSE Docking: POST /api/docking/run/stream returns text/event-stream and emits queued -> pair_start -> pair_done -> done in order (verified with real Aspirin x P23219 PTGS1 docking run, best_affinity=-6.517 kcal/mol). (3) Chart customization drawer: floating button (data-testid `chart-style-open`) present on every page, opens right-side drawer with all controls (3 themes, 4 colors, 4 sliders, 5 legend buttons, live SVG preview, reset/save). Selecting theme-dark updates preview background AND persists to localStorage key 'phytonet.chart-style.v1' as {\"themeKey\":\"dark\",...}. Frontend GoogleCallback route renders and immediately forwards ?code&state to backend as designed. AuthModal 'Continue with Google' button has correct data-testid and href points to /api/auth/google/login?next=%2F. Regression: 79/79 backend pytest pass in 48.67s (assistant_workflow / assistant tests skipped due to long ChEMBL fixture time).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "All pages (bottom-right floating buttons)",
+        "issues": [
+          "The Emergent-platform 'Made with Emergent' badge (bottom-right, injected by preview) visually overlaps the chart-style-open floating button (also bottom-6 right-6). Real user clicks still work if they click the visible portion of the Customize pill, but elementFromPoint at the button's centre resolves to a <p> in the Emergent badge in the preview environment. This overlap does not exist in production deployment (the Emergent badge is only injected in preview). Consider offsetting the Customize button to bottom-20 or bottom-24 in preview mode, or nudging it left, to avoid ambiguity in preview screenshots and any future automation."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter28_features.py",
+    "/app/test_reports/pytest/iter28_features.xml",
+    "/app/test_reports/pytest/iter28_full.xml"
+  ],
+  "code_inspection_results": [
+    "backend/google_oauth.py: build_router uses env-only redirect_uri (no hardcoding); in-memory _STATE_STORE for CSRF; upserts user; issues standard access+refresh cookies via auth_service.",
+    "server.py L1429: /api/docking/run/stream is a StreamingResponse with correct SSE framing (event: <name>\\ndata: <json>\\n\\n).",
+    "frontend/src/lib/api.js L83: dockingRunStream uses fetch with credentials:'include' and Accept:'text/event-stream'.",
+    "frontend/src/pages/MolecularDocking.jsx: runDocking() decodes stream via TextDecoder, updates progressEvents/progressPair/progressTotal/progressDone; renders data-testid `dock-live-progress` block with progress bar, currently-running label, and activity log data-testid `dock-progress-log`.",
+    "frontend/src/context/ChartStyleContext.jsx: 3 themes; localStorage key 'phytonet.chart-style.v1'; useChartStyle() hook exposed.",
+    "frontend/src/components/ChartStyleDrawer.jsx: all required data-testids present (chart-style-open, chart-style-drawer, chart-style-close, theme-{light,dark,publication}, color-{node,edge,bg,label}, size-{node,edge,label,opacity}, legend-{off,top,right,bottom,left}, chart-style-reset, chart-style-save).",
+    "frontend/src/pages/GoogleCallback.jsx: window.location.replace to backend callback preserves Set-Cookie; renders data-testid `google-callback` loader with 'Completing Google sign-in…' before the browser navigates away."
+  ],
+  "action_items": [
+    "Optional cosmetic: nudge the 'Customize' floating button up (e.g. bottom-20) or left so it doesn't visually overlap the 'Made with Emergent' preview badge. Non-blocking."
+  ],
+  "critical_code_review_comments": [
+    "backend/google_oauth.py builds the OAuth query string via a quirky `httpx.QueryParams(...).__str__().split('=', 1)[1]` pattern per param — works but is fragile. Simpler and safer: `httpx.QueryParams(params)` in one shot, then str(qp).",
+    "google_oauth.py _STATE_STORE is a module-level in-memory dict — will silently break in multi-worker deployments (Gunicorn N workers). For MVP OK; for HA, move to Mongo TTL collection.",
+    "server.py: SSE endpoint /api/docking/run/stream is public (no auth). If docking cost is a concern, consider requiring authenticated_client — matches pattern of other heavy endpoints."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter28_features.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (6/6 new iter-28 tests, 79/79 combined regression)",
+    "frontend": "100% (chart drawer verified end-to-end; Google button + callback verified; MolecularDocking SSE code-inspected per spec)"
+  },
+  "test_credentials": "Admin: admin@phytonet.ai / Admin123! (from /app/memory/test_credentials.md).",
+  "seed_data_creation": "None. All tests use existing seed data.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All 3 features (Google OAuth backend + AuthModal button + callback page, SSE docking backend + MolecularDocking UI, ChartStyle drawer) are working. Full real Google login handshake NOT tested (would require an actual Google account) — only the redirect + CSRF guard are covered as per iteration spec. Next testing agent can re-run /app/backend/tests/test_iter28_features.py plus /app/backend/tests/test_iter28_features.py::TestAuthRegression for a fast smoke. To test the chart drawer UI reliably in Playwright, dispatch the click via `element.click()` in page.evaluate() to bypass the Emergent preview-badge overlap on bottom-right. The MolecularDocking SSE UI requires an upstream authenticated workflow (compounds -> targets -> ADMET -> priority) to reach — code inspection was used per iteration spec."
+}

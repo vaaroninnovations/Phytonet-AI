@@ -5,7 +5,7 @@ import WorkflowLayout from "@/components/WorkflowLayout";
 import { useNetwork } from "@/context/NetworkContext";
 import { useResults } from "@/context/ResultsContext";
 import { useWorkflow } from "@/context/WorkflowContext";
-import { dockingPDBCandidates, dockingRun, dockingPoseURL } from "@/lib/api";
+import { dockingPDBCandidates, dockingRun, dockingRunStream, dockingPoseURL } from "@/lib/api";
 import { toast } from "sonner";
 import { TableToolbar } from "@/components/network/TableToolbar";
 import { DataTable } from "@/components/network/DataTable";
@@ -212,28 +212,62 @@ export default function MolecularDocking() {
     finally { setCandidateLoading(false); }
   };
 
+  const [progressEvents, setProgressEvents] = useState([]);   // SSE per-pair activity log
+  const [progressPair, setProgressPair] = useState(null);      // currently-running pair
+  const [progressTotal, setProgressTotal] = useState(0);
+  const [progressDone, setProgressDone] = useState(0);
+
   const runDocking = async () => {
     if (selectedComp.length === 0) return toast.error("Select at least 1 compound");
     if (selectedGenes.length === 0) return toast.error("Select at least 1 target");
     setRunning(true); setResult(null);
+    setProgressEvents([]); setProgressPair(null); setProgressTotal(0); setProgressDone(0);
     try {
       const targets = selectedGenes.map((g) => {
         const t = targetOptions.find((x) => x.gene_symbol === g);
-        return {
-          uniprot_id: t?.uniprot_id, gene_symbol: g, pdb_id: pdbSelections[g] || undefined,
-        };
+        return { uniprot_id: t?.uniprot_id, gene_symbol: g, pdb_id: pdbSelections[g] || undefined };
       }).filter((t) => t.uniprot_id);
-      const res = await dockingRun({
-        compounds: selectedComp,
-        targets,
-        exhaustiveness, num_modes: numModes, box_padding: padding,
-      });
+      const body = { compounds: selectedComp, targets, exhaustiveness, num_modes: numModes, box_padding: padding };
+
+      // ── SSE stream: parse events off a ReadableStream, updating UI live ──
+      const resp = await dockingRunStream(body);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = ""; let finalResults = [];
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split("\n\n");
+        buffer = events.pop() || "";
+        for (const ev of events) {
+          const eName = /event:\s*(\w+)/.exec(ev)?.[1];
+          const dJson = /data:\s*(.+)/.exec(ev)?.[1];
+          if (!eName || !dJson) continue;
+          let data; try { data = JSON.parse(dJson); } catch { continue; }
+          if (eName === "queued") setProgressTotal(data.total || 0);
+          else if (eName === "pair_start") {
+            setProgressPair(data);
+            setProgressEvents((p) => [...p, { type: "start", ...data, at: Date.now() }]);
+          } else if (eName === "pair_done") {
+            setProgressDone((d) => d + 1);
+            setProgressEvents((p) => [...p, { type: "done", ...data, at: Date.now() }]);
+          } else if (eName === "error") {
+            setProgressDone((d) => d + 1);
+            setProgressEvents((p) => [...p, { type: "error", ...data, at: Date.now() }]);
+          } else if (eName === "done") {
+            finalResults = data.results || [];
+          }
+        }
+      }
+      const res = { results: finalResults };
       setResult(res);
-      setDockingResults(res);   // publish to context for MD + Report
+      setDockingResults(res);
       markComplete("molecular-docking");
-      toast.success(`Docking complete · ${res.results.length} pairs`);
+      toast.success(`Docking complete · ${finalResults.length} pairs`);
     } catch (e) { toast.error("Docking run failed: " + (e.response?.data?.detail || e.message)); }
-    finally { setRunning(false); }
+    finally { setRunning(false); setProgressPair(null); }
   };
 
   const autoSelectForMD = () => {
@@ -389,6 +423,41 @@ export default function MolecularDocking() {
               </button>
             </div>
           </div>
+          {running && (
+            <div data-testid="dock-live-progress" className="mt-4 rounded-2xl border border-[#5139ED]/30 bg-[#F5F3FE] p-4">
+              <div className="flex items-center justify-between">
+                <p className="font-heading text-[11px] font-bold uppercase tracking-widest text-[#5139ED]">Live docking progress</p>
+                <p className="font-mono text-[11px] text-[#0B0B18]">{progressDone} / {progressTotal || "?"} pairs</p>
+              </div>
+              <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-white">
+                <div className="h-2 rounded-full bg-gradient-to-r from-[#5139ED] via-[#395AED] to-[#8139ED] transition-all"
+                     style={{ width: progressTotal ? `${(progressDone / progressTotal) * 100}%` : "5%" }} />
+              </div>
+              {progressPair && (
+                <p className="mt-2 text-[11px] text-[#0B0B18]">
+                  <Loader2 className="inline h-3 w-3 animate-spin text-[#5139ED]" /> Docking{" "}
+                  <span className="font-bold">{progressPair.compound}</span> × <span className="font-bold">{progressPair.target}</span>
+                </p>
+              )}
+              {progressEvents.length > 0 && (
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-[10px] font-semibold text-[#5139ED]">Activity log ({progressEvents.length})</summary>
+                  <ul data-testid="dock-progress-log" className="mt-2 max-h-40 overflow-y-auto space-y-1 font-mono text-[10px]">
+                    {progressEvents.slice(-40).reverse().map((e, i) => (
+                      <li key={i} className={
+                        e.type === "error" ? "text-red-600" :
+                        e.type === "done"  ? "text-[#2BB673]" : "text-[#64748B]"
+                      }>
+                        [{new Date(e.at).toLocaleTimeString()}] {e.type} · {e.compound} × {e.target}
+                        {e.result?.best_affinity !== undefined && ` · ${e.result.best_affinity.toFixed(2)} kcal/mol`}
+                        {e.error && ` · ${String(e.error).slice(0, 80)}`}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </div>
+          )}
           {Object.keys(pdbCandidates).length > 0 && (
             <div data-testid="dock-pdb-selection" className="mt-4 space-y-2">
               <p className="font-heading text-[10px] font-bold uppercase tracking-widest text-[#64748B]">PDB structure per target (auto-recommended)</p>

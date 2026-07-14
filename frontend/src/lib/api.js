@@ -77,6 +77,19 @@ export const dockingPDBCandidates = (payload) =>
   api.post("/docking/pdb-candidates", payload).then((r) => r.data);
 export const dockingRun = (payload) =>
   api.post("/docking/run", payload, { timeout: 600000 }).then((r) => r.data);
+
+// SSE stream — returns EventSource. Caller wires up `pair_start` / `pair_done`
+// / `error` / `done` listeners.
+export const dockingRunStream = (payload) => {
+  // EventSource requires a GET, but our SSE endpoint is POST. Use fetch+ReadableStream instead.
+  const url = `${BACKEND_URL}/api/docking/run/stream`;
+  return fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Accept": "text/event-stream" },
+    body: JSON.stringify(payload),
+    credentials: "include",
+  });
+};
 export const dockingPoseURL = (job_id, pair_id, fmt = "pdbqt") =>
   `${BACKEND_URL}/api/docking/pose/${encodeURIComponent(job_id)}/${encodeURIComponent(pair_id)}?fmt=${fmt}`;
 

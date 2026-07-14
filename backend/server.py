@@ -28,6 +28,7 @@ import report_service
 import projects_service
 import assistant_service
 import deps_check
+import google_oauth
 
 
 ROOT_DIR = Path(__file__).parent
@@ -1419,6 +1420,61 @@ async def docking_run(payload: DockRunRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@api_router.post("/docking/pose/{job_id}/{pair_id}")
+async def docking_pose_alias(job_id: str, pair_id: str, fmt: str = "pdbqt"):
+    # Legacy alias
+    return await docking_pose(job_id, pair_id, fmt)
+
+
+@api_router.post("/docking/run/stream")
+async def docking_run_stream(payload: DockRunRequest):
+    """SSE per-pair progress stream for docking runs. Emits events:
+    `queued` (start of batch), `pair_start` (per pair), `pair_done` (per pair
+    result), `error` (per pair failure), `done` (final batch payload).
+    """
+    from fastapi.responses import StreamingResponse
+    import json as _json
+
+    missing = deps_check.get_missing_required()
+    blockers = [m for m in missing if m in {"vina", "obabel", "rdkit", "meeko"}]
+    if blockers:
+        raise HTTPException(status_code=503,
+                            detail=f"Docking dependencies missing: {', '.join(blockers)}")
+
+    compounds = [c.model_dump() for c in payload.compounds]
+    targets   = [t.model_dump() for t in payload.targets]
+    pairs     = [(c, t) for c in compounds for t in targets]
+    total     = len(pairs)
+
+    async def event_gen():
+        started = time.time()
+        yield f"event: queued\ndata: {_json.dumps({'total': total})}\n\n"
+        results = []
+        for i, (c, t) in enumerate(pairs):
+            elapsed = time.time() - started
+            payload_start = {
+                "index": i, "total": total,
+                "compound": c.get("name"), "target": t.get("gene_symbol") or t.get("uniprot_id"),
+                "elapsed_s": round(elapsed, 1),
+            }
+            yield f"event: pair_start\ndata: {_json.dumps(payload_start)}\n\n"
+            try:
+                r = await docking_service.run_docking_batch(
+                    compounds=[c], targets=[t],
+                    exhaustiveness=payload.exhaustiveness,
+                    num_modes=payload.num_modes,
+                    box_padding=payload.box_padding,
+                )
+                res = (r.get("results") or [{}])[0]
+                results.append(res)
+                yield f"event: pair_done\ndata: {_json.dumps({**payload_start, 'result': res})}\n\n"
+            except Exception as e:
+                yield f"event: error\ndata: {_json.dumps({**payload_start, 'error': str(e)})}\n\n"
+        yield f"event: done\ndata: {_json.dumps({'results': results, 'n': len(results)})}\n\n"
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
 @api_router.get("/docking/pose/{job_id}/{pair_id}")
 async def docking_pose(job_id: str, pair_id: str, fmt: str = "pdbqt"):
     from fastapi.responses import Response
@@ -1601,6 +1657,12 @@ _assistant_router = assistant_service.build_router(
 api_router_assistant = APIRouter(prefix="/api")
 api_router_assistant.include_router(_assistant_router)
 app.include_router(api_router_assistant)
+
+# Google OAuth router
+_google_router = google_oauth.build_router(db, auth_service=auth_service)
+api_router_google = APIRouter(prefix="/api")
+api_router_google.include_router(_google_router)
+app.include_router(api_router_google)
 
 app.add_middleware(
     CORSMiddleware,

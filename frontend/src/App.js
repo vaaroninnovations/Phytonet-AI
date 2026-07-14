@@ -13,6 +13,7 @@ import AIScientificReport from "@/pages/AIScientificReport";
 import MyProjects from "@/pages/MyProjects";
 import VerifyEmail from "@/pages/VerifyEmail";
 import AIAssistant from "@/pages/AIAssistant";
+import GoogleCallback from "@/pages/GoogleCallback";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import { SelectionProvider } from "@/context/SelectionContext";
@@ -21,8 +22,10 @@ import { WorkflowProvider } from "@/context/WorkflowContext";
 import { NetworkProvider } from "@/context/NetworkContext";
 import { AuthProvider } from "@/context/AuthContext";
 import { ProjectProvider } from "@/context/ProjectContext";
+import { ChartStyleProvider } from "@/context/ChartStyleContext";
 import { AuthModal } from "@/components/AuthModal";
 import ResumeSessionModal from "@/components/ResumeSessionModal";
+import ChartStyleDrawer from "@/components/ChartStyleDrawer";
 import { Toaster } from "sonner";
 
 function App() {
@@ -35,6 +38,7 @@ function App() {
               <WorkflowProvider>
                 <NetworkProvider>
                   <ProjectProvider>
+                    <ChartStyleProvider>
                     <SiteHeader />
                     <Routes>
                       <Route path="/" element={<Home />} />
@@ -57,11 +61,14 @@ function App() {
                       <Route path="/projects" element={<MyProjects />} />
                       <Route path="/verify-email" element={<VerifyEmail />} />
                       <Route path="/ai-assistant" element={<AIAssistant />} />
+                      <Route path="/auth/google/callback" element={<GoogleCallback />} />
                       <Route path="/tool/:slug" element={<ComingSoon />} />
                     </Routes>
                     <SiteFooter />
                     <AuthModal />
                     <ResumeSessionModal />
+                    <ChartStyleDrawer />
+                    </ChartStyleProvider>
                   </ProjectProvider>
                 </NetworkProvider>
               </WorkflowProvider>
