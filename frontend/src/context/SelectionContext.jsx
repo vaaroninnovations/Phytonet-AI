@@ -65,6 +65,12 @@ export function SelectionProvider({ children }) {
 
   const clear = useCallback(() => setSelection({}), []);
 
+  // Snapshot helpers for ProjectContext save/restore.
+  const getAllSelections = useCallback(() => ({ ...selection }), [selection]);
+  const replaceAllSelections = useCallback((snapshot) => {
+    setSelection(snapshot && typeof snapshot === "object" ? { ...snapshot } : {});
+  }, []);
+
   const selectedIds = useMemo(() => Object.keys(selection), [selection]);
   const selectedCompounds = useMemo(() => Object.values(selection), [selection]);
   const count = selectedIds.length;
@@ -79,6 +85,8 @@ export function SelectionProvider({ children }) {
       toggle,
       setMany,
       clear,
+      getAllSelections,
+      replaceAllSelections,
       sourcePlant,
       setSourcePlant,
     }),
@@ -91,6 +99,8 @@ export function SelectionProvider({ children }) {
       toggle,
       setMany,
       clear,
+      getAllSelections,
+      replaceAllSelections,
       sourcePlant,
     ]
   );

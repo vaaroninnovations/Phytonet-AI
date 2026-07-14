@@ -5,12 +5,12 @@ import WorkflowLayout from "@/components/WorkflowLayout";
 import { useNetwork } from "@/context/NetworkContext";
 import { useResults } from "@/context/ResultsContext";
 import { useWorkflow } from "@/context/WorkflowContext";
-import { mdEstimate, mdBuild } from "@/lib/api";
+import { mdEstimate, mdBuild, listMDEngines } from "@/lib/api";
 import { toast } from "sonner";
 import { saveAs } from "file-saver";
 import { HelpTip } from "@/components/network/HelpTip";
 import { requireAuth } from "@/context/AuthContext";
-import { ArrowLeft, ArrowRight, Atom, Download, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Atom, Download, Loader2, Server } from "lucide-react";
 
 const FF_OPTS = [
   { key: "amber99sb-ildn", label: "AMBER99SB-ILDN" },
@@ -72,6 +72,44 @@ export default function MolecularDynamics() {
   const [building, setBuilding] = useState(false);
   const [estimate, setEstimate] = useState(null);
 
+  // ── Execution Engine state ─────────────────────────────────────
+  const [engines, setEngines] = useState([]);
+  const [engineKey, setEngineKey] = useState("local");
+  const [engineOptions, setEngineOptions] = useState({});
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { engines } = await listMDEngines();
+        setEngines(engines || []);
+        // Initialize default options for the active engine
+        const first = (engines || []).find((e) => e.key === "local") || (engines || [])[0];
+        if (first) {
+          setEngineKey(first.key);
+          const opts = {};
+          (first.options || []).forEach((o) => { opts[o.key] = o.default; });
+          setEngineOptions(opts);
+        }
+      } catch (e) {}
+    })();
+  }, []);
+
+  const activeEngine = useMemo(() => engines.find((e) => e.key === engineKey), [engines, engineKey]);
+
+  useEffect(() => {
+    if (!activeEngine) return;
+    const opts = {};
+    (activeEngine.options || []).forEach((o) => { opts[o.key] = o.default; });
+    setEngineOptions(opts);
+  }, [engineKey]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  const updEngineOpt = (k) => (e) => {
+    const raw = e.target.type === "checkbox" ? e.target.checked
+              : e.target.type === "number" ? Number(e.target.value)
+              : e.target.value;
+    setEngineOptions((o) => ({ ...o, [k]: raw }));
+  };
+
   useEffect(() => {
     (async () => {
       try { const est = await mdEstimate(cfg); setEstimate(est); } catch (e) {}
@@ -92,6 +130,8 @@ export default function MolecularDynamics() {
             pdb_id: pdbId || undefined,
           },
           config: cfg,
+          engine: engineKey,
+          engine_options: engineOptions,
         };
         const blob = await mdBuild(payload);
         const filename = `md_${compoundOptions[compIdx].name}_x_${targetOptions[tgtIdx].gene_symbol || ""}.zip`.replace(/[^A-Za-z0-9_.-]/g, "_");
@@ -197,6 +237,74 @@ export default function MolecularDynamics() {
               {building ? "Building project…" : "Generate & Download MD Project"}
             </button>
           </div>
+        </div>
+
+        {/* Execution Engine picker */}
+        <div data-testid="md-engine" className="mt-6 rounded-3xl border border-[#E7E7F3] bg-white p-5">
+          <div className="flex items-center gap-2">
+            <Server className="h-4 w-4 text-[#5139ED]" />
+            <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">Execution Engine</p>
+          </div>
+          <p className="mt-2 text-sm text-[#64748B]">
+            Choose where you plan to run this simulation. The generated project package will include
+            environment-specific scripts (bash / SLURM / cloud spec).
+          </p>
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+            {engines.map((e) => (
+              <button key={e.key} data-testid={`md-engine-${e.key}`} onClick={() => setEngineKey(e.key)}
+                      className={`flex flex-col items-start rounded-2xl border p-4 text-left transition-all ${
+                        engineKey === e.key
+                          ? "border-[#5139ED] bg-[#F5F3FE] shadow-[0_6px_20px_-10px_rgba(81,57,237,0.5)]"
+                          : "border-[#E7E7F3] bg-white hover:border-[#5139ED]/40"
+                      }`}>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-[#64748B]">{e.category}</span>
+                <span className="mt-1 text-sm font-bold text-[#0B0B18]">{e.label}</span>
+                <span className="mt-1 text-[11px] text-[#64748B]">{e.description}</span>
+              </button>
+            ))}
+          </div>
+
+          {activeEngine && activeEngine.options && activeEngine.options.length > 0 && (
+            <div data-testid={`md-engine-options-${engineKey}`} className="mt-5">
+              <p className="font-heading text-[10px] font-bold uppercase tracking-widest text-[#64748B]">
+                {activeEngine.label} — options
+              </p>
+              <div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {activeEngine.options.map((o) => (
+                  <div key={o.key} className="flex flex-col gap-1">
+                    <label className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-[#64748B]">
+                      {o.label}{o.help && <HelpTip text={o.help} />}
+                    </label>
+                    {o.type === "select" ? (
+                      <select data-testid={`md-engine-opt-${o.key}`} value={engineOptions[o.key] ?? o.default}
+                              onChange={updEngineOpt(o.key)}
+                              className="w-full rounded-lg border border-[#E7E7F3] bg-white px-2 py-1.5 text-sm">
+                        {(o.options || []).map((v) => <option key={v} value={v}>{v}</option>)}
+                      </select>
+                    ) : o.type === "bool" ? (
+                      <div className="flex items-center gap-2">
+                        <input data-testid={`md-engine-opt-${o.key}`} type="checkbox"
+                               checked={Boolean(engineOptions[o.key])} onChange={updEngineOpt(o.key)}
+                               className="h-4 w-4 rounded border-[#E7E7F3]" />
+                        <span className="text-xs text-[#0B0B18]">{engineOptions[o.key] ? "Enabled" : "Disabled"}</span>
+                      </div>
+                    ) : o.type === "number" ? (
+                      <input data-testid={`md-engine-opt-${o.key}`} type="number"
+                             min={o.min} max={o.max} step={o.step || 1}
+                             value={engineOptions[o.key] ?? o.default}
+                             onChange={updEngineOpt(o.key)}
+                             className="w-full rounded-lg border border-[#E7E7F3] bg-white px-2 py-1.5 text-sm" />
+                    ) : (
+                      <input data-testid={`md-engine-opt-${o.key}`} type="text"
+                             value={engineOptions[o.key] ?? o.default ?? ""}
+                             onChange={updEngineOpt(o.key)}
+                             className="w-full rounded-lg border border-[#E7E7F3] bg-white px-2 py-1.5 text-sm" />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Contents preview */}

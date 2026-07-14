@@ -23,7 +23,9 @@ import disease_service
 import network_service
 import docking_service
 import md_service
+import execution_engines
 import report_service
+import projects_service
 
 
 ROOT_DIR = Path(__file__).parent
@@ -1448,6 +1450,13 @@ class MDBuildRequest(BaseModel):
     target: MDTarget
     config: MDConfigModel = MDConfigModel()
     receptor_pdb_content: Optional[str] = None    # if omitted, backend downloads from RCSB
+    engine: Optional[str] = None                  # local | hpc_slurm | cloud
+    engine_options: Dict[str, Any] = Field(default_factory=dict)
+
+
+@api_router.get("/md/engines")
+async def md_engines():
+    return {"engines": execution_engines.list_engines()}
 
 
 @api_router.post("/md/estimate")
@@ -1475,6 +1484,8 @@ async def md_build(payload: MDBuildRequest):
         receptor_pdb_content=receptor_content,
         ligand_smiles_or_mol2=payload.compound.smiles,
         cfg=cfg,
+        engine_key=payload.engine,
+        engine_opts=payload.engine_options or {},
     )
     return Response(content=zip_bytes, media_type="application/zip",
                     headers={"Content-Disposition": f"attachment; filename={project}.zip"})
@@ -1543,6 +1554,14 @@ api_router_auth = APIRouter(prefix="/api")
 api_router_auth.include_router(_auth_router)
 app.include_router(api_router_auth)
 
+# Projects router (mounted under /api/projects, protected by auth dependency)
+_projects_router = projects_service.build_router(
+    db, get_current_user=auth_service.make_get_current_user(db)
+)
+api_router_projects = APIRouter(prefix="/api")
+api_router_projects.include_router(_projects_router)
+app.include_router(api_router_projects)
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
@@ -1595,6 +1614,12 @@ async def _startup():
         await auth_service.initialize(db)
     except Exception as e:
         logger.warning(f"Auth init failed (non-fatal): {e}")
+
+    # Initialize projects indexes
+    try:
+        await projects_service.initialize(db)
+    except Exception as e:
+        logger.warning(f"Projects init failed (non-fatal): {e}")
 
 
 @app.on_event("shutdown")

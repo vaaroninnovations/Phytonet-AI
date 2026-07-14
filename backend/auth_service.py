@@ -19,10 +19,16 @@ from typing import List, Optional
 import bcrypt
 import jwt
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
+import email_service
+
 logger = logging.getLogger(__name__)
+
+# Verification tokens expire after 24 hours (production requirement).
+VERIFICATION_TTL = timedelta(hours=24)
+APP_NAME = "PhytoNet AI"
 
 JWT_ALGORITHM = "HS256"
 ACCESS_TTL = timedelta(minutes=60)   # slightly longer since app is analysis-heavy
@@ -139,13 +145,21 @@ def _serialize_user(u: dict) -> dict:
     }
 
 
-def _log_verification_link(base_url: str, token: str, email: str):
+def _dispatch_verification(background: BackgroundTasks, base_url: str, token: str,
+                           email: str, first_name: str = ""):
+    """Log + send verification email (async via BackgroundTasks)."""
     link = f"{base_url}/verify-email?token={token}"
     logger.warning(
         "\n============================================================\n"
-        f"[EMAIL VERIFICATION] Send this link to {email}:\n{link}\n"
+        f"[EMAIL VERIFICATION] Link for {email}:\n{link}\n"
         "============================================================\n"
     )
+    html = email_service.verification_email_html(APP_NAME, link, first_name)
+    subject = f"Verify your {APP_NAME} account"
+    if background is not None:
+        background.add_task(email_service.send_email, email, subject, html)
+    else:
+        email_service.send_email(email, subject, html)
 
 
 async def _record_login_attempt(db, key: str, success: bool):
@@ -227,7 +241,8 @@ def build_router(db, frontend_url: str = ""):
     dep_user = make_get_current_user(db)
 
     @router.post("/register")
-    async def register(payload: RegisterPayload, request: Request, response: Response):
+    async def register(payload: RegisterPayload, request: Request, response: Response,
+                       background: BackgroundTasks):
         email = payload.email
         if await db["users"].find_one({"email": email}):
             raise HTTPException(status_code=409, detail="An account with that email already exists.")
@@ -251,21 +266,22 @@ def build_router(db, frontend_url: str = ""):
         }
         res = await db["users"].insert_one(doc)
         uid = str(res.inserted_id)
-        # Generate verification token
+        # Generate verification token (24h TTL — production requirement)
         vtoken = secrets.token_urlsafe(32)
         await db["email_verification_tokens"].insert_one({
             "token": vtoken, "user_id": uid, "email": email,
-            "expires_at": datetime.now(timezone.utc) + timedelta(days=3),
+            "expires_at": datetime.now(timezone.utc) + VERIFICATION_TTL,
         })
         base = frontend_url or str(request.base_url).rstrip("/")
-        _log_verification_link(base, vtoken, email)
+        _dispatch_verification(background, base, vtoken, email, payload.first_name)
         # Auto-login upon register (verification is required only for downloads)
         access = create_access_token(uid, email)
         refresh = create_refresh_token(uid)
         _set_auth_cookies(response, access, refresh, remember=True)
         doc["_id"] = res.inserted_id
         return {"user": _serialize_user(doc), "verification_required": True,
-                "verification_token_dev": vtoken}
+                "verification_token_dev": vtoken,
+                "email_provider": email_service.get_provider() or "dev-log"}
 
     @router.post("/login")
     async def login(payload: LoginPayload, request: Request, response: Response):
@@ -323,7 +339,8 @@ def build_router(db, frontend_url: str = ""):
         return {"ok": True, "email": rec["email"]}
 
     @router.post("/resend-verification")
-    async def resend_verification(request: Request, user=Depends(dep_user)):
+    async def resend_verification(request: Request, background: BackgroundTasks,
+                                  user=Depends(dep_user)):
         if user.get("email_verified"):
             return {"ok": True, "already_verified": True}
         # Purge previous tokens
@@ -331,10 +348,32 @@ def build_router(db, frontend_url: str = ""):
         vtoken = secrets.token_urlsafe(32)
         await db["email_verification_tokens"].insert_one({
             "token": vtoken, "user_id": str(user["_id"]), "email": user["email"],
-            "expires_at": datetime.now(timezone.utc) + timedelta(days=3),
+            "expires_at": datetime.now(timezone.utc) + VERIFICATION_TTL,
         })
         base = frontend_url or str(request.base_url).rstrip("/")
-        _log_verification_link(base, vtoken, user["email"])
-        return {"ok": True, "verification_token_dev": vtoken}
+        _dispatch_verification(background, base, vtoken, user["email"], user.get("first_name", ""))
+        return {"ok": True, "verification_token_dev": vtoken,
+                "email_provider": email_service.get_provider() or "dev-log"}
+
+    @router.post("/resend-verification-public")
+    async def resend_verification_public(payload: LoginPayload, request: Request,
+                                         background: BackgroundTasks):
+        """Public resend used when a user isn't logged in (e.g. token expired).
+        Validates password to prevent enumeration + spam."""
+        u = await db["users"].find_one({"email": payload.email})
+        if not u or not verify_password(payload.password, u["password_hash"]):
+            raise HTTPException(status_code=401, detail="Invalid email or password.")
+        if u.get("email_verified"):
+            return {"ok": True, "already_verified": True}
+        await db["email_verification_tokens"].delete_many({"user_id": str(u["_id"])})
+        vtoken = secrets.token_urlsafe(32)
+        await db["email_verification_tokens"].insert_one({
+            "token": vtoken, "user_id": str(u["_id"]), "email": u["email"],
+            "expires_at": datetime.now(timezone.utc) + VERIFICATION_TTL,
+        })
+        base = frontend_url or str(request.base_url).rstrip("/")
+        _dispatch_verification(background, base, vtoken, u["email"], u.get("first_name", ""))
+        return {"ok": True, "verification_token_dev": vtoken,
+                "email_provider": email_service.get_provider() or "dev-log"}
 
     return router

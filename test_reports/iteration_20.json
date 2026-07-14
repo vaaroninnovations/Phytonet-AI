@@ -1,0 +1,43 @@
+{
+  "summary": "Iteration 20 — Verified P2 features: Save/Resume Projects, MD Execution-Engine abstraction (local/hpc_slurm/cloud), Email verification (dev-log provider) + public resend endpoint. Backend pytest 11/11 pass (6 in test_projects_and_engines.py already existed + 5 new in test_iter20_extras.py). Frontend verified end-to-end: admin login → header-save-project menu (saveas/snapshot/list) → saveas-modal fill+confirm shows 'Saved as ...' toast → /projects page renders with project cards, rename/duplicate/delete all functional (verified 'Playwright Renamed' + '(copy)' + card removal). /molecular-dynamics correctly shows md-empty state (expected per instructions since no upstream workflow context). /verify-email?token=INVALID renders verify-email-page with verify-error state and resend-email/password/submit form.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "MyProjects.jsx (and likely VerifyEmail.jsx)", "issue": "Auth modal spuriously RE-OPENS on /projects mount even when the user has an active admin session (avatar visible in header). Root cause: useEffect on line 29-33 runs on initial mount when `user` is still null (before AuthContext finishes hydrating from /api/auth/me), triggering openModal('signin'). Once user loads, the modal is never auto-closed. Workaround in tests: dismiss via ESC. Fix: expose `authLoading` (or `authReady`) from AuthContext and guard `if (!user && authReady)` before opening. Same pattern likely affects any other route that guards on `user` from useEffect.", "selector": "[data-testid=\"auth-modal-backdrop\"]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_projects_and_engines.py",
+    "/app/backend/tests/test_iter20_extras.py",
+    "/app/test_reports/pytest/iter20_projects_engines.xml",
+    "/app/test_reports/pytest/iter20_extras.xml"
+  ],
+  "action_items": [
+    "Fix auth-modal spurious re-open on /projects (and any route that gates on `user` in a useEffect): add an `authReady` flag to AuthContext and only openModal('signin') once auth hydration has finished. Currently AuthContext.user starts as null and populates asynchronously from /api/auth/me, causing MyProjects.jsx line 30 to open the signin modal even for logged-in admins."
+  ],
+  "critical_code_review_comments": [
+    "MyProjects.jsx L29-33: `useEffect(()=>{ if (!user) openModal('signin'); ... }, [user])` — races with AuthContext hydration; a logged-in user briefly has user===null and gets the modal. Add `authReady`/`authLoading` guard.",
+    "test_iter20_extras.py — register schema requires `first_name`/`last_name`, not `name`. Existing test_auth.py was correct; docs in /app/memory/test_credentials.md do not mention this — consider updating the doc.",
+    "MD engines endpoint /api/md/engines returns options schema for each of local/hpc_slurm/cloud (verified). Cloud engine with provider=aws correctly emits execution/cloud/aws/README.md and dispatch.json. HPC SLURM correctly emits submit.sh with #SBATCH partition/nodes/gres/time (verified 6/6 pytest).",
+    "resend-verification-public correctly returns verification_token_dev for correct password and 401 for wrong password (verified). email_provider='dev-log' is returned in register response as documented.",
+    "Restore-version behaviour verified: snapshot v1 → mutate → restore v1 → GET shows original workflow_state (`plantName: Original`)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter20_extras.py (created)"
+  ],
+  "success_rate": {
+    "backend": "100% (11/11 tests pass: 6 existing + 5 new)",
+    "frontend": "95% — Save/SaveAs flow ✅, Projects list ✅, Rename ✅, Duplicate ✅, Delete ✅, MD engine picker md-empty ✅ (as expected), Verify-email invalid token ✅. Minor: auth modal spurious re-open bug on /projects (workaround: dismiss via ESC)."
+  },
+  "test_credentials": "admin@phytonet.ai / Admin123! — used successfully.",
+  "seed_data_creation": "Created transient project 'Playwright Test Project' → renamed to 'Playwright Renamed' → duplicated → deleted both copies. Final state cleaned up. New pytest registers 2 ephemeral users (testuser_*, resend_*) with dev verification tokens — no cleanup needed (dev-log provider).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "All iteration-20 P2 features are wired. Backend contract verified for /api/md/engines (returns 3 engines with options schema), /api/md/build for each engine (local emits run_local.sh+README, hpc_slurm emits submit.sh with correct SBATCH directives, cloud emits aws/README.md+dispatch.json), full /api/projects CRUD + snapshot + versions + duplicate + restore-version, autosave upsert/get/delete, and public resend-verification with wrong-password 401. Frontend verified for header-save-project menu, saveas-modal flow, MyProjects rename/duplicate/delete, verify-email invalid-token state. The MD engine picker (md-engine, md-engine-local/hpc_slurm/cloud, md-engine-opt-*) can only be exercised with a completed upstream workflow (Plant→ADMET→CT→DT→Network→Docking) — same limitation as iter19. To test full MD engine picker, main agent should either seed workflow state in NetworkContext/DockingContext or provide a debug hydration endpoint.",
+  "rca of the issue": "Auth modal re-open bug: AuthContext.user starts as null then hydrates asynchronously from GET /api/auth/me. Any component whose useEffect fires openModal('signin') when !user (like MyProjects.jsx L30) will always open the modal on mount, even for authenticated users. Once user finally populates, the modal remains open (no auto-close on user change). Fix: introduce `authLoading` (initially true, false after /api/auth/me returns), and only open modal when `!user && !authLoading`."
+}

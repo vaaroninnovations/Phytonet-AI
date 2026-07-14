@@ -94,3 +94,46 @@ export const reportGenerate = (workflow, model) =>
 export const reportDownloadURL = (report_id, fmt) =>
   `${BACKEND_URL}/api/report/download/${encodeURIComponent(report_id)}?fmt=${fmt}`;
 
+// ─────────────────────────── Projects ────────────────────────────
+// All project endpoints require an authenticated session; use `authApi` from
+// AuthContext (withCredentials) rather than the anonymous `api` instance.
+import { authApi } from "@/context/AuthContext";
+
+export const listProjects = () =>
+  authApi.get("/projects").then((r) => r.data);
+export const getProject = (id) =>
+  authApi.get(`/projects/${encodeURIComponent(id)}`).then((r) => r.data);
+export const createProject = (payload) =>
+  authApi.post("/projects", payload).then((r) => r.data);
+export const updateProject = (id, payload) =>
+  authApi.put(`/projects/${encodeURIComponent(id)}`, payload).then((r) => r.data);
+export const deleteProject = (id) =>
+  authApi.delete(`/projects/${encodeURIComponent(id)}`).then((r) => r.data);
+export const duplicateProject = (id) =>
+  authApi.post(`/projects/${encodeURIComponent(id)}/duplicate`).then((r) => r.data);
+export const snapshotProject = (id, label) =>
+  authApi.post(`/projects/${encodeURIComponent(id)}/snapshot`, { label }).then((r) => r.data);
+export const listVersions = (id) =>
+  authApi.get(`/projects/${encodeURIComponent(id)}/versions`).then((r) => r.data);
+export const restoreVersion = (id, versionId) =>
+  authApi.post(`/projects/${encodeURIComponent(id)}/restore/${encodeURIComponent(versionId)}`).then((r) => r.data);
+
+export const getAutosave = () =>
+  authApi.get("/projects/autosave/latest").then((r) => r.data);
+export const upsertAutosave = (payload) =>
+  authApi.post("/projects/autosave", payload).then((r) => r.data);
+export const clearAutosave = () =>
+  authApi.delete("/projects/autosave").then((r) => r.data);
+export const promoteAutosave = (payload) =>
+  authApi.post("/projects/autosave/promote", payload).then((r) => r.data);
+
+// ─────────────────────────── MD Execution Engines ─────────────────
+export const listMDEngines = () =>
+  api.get("/md/engines").then((r) => r.data);
+
+// ─────────────────────────── Public verify-email ──────────────────
+export const verifyEmailToken = (token) =>
+  api.post("/auth/verify-email", { token }).then((r) => r.data);
+export const resendVerificationPublic = (email, password) =>
+  api.post("/auth/resend-verification-public", { email, password }).then((r) => r.data);
+

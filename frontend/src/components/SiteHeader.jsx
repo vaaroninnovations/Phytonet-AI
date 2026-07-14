@@ -1,13 +1,15 @@
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { Slash, User, LogOut, LayoutDashboard, FolderOpen, Download, Settings } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import SaveProjectMenu from "@/components/SaveProjectMenu";
 
 export default function SiteHeader() {
   const { pathname } = useLocation();
   const isActive = (p) => pathname === p;
   const { user, openModal, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
+  const navigate = useNavigate();
 
   const initials = user ? (
     (user.first_name?.[0] || user.email?.[0] || "U").toUpperCase() +
@@ -35,6 +37,7 @@ export default function SiteHeader() {
         </nav>
 
         <div className="flex items-center gap-2">
+          {user && <SaveProjectMenu />}
           {!user ? (
             <>
               <button data-testid="header-signin" onClick={() => openModal("signin")}
@@ -63,7 +66,7 @@ export default function SiteHeader() {
                     {!user.email_verified && <p className="mt-1 text-[10px] text-amber-600">Email not yet verified</p>}
                   </div>
                   <MenuItem icon={<LayoutDashboard className="h-4 w-4" />} label="Dashboard" testid="menu-dashboard" onClick={() => setMenuOpen(false)} />
-                  <MenuItem icon={<FolderOpen className="h-4 w-4" />} label="My Projects" testid="menu-projects" onClick={() => setMenuOpen(false)} />
+                  <MenuItem icon={<FolderOpen className="h-4 w-4" />} label="My Projects" testid="menu-projects" onClick={() => { setMenuOpen(false); navigate("/projects"); }} />
                   <MenuItem icon={<Download className="h-4 w-4" />} label="Downloads" testid="menu-downloads" onClick={() => setMenuOpen(false)} />
                   <MenuItem icon={<User className="h-4 w-4" />} label="Profile" testid="menu-profile" onClick={() => setMenuOpen(false)} />
                   <MenuItem icon={<Settings className="h-4 w-4" />} label="Settings" testid="menu-settings" onClick={() => setMenuOpen(false)} />

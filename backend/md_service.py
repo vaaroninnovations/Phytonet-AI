@@ -332,7 +332,9 @@ def build_md_project(compound: Dict[str, Any],
                      target: Dict[str, Any],
                      receptor_pdb_content: Optional[str],
                      ligand_smiles_or_mol2: Optional[str],
-                     cfg: MDConfig) -> Tuple[str, bytes]:
+                     cfg: MDConfig,
+                     engine_key: Optional[str] = None,
+                     engine_opts: Optional[Dict[str, Any]] = None) -> Tuple[str, bytes]:
     """Create a zip package containing every file needed for MD.
 
     Args:
@@ -389,9 +391,31 @@ def build_md_project(compound: Dict[str, Any],
             zf.writestr(base + "receptor.pdb", receptor_pdb_content)
         if ligand_smiles_or_mol2:
             zf.writestr(base + "ligand.smi", ligand_smiles_or_mol2)
+        # ── Execution engine layer ─────────────────────────────────
+        engine = None
+        if engine_key:
+            try:
+                import execution_engines as _ee
+                engine = _ee.get(engine_key)
+            except Exception:
+                engine = None
+        if engine is not None:
+            try:
+                extra = engine.render_extra_files(
+                    compound, target,
+                    {k: getattr(cfg, k) for k in cfg.__dataclass_fields__},
+                    engine_opts or {},
+                )
+                for rel_path, content in (extra or {}).items():
+                    zf.writestr(base + rel_path, content)
+            except Exception as e:
+                zf.writestr(base + f"execution/{engine_key}/ERROR.txt",
+                            f"Engine render failed: {e}")
         zf.writestr(base + "PROJECT_MANIFEST.json", json.dumps({
             "project": project, "compound": compound, "target": target,
             "config": {k: getattr(cfg, k) for k in cfg.__dataclass_fields__},
+            "execution_engine": engine_key,
+            "execution_options": engine_opts or {},
             "runtime_estimate": estimate_runtime(cfg, 30000),
         }, indent=2))
     return project, buf.getvalue()
