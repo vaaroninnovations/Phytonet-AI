@@ -1621,6 +1621,23 @@ async def _startup():
     except Exception as e:
         logger.warning(f"Projects init failed (non-fatal): {e}")
 
+    # Self-heal: ensure the AutoDock Vina CLI binary is present so /api/docking/run
+    # doesn't fail with ENOENT after a container recycle.
+    try:
+        import shutil, subprocess
+        if not shutil.which("vina"):
+            logger.warning("autodock-vina CLI not found on PATH — attempting install")
+            r = subprocess.run(
+                ["apt-get", "install", "-y", "--no-install-recommends", "autodock-vina"],
+                capture_output=True, text=True, timeout=120,
+            )
+            if shutil.which("vina"):
+                logger.info("autodock-vina installed successfully on startup")
+            else:
+                logger.error(f"autodock-vina install failed: {r.stderr[-400:]}")
+    except Exception as e:
+        logger.warning(f"Vina self-heal skipped (non-fatal): {e}")
+
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
