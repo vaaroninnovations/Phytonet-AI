@@ -1,0 +1,34 @@
+{
+  "summary": "Verified bug fix for AutoDock Vina ENOENT error. /usr/bin/vina (v1.2.3) is installed and functional. All 4 tests in test_docking_md.py pass in 23.38s against the public URL. Explicit curl POST /api/docking/run with Aspirin/PTGS1 returned real results (best_affinity=-6.517 kcal/mol, 3 poses, interactions populated). Regression /api/docking/pdb-candidates returns valid PDB candidates. No new FileNotFoundError:'vina' entries in backend.err.log after the fix.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/docking/run", "issue": "Open Babel emits noisy 'WARNING: Problems reading a PDBQT file' due to G0 (dummy) atoms in Vina output. Non-fatal — best_affinity and poses parsed correctly. Consider filtering G-labelled dummies before Open Babel parsing to reduce log noise."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_docking_md.py",
+    "/app/test_reports/pytest/pytest_iter23.xml"
+  ],
+  "action_items": [
+    "Persist the `autodock-vina` install in the container setup (Dockerfile / setup script) so it survives container recycles. Currently the fix is only present at runtime via apt-get; if the container is rebuilt the ENOENT bug will regress.",
+    "(Optional) Silence Open Babel PDBQT warnings for dummy 'G0' atoms in docking output parsing."
+  ],
+  "critical_code_review_comments": [
+    "docking_service.py invokes `vina` as a bare command via subprocess. It relies on the system PATH for the binary — good practice would be to also check for /usr/bin/vina or an env-var override (VINA_BIN) with a clear error message at startup if missing, so future ENOENT is caught immediately rather than at first docking run.",
+    "Health/startup check: consider adding a service-level readiness probe that verifies vina, obabel, mgltools, etc. are present before accepting docking requests."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "N/A (backend-only test cycle)"},
+  "test_credentials": "N/A — docking endpoints are public per problem statement",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Bug fix verified. /usr/bin/vina v1.2.3 installed. test_docking_md.py (4 tests) passes in ~23s. /api/docking/run with Aspirin+PTGS1 returns best_affinity ~-6.5 kcal/mol with 3 poses. If the container is recycled, the vina binary may disappear again — check `which vina` first as a smoke test before running docking tests. If missing, run `apt-get install -y autodock-vina`. Note also 5 historical ENOENT log entries (lines 35578-37148 of backend.err.log) — these are PRE-fix, no new ones after the fix.",
+  "rca of the issue": "Root cause: `autodock-vina` OS package was not present in container image. `docking_service.py:362` invokes the CLI (`vina`) via asyncio.create_subprocess_exec — needs the system binary, not the Python `vina` package. Mitigation: apt-get install -y autodock-vina installed /usr/bin/vina v1.2.3. Long-term: add `autodock-vina` to Dockerfile / setup script so containers ship with it. Reproduction (pre-fix): POST /api/docking/run → each pair returns error 'No such file or directory: vina'. Verification (post-fix): POST /api/docking/run with Aspirin/PTGS1 returned best_affinity=-6.517, 3 poses, no error."
+}
