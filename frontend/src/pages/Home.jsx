@@ -444,10 +444,8 @@ function PlantPreview() {
 /* ─────────────────────────── AI ASSISTANT HERO ─────────────────────────── */
 function AssistantHero() {
   return (
-    <section id="assistant" data-testid="assistant-hero" className="relative overflow-hidden py-24">
-      <div aria-hidden className="absolute inset-0 -z-10">
-        <div className="absolute inset-0 bg-gradient-to-br from-[#5139ED] via-[#395AED] to-[#8139ED]" />
-      </div>
+    <section id="assistant" data-testid="assistant-hero" className="relative isolate overflow-hidden py-24">
+      <div aria-hidden className="absolute inset-0 -z-10 bg-gradient-to-br from-[#5139ED] via-[#395AED] to-[#8139ED]" />
       <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-10 px-6 lg:grid-cols-2">
         <div className="text-white">
           <span className="inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1.5 text-[11px] font-bold uppercase tracking-widest text-white backdrop-blur">
@@ -711,11 +709,9 @@ function FAQ() {
 /* ─────────────────────────── FINAL CTA ─────────────────────────── */
 function FinalCTA() {
   return (
-    <section data-testid="final-cta" className="relative overflow-hidden py-24">
-      <div aria-hidden className="absolute inset-0 -z-10">
-        <div className="absolute inset-0 bg-gradient-to-br from-[#5139ED] via-[#395AED] to-[#8139ED]" />
-        <div className="absolute inset-0 opacity-30 dot-grid" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,0.3) 1px, transparent 1px)" }} />
-      </div>
+    <section data-testid="final-cta" className="relative isolate overflow-hidden py-24">
+      <div aria-hidden className="absolute inset-0 -z-10 bg-gradient-to-br from-[#5139ED] via-[#395AED] to-[#8139ED]" />
+      <div aria-hidden className="absolute inset-0 -z-10 opacity-30 dot-grid" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,0.3) 1px, transparent 1px)" }} />
       <div className="mx-auto max-w-4xl px-6 text-center text-white">
         <h2 className="font-headline text-[36px] leading-[1.06] tracking-tight sm:text-[52px]">
           Ready to accelerate your research?
