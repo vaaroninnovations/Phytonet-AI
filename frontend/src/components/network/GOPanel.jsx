@@ -41,9 +41,15 @@ const SIZE_KEYS = [
   { key: "fold_enrichment", label: "Fold Enrichment" },
 ];
 
-export function GOPanel({ genes, onComplete }) {
+export function GOPanel({ genes, onComplete, onResultChange }) {
   const [loading, setLoading] = useState(false);
   const [rawResult, setRawResult] = useState(null);
+
+  // Bubble raw g:Profiler terms up to parent (NetworkAnalysis → NetworkContext)
+  // so downstream modules (AI Report) can consume GO enrichment.
+  useEffect(() => {
+    if (onResultChange) onResultChange(rawResult?.terms || []);
+  }, [rawResult, onResultChange]);
 
   // Filter panel state
   const [categories, setCategories] = useState({ "GO:BP": true, "GO:MF": true, "GO:CC": true });

@@ -1,5 +1,6 @@
 // Plant → Compound → Target → Disease → Pathway integrative network.
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import CytoscapeComponent from "react-cytoscapejs";
 import "@/lib/cytoscapeSetup";
 import { Sparkles } from "lucide-react";
@@ -33,6 +34,7 @@ export function PCTDPPanel({ intersectingGenes = [], selectedKeggPathways = [], 
     plantName: ctxPlantName, setPlantName,
     selectedCompounds, compoundTargets, diseaseTargets, selectedDisease,
   } = useNetwork();
+  const navigate = useNavigate();
 
   // Local plant name editor (writes back to context)
   const [plantInput, setPlantInput] = useState(ctxPlantName || "");
@@ -306,7 +308,7 @@ export function PCTDPPanel({ intersectingGenes = [], selectedKeggPathways = [], 
       </div>
 
       <div className="flex justify-end">
-        <a data-testid="pctdp-complete" href="/molecular-docking" onClick={(e) => { e.preventDefault(); onComplete?.(); window.location.assign("/molecular-docking"); }}
+        <a data-testid="pctdp-complete" href="/molecular-docking" onClick={(e) => { e.preventDefault(); onComplete?.(); navigate("/molecular-docking"); }}
           className="inline-flex items-center gap-2 rounded-full bg-[#5139ED] px-5 py-2.5 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 hover:bg-[#4127c9]">
           Proceed to Molecular Docking →
         </a>

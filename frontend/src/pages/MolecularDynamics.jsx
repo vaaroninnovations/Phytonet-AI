@@ -32,12 +32,52 @@ const BOX_OPTS = [
 ];
 
 export default function MolecularDynamics() {
-  const { compoundTargets, diseaseTargets, selectedCompounds, setMdConfig } = useNetwork();
+  const { compoundTargets, diseaseTargets, selectedCompounds, dockingResults, setMdConfig } = useNetwork();
   const { compounds: allCompounds } = useResults();
   const { markComplete } = useWorkflow();
 
-  // Merge target metadata
+  // Only successfully docked compound×target pairs are eligible for MD.
+  // If docking has been run, restrict compound/target options to those pairs;
+  // if docking has NOT been run, we render a blocked empty-state below.
+  const dockedPairs = useMemo(() => {
+    const rr = dockingResults?.results || [];
+    return rr
+      .filter((r) => !r.error && typeof r.best_affinity === "number")
+      .map((r) => ({
+        ligand_name: r.ligand_name,
+        smiles: r.ligand_smiles,
+        uniprot_id: r.receptor_uniprot,
+        gene_symbol: r.gene_symbol,
+        pdb_id: r.receptor_pdb,
+        best_affinity: r.best_affinity,
+        pair_id: r.pair_id,
+        job_id: r.job_id,
+      }));
+  }, [dockingResults]);
+
+  const hasDocking = dockedPairs.length > 0;
+
+  // Merge target metadata — restricted to docked receptors when docking exists
   const targetOptions = useMemo(() => {
+    if (hasDocking) {
+      const idx = new Map();
+      for (const p of dockedPairs) {
+        const key = p.gene_symbol || p.uniprot_id;
+        if (!key || idx.has(key)) continue;
+        idx.set(key, {
+          gene_symbol: p.gene_symbol || key,
+          uniprot_id: p.uniprot_id,
+          protein_name: undefined,
+          pdb_id: p.pdb_id,
+        });
+      }
+      // Enrich with protein_name if available from Target/Disease tables
+      for (const r of [...compoundTargets, ...diseaseTargets]) {
+        const t = idx.get(r.gene_symbol);
+        if (t && !t.protein_name && r.protein_name) t.protein_name = r.protein_name;
+      }
+      return [...idx.values()];
+    }
     const idx = new Map();
     for (const r of [...compoundTargets, ...diseaseTargets]) {
       const g = r.gene_symbol;
@@ -46,9 +86,19 @@ export default function MolecularDynamics() {
       else if (!idx.get(g).uniprot_id && r.uniprot_id) idx.get(g).uniprot_id = r.uniprot_id;
     }
     return [...idx.values()];
-  }, [compoundTargets, diseaseTargets]);
+  }, [hasDocking, dockedPairs, compoundTargets, diseaseTargets]);
 
   const compoundOptions = useMemo(() => {
+    if (hasDocking) {
+      const seen = new Set();
+      const out = [];
+      for (const p of dockedPairs) {
+        if (!p.ligand_name || seen.has(p.ligand_name)) continue;
+        seen.add(p.ligand_name);
+        out.push({ name: p.ligand_name, smiles: p.smiles });
+      }
+      return out;
+    }
     const seen = new Set();
     const out = [];
     for (const c of [...(selectedCompounds || []), ...(allCompounds || [])]) {
@@ -58,7 +108,7 @@ export default function MolecularDynamics() {
       out.push({ name: c.compound_name || c.imppat_id || "Compound", smiles: c.smiles });
     }
     return out;
-  }, [selectedCompounds, allCompounds]);
+  }, [hasDocking, dockedPairs, selectedCompounds, allCompounds]);
 
   const [compIdx, setCompIdx] = useState(0);
   const [tgtIdx, setTgtIdx] = useState(0);
@@ -71,6 +121,22 @@ export default function MolecularDynamics() {
   });
   const [building, setBuilding] = useState(false);
   const [estimate, setEstimate] = useState(null);
+
+  // Auto-select the best-affinity compound×target pair when docking data arrives.
+  // (Only fires once per docking session — resets if user manually changes.)
+  useEffect(() => {
+    if (!hasDocking) return;
+    const best = [...dockedPairs].sort((a, b) => a.best_affinity - b.best_affinity)[0];
+    if (!best) return;
+    const ci = compoundOptions.findIndex((c) => c.name === best.ligand_name);
+    const ti = targetOptions.findIndex((t) =>
+      (t.gene_symbol && t.gene_symbol === best.gene_symbol) ||
+      (t.uniprot_id && t.uniprot_id === best.uniprot_id));
+    if (ci >= 0) setCompIdx(ci);
+    if (ti >= 0) setTgtIdx(ti);
+    if (best.pdb_id) setPdbId(best.pdb_id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasDocking, dockedPairs.length]);
 
   // ── Execution Engine state ─────────────────────────────────────
   const [engines, setEngines] = useState([]);
@@ -145,6 +211,26 @@ export default function MolecularDynamics() {
   };
 
   const upd = (k) => (e) => setCfg((c) => ({ ...c, [k]: e.target.type === "number" ? Number(e.target.value) : e.target.value }));
+
+  // Enforce workflow contract: MD requires successful docking results.
+  if (!hasDocking) {
+    return (
+      <WorkflowLayout>
+        <main data-testid="md-blocked-no-docking" className="mx-auto max-w-3xl px-6 pb-24 pt-14 text-center">
+          <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-[#5139ED]/10 text-[#5139ED]"><Atom className="h-6 w-6" /></div>
+          <h1 className="mt-6 font-display text-4xl font-bold tracking-tight text-[#0B0B18]">Docking required</h1>
+          <p className="mt-3 text-[#64748B]">
+            Molecular Dynamics runs on successfully-docked compound × target complexes. Run docking first
+            — the best-affinity pair will be pre-selected here automatically.
+          </p>
+          <Link to="/molecular-docking" data-testid="md-blocked-goto-docking"
+                className="mt-8 inline-flex items-center gap-2 rounded-full bg-[#5139ED] px-6 py-3 text-sm font-semibold text-white hover:bg-[#4127c9]">
+            <ArrowLeft className="h-4 w-4" />Go to Molecular Docking
+          </Link>
+        </main>
+      </WorkflowLayout>
+    );
+  }
 
   const noInputs = compoundOptions.length === 0 || targetOptions.length === 0;
   if (noInputs) {

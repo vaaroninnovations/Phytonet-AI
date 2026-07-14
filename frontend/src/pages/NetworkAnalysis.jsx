@@ -264,6 +264,7 @@ export default function NetworkAnalysis() {
                   ppiResult?.nodes?.map((n) => n.id) ||
                   Object.keys(intersectSel).filter((g) => intersectSel[g])
                 }
+                onResultChange={(terms) => setGoTerms(terms || [])}
                 onComplete={() => {
                   setCompleted((c) => ({ ...c, go: true }));
                   setActive("kegg");
