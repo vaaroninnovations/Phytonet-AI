@@ -23,6 +23,7 @@ import { GOPanel as NewGOPanel } from "@/components/network/GOPanel";
 import { KEGGPanel as NewKEGGPanel } from "@/components/network/KEGGPanel";
 import { PCTDPPanel } from "@/components/network/PCTDPPanel";
 import { TableToolbar } from "@/components/network/TableToolbar";
+import { requireAuth } from "@/context/AuthContext";
 import { FigureToolbar } from "@/components/network/FigureToolbar";
 import { CyToolbar } from "@/components/network/CyToolbar";
 import {
@@ -416,15 +417,15 @@ function IntersectionPanel({
 
   const selectedCount = Object.keys(intersectSel).filter((k) => intersectSel[k]).length;
 
-  const downloadSvg = () => {
+  const downloadSvg = () => requireAuth(() => {
     if (!svgRef.current) return;
     const src = new XMLSerializer().serializeToString(svgRef.current);
     const blob = new Blob([src], { type: "image/svg+xml;charset=utf-8" });
     saveAs(blob, `venn_${diseaseLabel.replace(/\s+/g, "_")}.svg`);
-  };
-  const downloadPng = async (dpi = 300) => rasterize(dpi, "png");
-  const downloadTiff = async (dpi = 300) => rasterize(dpi, "tiff");
-  const downloadPdf = async () => {
+  });
+  const downloadPng = async (dpi = 300) => requireAuth(() => rasterize(dpi, "png"));
+  const downloadTiff = async (dpi = 300) => requireAuth(() => rasterize(dpi, "tiff"));
+  const downloadPdf = async () => requireAuth(() => {
     if (!svgRef.current) return;
     const scale = 300 / 96;
     const src = new XMLSerializer().serializeToString(svgRef.current);
@@ -449,7 +450,7 @@ function IntersectionPanel({
       URL.revokeObjectURL(url);
     };
     img.src = url;
-  };
+  });
   const rasterize = async (dpi, kind) => {
     if (!svgRef.current) return;
     const scale = dpi / 96;

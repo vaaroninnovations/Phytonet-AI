@@ -1,0 +1,28 @@
+{
+  "summary": "Iteration 21 — Verified bug fix: Download-auth flow reconnected. Centralized guard inside /app/frontend/src/lib/exporters.js (guardedSave -> window.__phytonet_auth.guard) now gates every exportCSV/XLSX/JSON caller. NetworkAnalysis Venn diagram entry-points (downloadSvg/Png/Tiff/Pdf) are wrapped with requireAuth() at the call site. Frontend E2E on /phytonet-ai (Plant Database, plant='Curcuma longa', 241 compounds returned via IMPPAT+LOTUS) confirms: (1) guest export-csv/xlsx/json all open the existing AuthModal without downloading, (2) after in-modal signin with admin creds the pendingAction fires and the intended file (compounds.json) auto-downloads, (3) authed clicks on export-csv/xlsx/json trigger immediate downloads with no modal. Regression on TableToolbar/FigureToolbar/CyToolbar guards verified via code inspection — still using requireAuth from @/context/AuthContext, no duplicated auth logic.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "exporters.js guardedSave() has a sensible pre-mount fallback (executes save if window.__phytonet_auth is not yet installed). AuthContext installs the global in a useEffect after mount, so on very fast first-paint clicks the fallback path could technically leak an unauthenticated download; in practice this window is unreachable because export buttons live inside a Results panel that only renders after user interaction. Acceptable.",
+    "NetworkAnalysis.jsx downloadSvg/Png/Tiff/Pdf correctly wrap the entry point with requireAuth (lines 420-449). The inner rasterize(...) still calls saveAs directly which is fine because requireAuth already guards the outer function.",
+    "Hydration warning in console: <span data-ve-dynamic ...> inside <option> in PlantDatabase.jsx L871-872 (page-size select). Not related to this bug fix but should be cleaned up — <option> cannot contain <span>. Pre-existing; unchanged by this iteration.",
+    "AuthContext.guard runs pendingAction 100ms after login via setTimeout(runPending, 100). Confirmed pendingAction fires reliably (compounds.json downloaded after in-modal signin during Test 4)."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "n/a (frontend-only testing per request)",
+    "frontend": "100% — 7/7 scenarios passed: guest CSV/XLSX/JSON open modal (3/3), pendingAction auto-continues JSON download after login (1/1), authed CSV/XLSX/JSON immediate downloads (3/3)."
+  },
+  "test_credentials": "admin@phytonet.ai / Admin123! — verified working via in-modal signin.",
+  "seed_data_creation": "None — used real IMPPAT+LOTUS search for Curcuma longa (241 compounds).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Bug fix is complete and verified end-to-end. The central fix in /app/frontend/src/lib/exporters.js (guardedSave wrapper) covers all Plant DB / Target Prediction / Disease Targets / Drug-Likeness / NetworkAnalysis inline CSV exports without touching individual call sites. NetworkAnalysis Venn diagram direct saveAs / pdf.save paths are individually wrapped with requireAuth. Auth modal opens with data-testid='auth-modal-backdrop'; signin fields = signin-email / signin-password / signin-submit. Guest state can be forced via `await fetch('/api/auth/logout', {method:'POST', credentials:'include'})` + reload. Venn diagram section was not exercised via UI (requires completed Plant→ADMET→CT→DT workflow), verified by code inspection only — matches review request expectation.",
+  "rca of the issue": "Root cause was direct call-sites (PlantDatabase, TargetPrediction, DiseaseTargets, DrugLikeness, NetworkAnalysis Venn) bypassing the requireAuth guard used by TableToolbar/FigureToolbar/CyToolbar. Fix centralizes guarding at the library level (exporters.js -> guardedSave -> window.__phytonet_auth.guard) so every caller of exportCSV/XLSX/JSON is automatically gated. Venn diagram direct saveAs / pdf.save calls were wrapped with requireAuth() at the entry-point level. No new UI, no new modal, no duplicated auth logic — reuses the same AuthContext.guard mechanism (pendingAction pattern) proven to work by the successful pendingAction auto-continue test."
+}
