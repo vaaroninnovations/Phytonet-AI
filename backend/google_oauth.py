@@ -78,8 +78,7 @@ def build_router(db, auth_service):
             "prompt": "select_account",
             "state": state,
         }
-        qs = "&".join(f"{k}={httpx.QueryParams({k: v}).__str__().split('=', 1)[1]}"
-                      for k, v in params.items())
+        qs = str(httpx.QueryParams(params))
         return RedirectResponse(url=f"{GOOGLE_AUTH}?{qs}", status_code=302)
 
     @router.get("/callback")

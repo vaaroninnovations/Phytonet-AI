@@ -14,7 +14,7 @@ export default function ChartStyleDrawer() {
         data-testid="chart-style-open"
         onClick={() => setOpen(true)}
         aria-label="Customize charts"
-        className="fixed bottom-6 right-6 z-40 inline-flex items-center gap-2 rounded-full border border-[#E7E7F3] bg-white/95 px-4 py-2.5 text-[12px] font-bold text-[#0B0B18] shadow-[0_16px_36px_-14px_rgba(11,11,24,0.25)] backdrop-blur hover:border-[#5139ED]/40 hover:text-[#5139ED]">
+        className="fixed bottom-24 right-6 z-40 inline-flex items-center gap-2 rounded-full border border-[#E7E7F3] bg-white/95 px-4 py-2.5 text-[12px] font-bold text-[#0B0B18] shadow-[0_16px_36px_-14px_rgba(11,11,24,0.25)] backdrop-blur hover:border-[#5139ED]/40 hover:text-[#5139ED]">
         <Palette className="h-4 w-4 text-[#5139ED]" /> Customize
       </button>
 
