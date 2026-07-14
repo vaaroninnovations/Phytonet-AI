@@ -2,19 +2,23 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url("https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
 
 :root {
     --brand-1: #5139ED;
     --brand-2: #8139ED;
     --brand-3: #395AED;
+    --accent:  #2BB673;
     --ink: #0B0B18;
+    --ink-1: #111827;
     --ink-2: #1E1E33;
-    --muted: #64748B;
+    --ink-3: #374151;
+    --muted: #6B7280;
+    --muted-2: #64748B;
     --line: #E7E7F3;
     --line-2: #F1F1FA;
     --paper: #FFFFFF;
-    --paper-2: #FAFAFF;
+    --paper-2: #F8FAFC;
 }
 
 html,
@@ -22,9 +26,55 @@ body {
     margin: 0;
     background: var(--paper);
     color: var(--ink);
-    font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+    font-family: "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+}
+
+.font-headline {
+    font-family: "Manrope", "Plus Jakarta Sans", sans-serif;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+}
+
+.font-body {
+    font-family: "Plus Jakarta Sans", "Inter", sans-serif;
+}
+
+/* Animated gradient text used on hero highlight */
+.gradient-text {
+    background: linear-gradient(90deg, #5139ED 0%, #395AED 40%, #8139ED 70%, #5139ED 100%);
+    background-size: 200% 100%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    animation: gradient-shift 6s linear infinite;
+}
+@keyframes gradient-shift {
+    0%   { background-position: 0% 50%; }
+    100% { background-position: 200% 50%; }
+}
+
+/* Subtle floating anim for hero visual */
+@keyframes float-slow {
+    0%,100% { transform: translateY(0px); }
+    50%     { transform: translateY(-10px); }
+}
+.animate-float-slow { animation: float-slow 6s ease-in-out infinite; }
+
+/* Dot grid backdrop */
+.dot-grid {
+    background-image: radial-gradient(rgba(81,57,237,0.10) 1px, transparent 1px);
+    background-size: 24px 24px;
+}
+
+/* Soft blurred orbs */
+.brand-blur {
+    filter: blur(80px);
+    opacity: 0.35;
+    border-radius: 9999px;
+    pointer-events: none;
 }
 
 @layer base {

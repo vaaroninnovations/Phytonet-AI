@@ -115,13 +115,40 @@ fields; sortable/searchable/paginated results table; export CSV/XLSX/JSON.
 - **PCTDPPanel button** renamed **"Proceed to Molecular Docking →"** (auto-navigates on click).
 - **Backend tests**: 14 new tests all pass (auth 3 + report 2 + network 5 + docking/MD 4). Report generation endpoint fully wired but LLM budget currently exhausted — user must top-up in Profile → Universal Key → Add Balance to actually generate manuscripts.
 
-## Backlog / Next Actions
-- **[BLOCKER for AI report]** Emergent LLM key budget exhausted ($1.55 / $1.16). User action: Profile → Universal Key → Add Balance.
-- P2: Molecular Docking / Dynamics improvements — save projects, resume state, ExecutionEngine abstraction for local / HPC / cloud
-- P3: SaaS billing tier integration (Stripe) — gate deep computation behind paid plans
-- Refactor: delete dead legacy GO/KEGG code (~500 lines) inside `NetworkAnalysis.jsx`
-- Refactor: split `NetworkAnalysis.jsx` and `server.py` into module-level files
-- Real email transport (SendGrid/Resend) so `email_verification` sends real emails instead of only logging the URL
+## Implemented (2026-02-14 — Iter 20 · Save/Resume Projects · MD Execution Engines · SMTP)
+
+- **Save/Resume Projects (P2)** — full persistence of the workflow across sessions:
+  - Backend `/app/backend/projects_service.py` — `POST /api/projects` (create), `GET` (list), `GET /{id}`, `PUT /{id}` (update / rename), `DELETE /{id}`, `POST /{id}/duplicate`, `POST /{id}/snapshot` (version), `GET /{id}/versions`, `POST /{id}/restore/{version_id}`, `POST /autosave`, `GET /autosave/latest`, `DELETE /autosave`, `POST /autosave/promote`. All require JWT auth (admin@phytonet.ai / Admin123!).
+  - Two Mongo collections: `projects` (with `is_autosave` flag) + `project_versions` (rotated at 50/project).
+  - Frontend `ProjectContext.jsx` — aggregates NetworkContext + ResultsContext + SelectionContext + WorkflowContext into an opaque `workflow_state` blob. **Auto-save debounced 2s** on any downstream change (only fires for authenticated users). Snapshot serialization is future-proof (backend never inspects state).
+  - Frontend `SaveProjectMenu.jsx` (header) — Save · Save As… (name + description) · Snapshot version · Open My Projects.
+  - Frontend `/projects` page (`MyProjects.jsx`) — card grid with Resume · Rename (inline) · Duplicate · History (version list w/ restore) · Delete. Empty state + refresh + loading.
+  - Frontend `ResumeSessionModal.jsx` — auto-prompts on login when an autosave exists; Resume (applies snapshot + navigates to `current_step`) or Discard.
+  - Backend pytest `test_projects_and_engines.py` — 6/6 pass (CRUD lifecycle, autosave upsert/get/delete, require-auth 401, MD engines endpoint, md build local + hpc_slurm produce correct extra files).
+- **MD Execution Engine Abstraction (P2)** — pluggable engines in `/app/backend/execution_engines.py`:
+  - `local`  → emits `execution/local/README.md` + `run_local.sh` (with OMP threads + optional CUDA + extra flags).
+  - `hpc_slurm` → emits `execution/hpc_slurm/submit.sh` with real SBATCH directives (partition, nodes, ntasks/node, cpus/task, mem, gres:gpu:N, walltime, module load, mail-user).
+  - `cloud` → provider-agnostic launch spec (`execution/cloud/{provider}/dispatch.json` + README) for AWS / Azure / GCP / RunPod / Lambda Labs. Design-only preview — no live dispatch yet.
+  - `GET /api/md/engines` returns the schema (label, category, description, options) so the frontend renders the picker dynamically — adding a new engine requires zero frontend changes.
+  - MolecularDynamics.jsx now has `md-engine-*` picker + `md-engine-opt-*` dynamic option fields; `POST /api/md/build` accepts `engine` + `engine_options`.
+- **Real SMTP Email Verification (P1)** — multi-provider `/app/backend/email_service.py`:
+  - Providers via `EMAIL_PROVIDER` env: **gmail** · **sendgrid** · **mailgun** · **ses** · **resend** · **smtp** (generic).
+  - Env vars added (all optional — blank = dev-log): `EMAIL_PROVIDER`, `EMAIL_FROM`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_TLS`, `FRONTEND_URL`.
+  - `auth_service.py` — 24h token TTL (was 3d), sends via `BackgroundTasks`, still logs the verification link + returns `verification_token_dev` for dev workflows.
+  - New public endpoint `POST /api/auth/resend-verification-public` — password-gated resend for users whose token expired *before* they could log in.
+  - New page `/verify-email?token=…` — success/error UI + inline resend form.
+  - Email HTML template with PhytoNet brand (glass gradient header · CTA button · 24h expiry copy · plain-text fallback).
+- **Project autosave recovery** — every meaningful action triggers a debounced upsert to the user's autosave slot. On next login the `ResumeSessionModal` shows plant / disease / compound-count / current-step preview and offers Resume or Discard.
+- Bug fix: `MyProjects.jsx` now waits for `authLoading===false` before opening the sign-in modal — previously the modal briefly re-opened for authenticated users during AuthContext hydration.
+- Iter 20 test report: `/app/test_reports/iteration_20.json` — backend 11/11 pytest pass, frontend 95 % E2E (all P2 flows verified except MD engine picker end-to-end which requires an upstream workflow to reach `/molecular-dynamics` — engine schema itself verified via backend).
+
+## Backlog / Next Actions (updated)
+
+- **[BLOCKER for AI report]** Emergent LLM key budget exhausted. Top-up via Profile → Universal Key → Add Balance.
+- P2: Wire real cloud dispatch (AWS Batch / RunPod / Lambda) — currently spec-only.
+- P2: MD post-processing analysis (RMSD/RMSF/H-bonds) once trajectories return.
+- P3: Refactor `server.py` (1600+ lines) into `/app/backend/routes/*` modules.
+- P3: SaaS billing tier integration (Stripe) — gate deep computation behind paid plans.
 - **Shared toolbars & utilities** (all in `/app/frontend/src/components/network/` and `/app/frontend/src/lib/`):
   - `TableToolbar` — universal CSV / XLSX / Copy-to-Clipboard for every table
   - `FigureToolbar` — universal SVG / PNG (300 & 600 dpi) / TIFF (300 & 600 dpi) / PDF (vector) + Fullscreen + Reset for every SVG figure. Publication-ready: font-family injected, title bar, viewBox preserved.

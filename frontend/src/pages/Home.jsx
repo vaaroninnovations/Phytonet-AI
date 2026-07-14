@@ -1,389 +1,664 @@
+// PhytoNet AI — Premium homepage.
+// Full rewrite (Iter 21). Sections: Hero · Stats · Features · Workflow · Why ·
+// Screenshot · Plant Preview · Modules · How It Works · Trust · Testimonials ·
+// FAQ · Final CTA. Design: minimal white background, Manrope headlines,
+// Plus Jakarta Sans body, soft gradients + glassmorphism only where appropriate.
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowUpRight, Sparkles, ChevronRight, Rocket } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, useInView } from "framer-motion";
+import {
+  ArrowRight, ArrowUpRight, Check, ChevronRight, ChevronDown,
+  Sparkles, ShieldCheck, GitBranch, Layers, Atom, Dna, Network,
+  Search, FlaskConical, FileText, Video, Image as ImageIcon, Beaker,
+  Microscope, Brain, Zap, BookOpen, Github, Linkedin, Twitter,
+  Play, Leaf, Cpu, Activity, Database, Workflow, Star, Quote,
+} from "lucide-react";
+import HeroVisual from "@/components/HeroVisual";
+import BrandLogo from "@/components/BrandLogo";
+import { useAuth } from "@/context/AuthContext";
 
-const PIPELINE_STEPS = [
-  "Plant Database / LC-MS",
-  "Compound Standardization",
-  "Toxicity Prediction",
-  "Drug-Likeness Screening",
-  "Target Prediction",
-  "Disease Target Identification",
-  "Network Analysis",
-  "Molecular Docking",
-  "Molecular Dynamics",
-  "AI Scientific Report",
-];
-
-export default function Home() {
+/* ────────────────────────────── HERO ────────────────────────────── */
+function Hero() {
+  const { openModal, user } = useAuth();
   return (
-    <main data-testid="home-page" className="relative overflow-hidden bg-white">
-      {/* ambient orbs */}
-      <div
-        className="brand-orb"
-        style={{
-          background: "#5139ED",
-          width: 420,
-          height: 420,
-          top: -140,
-          left: -120,
-        }}
-      />
-      <div
-        className="brand-orb"
-        style={{
-          background: "#395AED",
-          width: 380,
-          height: 380,
-          top: 60,
-          right: -140,
-        }}
-      />
-      <div
-        className="brand-orb"
-        style={{
-          background: "#8139ED",
-          width: 340,
-          height: 340,
-          top: 380,
-          left: "40%",
-          opacity: 0.18,
-        }}
-      />
+    <section data-testid="hero" className="relative overflow-hidden pt-16 pb-24 lg:pt-24">
+      {/* Blurred colour orbs */}
+      <div aria-hidden className="brand-blur absolute -left-40 top-0 h-[420px] w-[420px] bg-[#5139ED]" />
+      <div aria-hidden className="brand-blur absolute -right-32 top-40 h-[380px] w-[380px] bg-[#2BB673]" />
 
-      {/* Hero */}
-      <section className="relative mx-auto max-w-7xl px-6 pb-24 pt-20 md:pt-28">
-        <div className="pointer-events-none absolute inset-0 -z-0 bg-grid bg-grid-fade" />
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          className="relative z-10 mx-auto max-w-3xl text-center"
-        >
-          <div
-            data-testid="hero-pill"
-            className="mx-auto mb-8 inline-flex items-center gap-2 rounded-full border border-[#E7E7F3] bg-white/80 px-4 py-1.5 text-xs font-medium text-[#5139ED] shadow-sm backdrop-blur"
-          >
-            <Sparkles className="h-3.5 w-3.5" />
-            Agentic pipeline · phytochem → publication
-          </div>
+      {/* Dot grid background */}
+      <div aria-hidden className="absolute inset-0 dot-grid opacity-[0.35]"
+           style={{ maskImage: "radial-gradient(ellipse at center, black 35%, transparent 78%)",
+                    WebkitMaskImage: "radial-gradient(ellipse at center, black 35%, transparent 78%)" }} />
 
-          <h1
-            data-testid="hero-headline"
-            className="font-display text-6xl font-extrabold leading-[0.95] tracking-tight text-[#0B0B18] sm:text-7xl md:text-8xl"
-          >
-            Dr. <span className="text-[#5139ED]">/</span>
+      <div className="relative mx-auto grid max-w-7xl grid-cols-1 items-center gap-14 px-6 lg:grid-cols-2">
+        <div>
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#E7E7F3] bg-white/70 px-3.5 py-1.5 text-[11px] font-semibold text-[#374151] backdrop-blur">
+            <Sparkles className="h-3.5 w-3.5 text-[#5139ED]" />
+            Explainable AI for computational pharmacology
+          </span>
+
+          <h1 className="font-headline mt-6 text-[44px] leading-[1.05] tracking-[-0.03em] text-[#111827] sm:text-[56px] lg:text-[64px]">
+            <span className="gradient-text">AI Scientist</span> for<br/>
+            Medicinal Plant<br/>
+            Drug Discovery
           </h1>
 
-          <p
-            data-testid="hero-subhead"
-            className="mt-6 font-heading text-2xl font-semibold text-[#1E1E33] sm:text-3xl"
-          >
-            Your Research AI Assistant
+          <p className="mt-6 max-w-xl text-base leading-relaxed text-[#374151] sm:text-[17px]">
+            Transform medicinal plant research into reproducible discoveries using explainable AI,
+            network pharmacology, cheminformatics, molecular biology, and automated scientific workflows.
           </p>
 
-          <p
-            data-testid="hero-description"
-            className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-[#4B5563] sm:text-lg"
-          >
-            Rather than manually integrating numerous public databases and
-            standalone software packages, <span className="brand-underline">Dr. /</span>{" "}
-            employs specialized agents that communicate through an intelligent
-            orchestration engine. Each tool performs a dedicated scientific
-            task, automatically passing validated outputs to the next stage —
-            creating a fully automated, reproducible computational pipeline.
-          </p>
-
-          <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
+          <div className="mt-8 flex flex-wrap items-center gap-3">
             <Link
               to="/phytonet-ai"
-              data-testid="hero-cta-plant-database"
-              className="group inline-flex items-center gap-2 rounded-full bg-[#5139ED] px-7 py-3.5 text-sm font-semibold text-white shadow-[0_10px_30px_-10px_rgba(81,57,237,0.55)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#4127c9]"
+              data-testid="hero-primary-cta"
+              className="group inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#5139ED] via-[#395AED] to-[#8139ED] px-6 py-3.5 text-[14px] font-bold text-white shadow-[0_14px_36px_-10px_rgba(81,57,237,0.7)] transition-all hover:-translate-y-0.5 hover:shadow-[0_22px_48px_-12px_rgba(81,57,237,0.85)]"
             >
-              PhytoNet AI
-              <ArrowUpRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+              Start Research
+              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
             </Link>
-            <a
-              href="#agents"
-              data-testid="hero-cta-agents"
-              className="inline-flex items-center gap-2 rounded-full border border-[#E7E7F3] bg-white/70 px-7 py-3.5 text-sm font-semibold text-[#0B0B18] backdrop-blur transition-colors duration-200 hover:border-[#5139ED]/40 hover:text-[#5139ED]"
+            <Link
+              to="/phytonet-ai"
+              data-testid="hero-secondary-cta"
+              className="inline-flex items-center gap-2 rounded-full border border-[#E7E7F3] bg-white/70 px-6 py-3.5 text-[14px] font-semibold text-[#111827] backdrop-blur transition-all hover:border-[#5139ED]/40 hover:text-[#5139ED]"
             >
-              See the agents
+              Explore Plant Database
               <ChevronRight className="h-4 w-4" />
-            </a>
-          </div>
-        </motion.div>
-
-        {/* metric strip */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.25, duration: 0.6 }}
-          className="relative z-10 mx-auto mt-20 grid max-w-4xl grid-cols-2 gap-4 md:grid-cols-4"
-        >
-          {[
-            ["17,000+", "Phytochemicals"],
-            ["4,010", "Medicinal plants"],
-            ["270k+", "Natural products"],
-            ["8", "Autonomous agents"],
-          ].map(([k, v]) => (
-            <div
-              key={v}
-              className="glass rounded-2xl px-5 py-4 text-center"
-            >
-              <div className="font-display text-2xl font-bold text-[#0B0B18]">
-                {k}
-              </div>
-              <div className="mt-1 text-xs uppercase tracking-widest text-[#64748B]">
-                {v}
-              </div>
-            </div>
-          ))}
-        </motion.div>
-      </section>
-
-      {/* PhytoNet AI — single premium feature card */}
-      <section
-        id="agents"
-        data-testid="features-section"
-        className="relative mx-auto max-w-7xl px-6 pb-24"
-      >
-        <div className="mb-12 flex flex-col items-start justify-between gap-6 md:flex-row md:items-end">
-          <div className="max-w-2xl">
-            <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">
-              The pipeline
-            </p>
-            <h2 className="mt-3 font-display text-4xl font-bold tracking-tight text-[#0B0B18] sm:text-5xl">
-              One AI Scientist,
-              <br />
-              one continuous workflow.
-            </h2>
-          </div>
-          <p className="max-w-md text-sm leading-relaxed text-[#64748B]">
-            A single agentic system takes a medicinal plant or LC-MS input
-            through every stage — from compound standardization to a
-            publication-ready scientific report.
-          </p>
-        </div>
-
-        <PhytoNetAICard />
-      </section>
-
-      {/* How it works ribbon */}
-      <section
-        data-testid="ribbon-section"
-        className="relative border-y border-[#E7E7F3] bg-[#FAFAFF]"
-      >
-        <div className="mx-auto max-w-7xl px-6 py-16">
-          <div className="grid gap-10 md:grid-cols-3">
-            {[
-              {
-                n: "01",
-                t: "Query a plant",
-                d: "Enter any medicinal plant. Dr. / dispatches simultaneous requests to IMPPAT and LOTUS.",
-              },
-              {
-                n: "02",
-                t: "Agents orchestrate",
-                d: "Each agent enriches the payload with structures, targets, networks and enrichments.",
-              },
-              {
-                n: "03",
-                t: "Publish results",
-                d: "Sorted, exportable tables, high-resolution figures and an auto-drafted narrative.",
-              },
-            ].map((s) => (
-              <div key={s.n} className="flex items-start gap-4">
-                <span className="font-mono text-sm text-[#5139ED]">{s.n}</span>
-                <div>
-                  <div className="font-heading text-lg font-semibold text-[#0B0B18]">
-                    {s.t}
-                  </div>
-                  <p className="mt-1 text-sm text-[#64748B]">{s.d}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* CTA */}
-      <section className="relative mx-auto max-w-5xl px-6 py-24">
-        <div className="relative overflow-hidden rounded-3xl border border-[#E7E7F3] bg-white p-10 shadow-[0_20px_60px_-30px_rgba(81,57,237,0.35)] md:p-14">
-          <div
-            className="brand-orb"
-            style={{
-              background: "#5139ED",
-              width: 260,
-              height: 260,
-              top: -80,
-              right: -60,
-              opacity: 0.35,
-            }}
-          />
-          <div className="relative">
-            <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">
-              Start with data
-            </p>
-            <h3 className="mt-3 font-display text-3xl font-bold tracking-tight text-[#0B0B18] sm:text-4xl">
-              Search a medicinal plant.
-              <br className="hidden sm:block" /> Retrieve every phytochemical
-              in seconds.
-            </h3>
-            <p className="mt-4 max-w-xl text-sm text-[#64748B]">
-              A unified compound extractor over IMPPAT + LOTUS with exact,
-              substructure and molecular-weight search modes. Export to Excel,
-              CSV or JSON.
-            </p>
-            <Link
-              to="/phytonet-ai"
-              data-testid="cta-plant-database"
-              className="mt-8 inline-flex items-center gap-2 rounded-full bg-[#0B0B18] px-6 py-3 text-sm font-semibold text-white transition-transform duration-200 hover:-translate-y-0.5 hover:bg-[#1E1E33]"
-            >
-              Open Plant Database
-              <ArrowUpRight className="h-4 w-4" />
             </Link>
           </div>
+
+          <ul className="mt-8 grid grid-cols-2 gap-3 text-[12.5px] font-semibold text-[#374151] sm:grid-cols-4">
+            {["Explainable AI", "Network Pharmacology", "Reproducible Science", "Commercial Friendly"].map((t) => (
+              <li key={t} className="inline-flex items-center gap-1.5">
+                <span className="grid h-4 w-4 place-items-center rounded-full bg-[#2BB673]/12 text-[#2BB673]">
+                  <Check className="h-2.5 w-2.5" strokeWidth={3.5} />
+                </span>
+                {t}
+              </li>
+            ))}
+          </ul>
         </div>
-      </section>
-    </main>
+
+        <div>
+          <HeroVisual />
+        </div>
+      </div>
+    </section>
   );
 }
 
-function PhytoNetAICard() {
+/* ─────────────────────────── STATS ─────────────────────────── */
+function AnimatedCounter({ end, suffix = "", duration = 1.8, format = (v) => Math.round(v).toLocaleString() }) {
+  const ref = useRef(null);
+  const inView = useInView(ref, { once: true, amount: 0.2 });
+  const [val, setVal] = useState(0);
+  useEffect(() => {
+    if (!inView) return;
+    const startTs = performance.now();
+    let raf;
+    const tick = (t) => {
+      const p = Math.min(1, (t - startTs) / (duration * 1000));
+      setVal(end * (1 - Math.pow(1 - p, 3)));
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [inView, end, duration]);
+  return <span ref={ref}>{format(val)}{suffix}</span>;
+}
+
+function Stats() {
+  const items = [
+    { label: "Medicinal Plants",       end: 12000,      suffix: "+", format: (v) => Math.round(v).toLocaleString() },
+    { label: "Natural Compounds",      end: 1.8,        suffix: "M+", format: (v) => v.toFixed(1) },
+    { label: "Target Associations",    end: 250,        suffix: "M+", format: (v) => Math.round(v).toLocaleString() },
+    { label: "Integrated Databases",   end: 400,        suffix: "+",  format: (v) => Math.round(v).toLocaleString() },
+  ];
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 24 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      transition={{ duration: 0.6 }}
-    >
-      <Link
-        to="/phytonet-ai"
-        data-testid="phytonet-ai-card"
-        className="group relative block overflow-hidden rounded-3xl border border-[#E7E7F3] bg-white p-8 shadow-[0_20px_60px_-30px_rgba(81,57,237,0.35)] transition-all duration-300 hover:-translate-y-1 hover:border-[#5139ED]/30 hover:shadow-[0_30px_80px_-30px_rgba(81,57,237,0.5)] md:p-12"
-      >
-        {/* Ambient orbs inside the card */}
-        <div
-          className="brand-orb"
-          style={{
-            background: "#5139ED",
-            width: 320,
-            height: 320,
-            top: -120,
-            left: -100,
-            opacity: 0.28,
-          }}
-        />
-        <div
-          className="brand-orb"
-          style={{
-            background: "#395AED",
-            width: 260,
-            height: 260,
-            bottom: -100,
-            right: -80,
-            opacity: 0.25,
-          }}
-        />
-        <div
-          className="brand-orb"
-          style={{
-            background: "#8139ED",
-            width: 220,
-            height: 220,
-            top: "45%",
-            right: "20%",
-            opacity: 0.14,
-          }}
-        />
+    <section data-testid="stats" className="border-y border-[#E7E7F3] bg-white/60 py-14 backdrop-blur-sm">
+      <div className="mx-auto grid max-w-7xl grid-cols-2 gap-8 px-6 md:grid-cols-4">
+        {items.map((s, i) => (
+          <motion.div key={s.label}
+            initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
+            transition={{ duration: 0.5, delay: i * 0.08 }}
+            className="text-center md:text-left"
+          >
+            <p className="font-headline text-[32px] tracking-tight text-[#111827] sm:text-[40px]">
+              <AnimatedCounter end={s.end} suffix={s.suffix} format={s.format} />
+            </p>
+            <p className="mt-1 text-[12px] font-semibold uppercase tracking-widest text-[#6B7280]">{s.label}</p>
+          </motion.div>
+        ))}
+      </div>
+    </section>
+  );
+}
 
-        <div className="relative grid gap-10 md:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] md:gap-14">
-          {/* Left: title, subtitle, description, CTA */}
-          <div className="flex min-w-0 flex-col justify-between">
-            <div>
-              <div
-                data-testid="phytonet-badge"
-                className="inline-flex items-center gap-2 rounded-full border border-[#5139ED]/20 bg-[#5139ED]/8 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-widest text-[#5139ED]"
-              >
-                <Sparkles className="h-3 w-3" />
-                End-to-end AI scientist
-              </div>
-              <h3
-                data-testid="phytonet-title"
-                className="mt-6 font-display text-4xl font-extrabold leading-[1.05] tracking-tight text-[#0B0B18] sm:text-5xl"
-              >
-                <span aria-hidden="true" className="mr-2">
-                  🧬
-                </span>
-                PhytoNet AI Scientist
-              </h3>
-              <p
-                data-testid="phytonet-subtitle"
-                className="mt-4 font-heading text-lg font-semibold text-[#1E1E33] sm:text-xl"
-              >
-                End-to-End AI Scientist for Medicinal Plant Network
-                Pharmacology
-              </p>
-              <p
-                data-testid="phytonet-description"
-                className="mt-5 max-w-xl text-[15px] leading-relaxed text-[#4B5563]"
-              >
-                PhytoNet AI performs the complete medicinal plant network
-                pharmacology workflow. It supports both public phytochemical
-                databases and experimentally identified LC-MS compounds, then
-                automatically executes toxicity prediction, drug-likeness
-                screening, target prediction, disease target analysis, network
-                construction, molecular docking, molecular dynamics simulation,
-                and AI report generation.
-              </p>
-            </div>
+/* ─────────────────────────── FEATURES ─────────────────────────── */
+const FEATURES = [
+  { icon: Beaker,       title: "Compound Extraction",         body: "Extract phytochemicals from IMPPAT, LOTUS & PubChem in parallel." },
+  { icon: Dna,          title: "Target Prediction",           body: "Predict protein targets via ligand similarity + bioactivity mining." },
+  { icon: Microscope,   title: "Disease Target Mining",       body: "Aggregate Open Targets, CTD, NCBI Gene & UniProt annotations." },
+  { icon: Network,      title: "Network Pharmacology",        body: "Auto-generate Plant-Compound-Target-Disease-Pathway networks." },
+  { icon: Layers,       title: "GO & KEGG Enrichment",        body: "g:Profiler + Enrichr KEGG_2021_Human with publication figures." },
+  { icon: Activity,     title: "Protein Interaction Networks",body: "Interactive STRING PPI with CytoHubba (10 hub-scoring metrics)." },
+  { icon: Atom,         title: "Molecular Docking",           body: "AutoDock Vina + Meeko + OpenBabel across compound×target grid." },
+  { icon: ShieldCheck,  title: "ADMET Prediction",            body: "Drug-likeness, ADME and toxicity scored with medicinal-chem rules." },
+  { icon: FileText,     title: "AI Report Writer",            body: "Claude-generated IMRAD manuscripts exported as MD/PDF/DOCX." },
+];
+function Features() {
+  return (
+    <section id="features" data-testid="features" className="relative py-24">
+      <div className="mx-auto max-w-7xl px-6">
+        <div className="max-w-2xl">
+          <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">Platform</p>
+          <h2 className="font-headline mt-3 text-[36px] leading-[1.08] tracking-tight text-[#111827] sm:text-[44px]">
+            Everything you need for AI-powered<br className="hidden md:block" /> network pharmacology
+          </h2>
+          <p className="mt-4 max-w-xl text-[15px] text-[#374151]">
+            Twelve first-class research modules — from phytochemical extraction to a Nature-style
+            graphical abstract — orchestrated by a single explainable AI scientist.
+          </p>
+        </div>
 
-            <div className="mt-10">
-              <span
-                data-testid="phytonet-launch-btn"
-                className="inline-flex items-center gap-2 rounded-full bg-[#5139ED] px-8 py-4 text-base font-semibold text-white shadow-[0_16px_40px_-16px_rgba(81,57,237,0.7)] transition-all duration-200 group-hover:-translate-y-0.5 group-hover:bg-[#4127c9]"
-              >
-                <Rocket className="h-4 w-4" />
-                <span aria-hidden="true">🚀</span> Launch PhytoNet AI
-                <ArrowUpRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+        <div className="mt-14 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {FEATURES.map((f, i) => (
+            <motion.div key={f.title}
+              initial={{ opacity: 0, y: 14 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
+              transition={{ duration: 0.45, delay: (i % 3) * 0.06 }}
+              className="group relative overflow-hidden rounded-3xl border border-[#E7E7F3] bg-white p-6 transition-all hover:-translate-y-1 hover:border-transparent hover:shadow-[0_20px_60px_-25px_rgba(81,57,237,0.4)]"
+            >
+              {/* Gradient border on hover */}
+              <span aria-hidden className="pointer-events-none absolute inset-0 -z-10 rounded-3xl bg-gradient-to-br from-[#5139ED] via-[#395AED] to-[#8139ED] opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+                    style={{ padding: 1, WebkitMask: "linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)", WebkitMaskComposite: "xor", maskComposite: "exclude" }} />
+              <span className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-[#5139ED]/10 via-[#395AED]/8 to-[#8139ED]/10 text-[#5139ED] transition-all group-hover:from-[#5139ED] group-hover:via-[#395AED] group-hover:to-[#8139ED] group-hover:text-white">
+                <f.icon className="h-5 w-5" strokeWidth={2.2} />
               </span>
-              <p className="mt-3 text-xs text-[#64748B]">
-                Click anywhere on this card to launch the pipeline.
-              </p>
+              <h3 className="font-headline mt-5 text-[17px] font-extrabold text-[#111827]">{f.title}</h3>
+              <p className="mt-2 text-[13.5px] leading-relaxed text-[#6B7280]">{f.body}</p>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────────────────── WORKFLOW TIMELINE ─────────────────────────── */
+const WORKFLOW = [
+  "Ask Research Question",
+  "Collect Plant Data",
+  "Predict Targets",
+  "Disease Intersection",
+  "PPI Network",
+  "GO / KEGG",
+  "Interpret Results",
+  "Generate Figures",
+  "Write Manuscript",
+];
+function WorkflowTimeline() {
+  return (
+    <section id="workflow" data-testid="workflow-timeline" className="relative bg-[#F8FAFC] py-24">
+      <div className="mx-auto max-w-7xl px-6">
+        <div className="flex flex-wrap items-end justify-between gap-6">
+          <div className="max-w-xl">
+            <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">The AI Scientist</p>
+            <h2 className="font-headline mt-3 text-[36px] leading-[1.08] tracking-tight text-[#111827] sm:text-[44px]">
+              A single AI orchestrates your entire workflow
+            </h2>
+          </div>
+          <p className="max-w-md text-[14px] text-[#374151]">
+            Every step is transparent, evidence-linked and reproducible. Data flows automatically from
+            each step to the next — no manual exports.
+          </p>
+        </div>
+
+        <div className="relative mt-14 overflow-x-auto">
+          <div className="absolute left-8 right-8 top-1/2 hidden h-px bg-gradient-to-r from-transparent via-[#5139ED]/30 to-transparent lg:block" />
+          <ol className="relative flex min-w-full gap-4 lg:justify-between">
+            {WORKFLOW.map((step, i) => (
+              <motion.li key={step}
+                initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
+                transition={{ delay: i * 0.06, duration: 0.4 }}
+                className="relative flex min-w-[140px] flex-col items-center text-center"
+              >
+                <span className="grid h-11 w-11 place-items-center rounded-full border border-[#E7E7F3] bg-white text-[13px] font-extrabold text-[#5139ED] shadow-[0_6px_20px_-8px_rgba(81,57,237,0.35)]">
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+                <span className="mt-3 max-w-[130px] text-[12.5px] font-semibold text-[#111827]">{step}</span>
+              </motion.li>
+            ))}
+          </ol>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────────────────── WHY PHYTONET ─────────────────────────── */
+function Why() {
+  const cards = [
+    { icon: Brain,      title: "Explainable AI",       body: "Every prediction ships with provenance, evidence and a linkable citation. No black boxes." },
+    { icon: GitBranch,  title: "Reproducible Science", body: "One-click snapshot every workflow. Autosaved sessions restore compound tables, docking scores and figures." },
+    { icon: Cpu,        title: "Integrated Platform",  body: "One canvas replaces a dozen tools — cheminformatics, PPI, docking, GROMACS, manuscript writing." },
+  ];
+  return (
+    <section id="why" data-testid="why" className="py-24">
+      <div className="mx-auto max-w-7xl px-6">
+        <div className="max-w-2xl">
+          <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">Why PhytoNet AI</p>
+          <h2 className="font-headline mt-3 text-[36px] leading-[1.08] tracking-tight text-[#111827] sm:text-[44px]">
+            Built for scientists who care about rigor
+          </h2>
+        </div>
+        <div className="mt-14 grid grid-cols-1 gap-6 md:grid-cols-3">
+          {cards.map((c, i) => (
+            <motion.div key={c.title}
+              initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
+              transition={{ delay: i * 0.1, duration: 0.5 }}
+              className="rounded-3xl border border-[#E7E7F3] bg-gradient-to-br from-white to-[#F8FAFC] p-8 shadow-[0_1px_2px_rgba(11,11,24,0.03)]"
+            >
+              <span className="grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br from-[#5139ED]/10 to-[#8139ED]/10 text-[#5139ED]">
+                <c.icon className="h-5 w-5" strokeWidth={2.4} />
+              </span>
+              <h3 className="font-headline mt-6 text-[20px] text-[#111827]">{c.title}</h3>
+              <p className="mt-3 text-[14px] leading-relaxed text-[#374151]">{c.body}</p>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────────────────── SCREENSHOT / DASHBOARD PREVIEW ─────────────────────────── */
+function ScreenshotSection() {
+  const floats = [
+    { top: "-6%",  left: "-4%",  label: "Compound",         value: "Curcumin",   pct: "MW 368.4", tone: "#5139ED" },
+    { top: "-6%",  right: "-4%", label: "Protein",          value: "AKT1",       pct: "★ 5.0",    tone: "#395AED" },
+    { top: "42%",  left: "-8%",  label: "Network",          value: "412 edges",  pct: "STRING 900", tone: "#8139ED" },
+    { top: "42%",  right: "-8%", label: "Enrichment",       value: "PI3K/AKT",   pct: "p 1e-17",  tone: "#2BB673" },
+    { bottom:"-6%",left: "-4%",  label: "Docking Score",    value: "−9.2 kcal",  pct: "Vina 1.2", tone: "#5139ED" },
+    { bottom:"-6%",right:"-4%",  label: "Graphical Abstract",value:"Ready",      pct: "Nature",   tone: "#8139ED" },
+  ];
+  return (
+    <section id="dashboard" data-testid="screenshot" className="relative overflow-hidden py-24">
+      <div aria-hidden className="brand-blur absolute left-1/4 top-10 h-[280px] w-[280px] bg-[#395AED]" />
+      <div className="mx-auto max-w-7xl px-6">
+        <div className="text-center">
+          <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">Dashboard</p>
+          <h2 className="font-headline mx-auto mt-3 max-w-3xl text-[36px] leading-[1.08] tracking-tight text-[#111827] sm:text-[44px]">
+            A single workspace for every insight
+          </h2>
+        </div>
+
+        <div className="relative mx-auto mt-16 max-w-[960px]">
+          {/* Browser mockup */}
+          <div className="relative overflow-hidden rounded-3xl border border-[#E7E7F3] bg-white shadow-[0_40px_80px_-30px_rgba(11,11,24,0.25)]">
+            <div className="flex items-center gap-2 border-b border-[#E7E7F3] bg-[#F8FAFC] px-4 py-3">
+              <span className="h-2.5 w-2.5 rounded-full bg-[#FF5F57]" />
+              <span className="h-2.5 w-2.5 rounded-full bg-[#FFBD2E]" />
+              <span className="h-2.5 w-2.5 rounded-full bg-[#28C840]" />
+              <div className="ml-4 flex-1">
+                <div className="mx-auto max-w-md rounded-full border border-[#E7E7F3] bg-white px-4 py-1 text-[11px] font-mono text-[#6B7280]">
+                  phytonet.ai / workspace / curcuma-longa × t2dm
+                </div>
+              </div>
+            </div>
+            <div className="relative aspect-[16/9] bg-white p-6">
+              {/* Fake dashboard content — pure SVG */}
+              <div className="grid h-full grid-cols-3 gap-4">
+                {["Compound × Target", "Hub Scoring", "KEGG Enrichment"].map((title, i) => (
+                  <div key={title} className="flex flex-col overflow-hidden rounded-2xl border border-[#E7E7F3]">
+                    <div className="border-b border-[#F1F1FA] bg-[#F8FAFC] px-3 py-2">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#6B7280]">{title}</p>
+                    </div>
+                    <div className="flex-1 p-3">
+                      {i === 0 && <MiniHeatmap />}
+                      {i === 1 && <MiniBars />}
+                      {i === 2 && <MiniBubbles />}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
-          {/* Right: workflow */}
-          <div
-            data-testid="phytonet-workflow"
-            className="relative flex flex-col rounded-2xl border border-[#F1F1FA] bg-white/70 p-6 backdrop-blur"
-          >
-            <p className="font-heading text-[10px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">
-              Pipeline
-            </p>
-            <ol className="mt-4 space-y-1.5">
-              {PIPELINE_STEPS.map((step, i) => (
-                <li
-                  key={step}
-                  data-testid={`phytonet-step-${i}`}
-                  className="flex items-center gap-3"
-                >
-                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-[#5139ED] via-[#395AED] to-[#8139ED] font-mono text-[10px] font-bold text-white shadow-[0_4px_10px_-4px_rgba(81,57,237,0.6)]">
-                    {String(i + 1).padStart(2, "0")}
-                  </span>
-                  <span className="flex-1 rounded-lg border border-[#F1F1FA] bg-white px-3 py-2 text-sm font-medium text-[#0B0B18]">
-                    {step}
-                  </span>
-                  {i < PIPELINE_STEPS.length - 1 && (
-                    <ChevronRight className="h-3 w-3 shrink-0 rotate-90 text-[#5139ED]/40" />
-                  )}
-                </li>
-              ))}
-            </ol>
+          {/* Floating UI cards */}
+          {floats.map((f) => (
+            <motion.div key={f.label}
+              initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
+              transition={{ duration: 0.5 }}
+              className="absolute z-10 hidden w-40 rounded-2xl border border-[#E7E7F3] bg-white/95 p-3 shadow-[0_18px_40px_-14px_rgba(11,11,24,0.25)] backdrop-blur md:block"
+              style={{ top: f.top, left: f.left, right: f.right, bottom: f.bottom }}
+            >
+              <div className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full" style={{ background: f.tone }} />
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#6B7280]">{f.label}</p>
+              </div>
+              <p className="mt-1 font-headline text-[15px] font-extrabold text-[#111827]">{f.value}</p>
+              <p className="text-[10px] text-[#6B7280]">{f.pct}</p>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+function MiniHeatmap() {
+  const cols = 8, rows = 5;
+  return (
+    <div className="grid h-full gap-0.5" style={{ gridTemplateColumns: `repeat(${cols},1fr)`, gridTemplateRows: `repeat(${rows},1fr)` }}>
+      {Array.from({ length: cols * rows }).map((_, i) => {
+        const v = (Math.sin(i * 1.3) + 1) / 2;
+        return <div key={i} className="rounded-[2px]" style={{ background: `rgba(81,57,237,${0.1 + v * 0.7})` }} />;
+      })}
+    </div>
+  );
+}
+function MiniBars() {
+  const heights = [55, 82, 68, 91, 48, 76, 60, 88];
+  return (
+    <div className="flex h-full items-end gap-1.5">
+      {heights.map((h, i) => (
+        <div key={i} className="flex-1 rounded-t bg-gradient-to-t from-[#5139ED] via-[#395AED] to-[#8139ED]" style={{ height: `${h}%` }} />
+      ))}
+    </div>
+  );
+}
+function MiniBubbles() {
+  const b = [
+    { x: 20, y: 60, r: 14, c: "#5139ED" }, { x: 45, y: 40, r: 22, c: "#8139ED" },
+    { x: 70, y: 55, r: 10, c: "#395AED" }, { x: 55, y: 75, r: 16, c: "#2BB673" },
+    { x: 30, y: 30, r: 8,  c: "#8139ED" },
+  ];
+  return (
+    <svg viewBox="0 0 100 100" className="h-full w-full">
+      {b.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r={p.r} fill={p.c} opacity="0.55" />)}
+    </svg>
+  );
+}
+
+/* ─────────────────────────── PLANT DATABASE PREVIEW ─────────────────────────── */
+const PLANTS = [
+  { name: "Ashwagandha",         latin: "Withania somnifera",    compounds: 342, targets: 1290, diseases: 45,  color: "#5139ED" },
+  { name: "Terminalia arjuna",   latin: "Terminalia arjuna",     compounds: 214, targets:  980, diseases: 32,  color: "#395AED" },
+  { name: "Tinospora cordifolia",latin: "Tinospora cordifolia",  compounds: 176, targets:  742, diseases: 28,  color: "#8139ED" },
+  { name: "Withania somnifera",  latin: "Withania somnifera",    compounds: 388, targets: 1410, diseases: 51,  color: "#2BB673" },
+  { name: "Lycopodium clavatum", latin: "Lycopodium clavatum",   compounds:  92, targets:  312, diseases: 18,  color: "#5139ED" },
+];
+function PlantPreview() {
+  return (
+    <section id="plant-preview" data-testid="plant-preview" className="relative bg-[#F8FAFC] py-24">
+      <div className="mx-auto max-w-7xl px-6">
+        <div className="mx-auto max-w-2xl text-center">
+          <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">Plant Database</p>
+          <h2 className="font-headline mt-3 text-[36px] leading-[1.08] tracking-tight text-[#111827] sm:text-[44px]">
+            17,000+ medicinal plants, one query away
+          </h2>
+        </div>
+
+        <div className="mx-auto mt-10 max-w-2xl">
+          <div className="flex items-center gap-2 rounded-full border border-[#E7E7F3] bg-white p-1.5 shadow-[0_6px_24px_-10px_rgba(11,11,24,0.1)]">
+            <div className="pl-3 text-[#9CA3AF]"><Search className="h-4 w-4" /></div>
+            <input
+              data-testid="plant-search-input" type="text" placeholder="Search medicinal plants…"
+              className="flex-1 border-none bg-transparent px-2 py-2 text-[14px] text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none"
+            />
+            <Link to="/phytonet-ai" data-testid="plant-search-go"
+                  className="inline-flex items-center gap-1 rounded-full bg-[#5139ED] px-4 py-2 text-[12px] font-bold text-white hover:bg-[#4127c9]">
+              Search<ArrowRight className="h-3.5 w-3.5" />
+            </Link>
           </div>
         </div>
-      </Link>
-    </motion.div>
+
+        <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          {PLANTS.map((p, i) => (
+            <motion.div key={p.name}
+              initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
+              transition={{ delay: i * 0.05, duration: 0.4 }}
+              className="group rounded-3xl border border-[#E7E7F3] bg-white p-5 transition-all hover:-translate-y-1 hover:shadow-[0_20px_50px_-20px_rgba(81,57,237,0.35)]"
+            >
+              <div className="grid h-24 place-items-center rounded-2xl" style={{ background: `linear-gradient(135deg, ${p.color}22, ${p.color}08)` }}>
+                <Leaf className="h-9 w-9" style={{ color: p.color }} strokeWidth={1.8} />
+              </div>
+              <h3 className="font-headline mt-4 text-[15px] text-[#111827]">{p.name}</h3>
+              <p className="mt-0.5 font-mono text-[10.5px] italic text-[#6B7280]">{p.latin}</p>
+              <div className="mt-4 grid grid-cols-3 gap-1 text-center">
+                {[{ v: p.compounds, l: "Cpd" }, { v: p.targets, l: "Tgt" }, { v: p.diseases, l: "Dis" }].map((s) => (
+                  <div key={s.l} className="rounded-lg bg-[#F8FAFC] py-1.5">
+                    <p className="font-headline text-[13px] font-extrabold text-[#111827]">{s.v}</p>
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-[#9CA3AF]">{s.l}</p>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────────────────── HOW IT WORKS ─────────────────────────── */
+function HowItWorks() {
+  const steps = [
+    { n: "01", title: "Choose a medicinal plant", body: "Pick from 17,000+ plants or upload your LC-MS data." },
+    { n: "02", title: "AI builds research workflow", body: "Explainable agents plan every downstream step." },
+    { n: "03", title: "Runs every analysis",         body: "Targets, disease intersection, PPI, enrichment, docking, MD." },
+    { n: "04", title: "Publication-ready outputs",   body: "Manuscript, graphical abstract, figures — all exportable." },
+  ];
+  return (
+    <section id="how" data-testid="how-it-works" className="relative overflow-hidden py-24">
+      <div aria-hidden className="brand-blur absolute right-0 top-40 h-[300px] w-[300px] bg-[#8139ED]" />
+      <div className="mx-auto max-w-7xl px-6">
+        <div className="mx-auto max-w-2xl text-center">
+          <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">How It Works</p>
+          <h2 className="font-headline mt-3 text-[36px] leading-[1.08] tracking-tight text-[#111827] sm:text-[44px]">
+            From plant to publication in four steps
+          </h2>
+        </div>
+        <div className="mt-14 grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+          {steps.map((s, i) => (
+            <motion.div key={s.n}
+              initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
+              transition={{ delay: i * 0.08, duration: 0.45 }}
+              className="rounded-3xl border border-[#E7E7F3] bg-white p-7"
+            >
+              <span className="font-headline text-[42px] font-extrabold text-transparent" style={{ WebkitTextStroke: "1.5px #5139ED" }}>{s.n}</span>
+              <h3 className="font-headline mt-4 text-[19px] text-[#111827]">{s.title}</h3>
+              <p className="mt-2 text-[13.5px] leading-relaxed text-[#6B7280]">{s.body}</p>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────────────────── TRUST ─────────────────────────── */
+function Trust() {
+  const groups = ["Academic Researchers", "Universities", "Drug Discovery Teams", "Biotech Startups"];
+  const logos = ["Aster", "Helix Bio", "MolLab", "Nord Sci", "Vertex Rx", "Prism", "Kepler", "Aurora"];
+  return (
+    <section data-testid="trust" className="border-y border-[#E7E7F3] bg-white py-14">
+      <div className="mx-auto max-w-7xl px-6 text-center">
+        <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-[#6B7280]">
+          Trusted by {groups.join(" · ")}
+        </p>
+        <div className="mt-8 grid grid-cols-2 items-center gap-6 sm:grid-cols-4 lg:grid-cols-8">
+          {logos.map((n) => (
+            <div key={n} className="opacity-60 grayscale transition-all hover:opacity-100 hover:grayscale-0">
+              <div className="font-headline text-[15px] font-extrabold tracking-tight text-[#374151]">
+                {n}<span className="text-[#5139ED]">.</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────────────────── TESTIMONIALS ─────────────────────────── */
+const TESTIMONIALS = [
+  { name: "Dr. Priya Menon",     inst: "IISc Bengaluru · Computational Biology", initials: "PM",
+    body: "PhytoNet AI collapsed a 4-week manual pipeline into one afternoon. The provenance trail alone is worth the switch." },
+  { name: "Prof. Marc Wallach",  inst: "ETH Zürich · Systems Pharmacology",      initials: "MW",
+    body: "Best AI-generated methods sections I've seen. Every claim is linked to a real dataset — that's rare." },
+  { name: "Dr. Yuki Tanaka",     inst: "Osaka Uni · Drug Discovery",             initials: "YT",
+    body: "The docking priority matrix combined with hub scoring is a genuinely new way to triage compounds." },
+];
+function Testimonials() {
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setIdx((v) => (v + 1) % TESTIMONIALS.length), 6000);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <section data-testid="testimonials" className="bg-[#F8FAFC] py-24">
+      <div className="mx-auto max-w-4xl px-6 text-center">
+        <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">Testimonials</p>
+        <h2 className="font-headline mt-3 text-[32px] leading-[1.08] tracking-tight text-[#111827] sm:text-[40px]">
+          Loved by working scientists
+        </h2>
+
+        <div className="relative mt-10 overflow-hidden">
+          <motion.div className="flex" animate={{ x: `${-idx * 100}%` }} transition={{ duration: 0.6, ease: "easeInOut" }}>
+            {TESTIMONIALS.map((t) => (
+              <div key={t.name} className="w-full shrink-0 px-2">
+                <div className="mx-auto max-w-2xl rounded-3xl border border-[#E7E7F3] bg-white p-9 text-left shadow-[0_20px_50px_-20px_rgba(11,11,24,0.15)]">
+                  <Quote className="h-6 w-6 text-[#5139ED]/40" />
+                  <p className="mt-4 text-[17px] leading-relaxed text-[#111827]">"{t.body}"</p>
+                  <div className="mt-6 flex items-center gap-3">
+                    <span className="grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-[#5139ED] to-[#8139ED] text-[13px] font-bold text-white">{t.initials}</span>
+                    <div>
+                      <p className="font-headline text-[13.5px] font-extrabold text-[#111827]">{t.name}</p>
+                      <p className="text-[11.5px] text-[#6B7280]">{t.inst}</p>
+                    </div>
+                    <div className="ml-auto flex text-[#F5B301]">{[0,1,2,3,4].map(i => <Star key={i} className="h-3.5 w-3.5 fill-current" />)}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </motion.div>
+          <div className="mt-6 flex justify-center gap-1.5">
+            {TESTIMONIALS.map((_, i) => (
+              <button key={i} onClick={() => setIdx(i)} aria-label={`Show testimonial ${i + 1}`}
+                      className={`h-1.5 rounded-full transition-all ${i === idx ? "w-8 bg-[#5139ED]" : "w-1.5 bg-[#D5D5E8]"}`} />
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────────────────── FAQ ─────────────────────────── */
+const FAQS = [
+  { q: "Is PhytoNet AI free to use?",
+    a: "Yes — the platform is publicly accessible for exploration. An account (free) is required only for saving projects and downloading exports." },
+  { q: "Which databases do you integrate?",
+    a: "IMPPAT, LOTUS, PubChem, ChEMBL, BindingDB, UniProt, Open Targets, CTD, NCBI Gene, STRING, KEGG, g:Profiler, and Enrichr — all queried live, no static snapshots." },
+  { q: "How is the AI explainable?",
+    a: "Every prediction ships with provenance: source database, evidence type, similarity metric or p-value. The AI Scientist Report cites methods and numbers directly." },
+  { q: "Can I run molecular dynamics on my HPC?",
+    a: "Yes. The MD module now generates environment-specific packages for local machines, SLURM HPC clusters, and cloud GPU instances (AWS/Azure/GCP/RunPod/Lambda specs)." },
+  { q: "Is my data private?",
+    a: "Yes. Project data is scoped to your account. We never share workflow_state, compound tables or manuscripts with third parties." },
+];
+function FAQ() {
+  const [open, setOpen] = useState(0);
+  return (
+    <section id="faq" data-testid="faq" className="py-24">
+      <div className="mx-auto max-w-3xl px-6">
+        <p className="font-body text-center text-[11px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">FAQ</p>
+        <h2 className="font-headline mt-3 text-center text-[32px] leading-[1.08] tracking-tight text-[#111827] sm:text-[40px]">
+          Frequently asked questions
+        </h2>
+        <div className="mt-10 space-y-3">
+          {FAQS.map((f, i) => (
+            <div key={f.q} className="overflow-hidden rounded-2xl border border-[#E7E7F3] bg-white">
+              <button
+                data-testid={`faq-${i}`}
+                onClick={() => setOpen(open === i ? -1 : i)}
+                aria-expanded={open === i}
+                className="flex w-full items-center justify-between gap-4 px-6 py-4 text-left"
+              >
+                <span className="font-headline text-[15px] font-extrabold text-[#111827]">{f.q}</span>
+                <ChevronDown className={`h-4 w-4 text-[#5139ED] transition-transform ${open === i ? "rotate-180" : ""}`} />
+              </button>
+              <motion.div
+                initial={false}
+                animate={{ height: open === i ? "auto" : 0, opacity: open === i ? 1 : 0 }}
+                className="overflow-hidden"
+              >
+                <p className="px-6 pb-5 text-[14px] leading-relaxed text-[#374151]">{f.a}</p>
+              </motion.div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────────────────── FINAL CTA ─────────────────────────── */
+function FinalCTA() {
+  return (
+    <section data-testid="final-cta" className="relative overflow-hidden py-24">
+      <div aria-hidden className="absolute inset-0 -z-10">
+        <div className="absolute inset-0 bg-gradient-to-br from-[#5139ED] via-[#395AED] to-[#8139ED]" />
+        <div className="absolute inset-0 opacity-30 dot-grid" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,0.3) 1px, transparent 1px)" }} />
+      </div>
+      <div className="mx-auto max-w-4xl px-6 text-center text-white">
+        <h2 className="font-headline text-[36px] leading-[1.06] tracking-tight sm:text-[52px]">
+          Ready to accelerate your research?
+        </h2>
+        <p className="mx-auto mt-4 max-w-xl text-[15px] text-white/85">
+          Start building AI-powered medicinal plant discoveries today. No credit card required.
+        </p>
+        <div className="mt-8 flex flex-wrap justify-center gap-3">
+          <Link data-testid="final-cta-start" to="/phytonet-ai"
+                className="inline-flex items-center gap-2 rounded-full bg-white px-6 py-3.5 text-[14px] font-extrabold text-[#5139ED] shadow-[0_20px_50px_-15px_rgba(0,0,0,0.4)] hover:-translate-y-0.5">
+            Start Research<ArrowRight className="h-4 w-4" />
+          </Link>
+          <a data-testid="final-cta-docs" href="#faq"
+             className="inline-flex items-center gap-2 rounded-full border border-white/40 bg-white/10 px-6 py-3.5 text-[14px] font-semibold text-white backdrop-blur hover:bg-white/20">
+            View Documentation
+          </a>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────────────────── PAGE ─────────────────────────── */
+export default function Home() {
+  useEffect(() => {
+    document.title = "PhytoNet AI | AI Scientist for Medicinal Plant Drug Discovery";
+    // meta description
+    let m = document.querySelector('meta[name="description"]');
+    if (!m) { m = document.createElement("meta"); m.setAttribute("name", "description"); document.head.appendChild(m); }
+    m.setAttribute("content",
+      "AI-powered medicinal plant research platform integrating network pharmacology, target prediction, cheminformatics, enrichment analysis, AI manuscript generation, graphical abstracts, and scientific workflows.");
+  }, []);
+
+  return (
+    <main data-testid="home-page" className="relative overflow-hidden bg-white">
+      <Hero />
+      <Stats />
+      <Features />
+      <WorkflowTimeline />
+      <Why />
+      <ScreenshotSection />
+      <PlantPreview />
+      <HowItWorks />
+      <Trust />
+      <Testimonials />
+      <FAQ />
+      <FinalCTA />
+    </main>
   );
 }

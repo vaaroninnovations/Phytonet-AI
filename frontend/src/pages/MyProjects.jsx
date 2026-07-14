@@ -15,7 +15,7 @@ const STEP_LABELS = Object.fromEntries(WORKFLOW_STEPS.map((s) => [s.id, s.label]
 const STEP_ROUTES = Object.fromEntries(WORKFLOW_STEPS.map((s) => [s.id, s.route]));
 
 export default function MyProjects() {
-  const { user, openModal } = useAuth();
+  const { user, loading: authLoading, openModal } = useAuth();
   const { list, load, rename, duplicate, remove, versions, restore } = useProject();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -27,10 +27,11 @@ export default function MyProjects() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    if (authLoading) return;           // wait for auth hydration
     if (!user) { openModal("signin"); return; }
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user, authLoading]);
 
   async function refresh() {
     setLoading(true); setError(null);
@@ -92,6 +93,15 @@ export default function MyProjects() {
       toast.error(e?.response?.data?.detail || e.message);
     }
   };
+
+  if (authLoading) {
+    return (
+      <main data-testid="projects-loading" className="mx-auto max-w-3xl px-6 py-24 text-center">
+        <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#5139ED]" />
+        <p className="mt-3 text-xs text-[#64748B]">Loading session…</p>
+      </main>
+    );
+  }
 
   if (!user) {
     return (
