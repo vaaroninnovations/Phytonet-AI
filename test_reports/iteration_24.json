@@ -1,0 +1,32 @@
+{
+  "summary": "Verified iteration 24: Vina is now a permanent Dockerfile-baked dependency with a proper startup dependency-check pattern (no runtime self-heal). All 7 required checks pass: (1) GET /api/deps/status returns ok=true, missing_required=[], vina.ok=true path=/bin/vina version='AutoDock Vina v1.2.3', obabel.ok=true version='Open Babel 3.1.0', rdkit.ok=true version='2026.03.3', meeko.ok=true version='0.7.1'; gmx and vina_py are false (OPTIONAL — expected). (2) VINA_EXECUTABLE env override works via deps_check._resolve_binary; grep confirms no hardcoded 'vina' subprocess arg in docking_service.py (uses deps_check.vina_path()). (3) /api/docking/run has 503 gating on missing_required intersection with {vina,obabel,rdkit,meeko} (server.py L1395-1406). (4) Startup log contains '[deps] Vina --help OK (v v1.2.3)'. (5) Real docking end-to-end (Aspirin/PTGS1, exhaustiveness=4) returned best_affinity=-6.517 kcal/mol with 3 poses, no ENOENT. (6) pytest regression 13/13 PASSED in 12.35s (test_docking_md.py::test_docking_run_aspirin_ptgs1 actually invokes Vina). (7) Dockerfile contains autodock-vina apt install, RUN vina --version build-time verify, ENV VINA_EXECUTABLE=/usr/bin/vina, HEALTHCHECK with shutil.which('vina'). No apt-get install strings in server.py.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/deps/status", "issue": "vina.path is reported as /bin/vina rather than /usr/bin/vina. This is because shutil.which() resolves it via /bin first (which is symlinked to /usr/bin on Debian). Functionally identical, but the ENV VINA_EXECUTABLE=/usr/bin/vina in the Dockerfile is NOT taking effect in the preview container because the backend was started before the Dockerfile ENV was applied (this preview env uses supervisor, not Docker). Not a defect — Dockerfile build will produce /usr/bin/vina in production."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_docking_md.py",
+    "/app/backend/tests/test_projects_and_engines.py",
+    "/app/backend/tests/test_auth.py",
+    "/app/test_reports/pytest/pytest_iter24.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "deps_check.py cleanly separates required vs optional deps and produces structured DEPS_STATUS. Good.",
+    "docking_service.py L360-368 correctly delegates to deps_check.vina_path() and returns a DockResult with error message instead of crashing when the binary is unresolvable. Good.",
+    "server.py docking_run L1395-1406 raises HTTPException(503) when missing_required intersects {vina,obabel,rdkit,meeko}. Verified via code inspection (did not break deps deliberately per test instructions).",
+    "Dockerfile correctly bakes autodock-vina + openbabel + gromacs and verifies with `vina --version` at build time. HEALTHCHECK uses shutil.which. Meets user directive.",
+    "Nit: The `/api/deps/status` object could additionally expose `vina --help OK` selftest boolean separately (currently the selftest may flip vina.ok to False on failure but success path is only logged). Not blocking."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "N/A (backend-only test cycle)"},
+  "test_credentials": "N/A — /api/deps/status and /api/docking/run are public per problem statement.",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 24 fully verified. Vina now baked into Dockerfile; runtime self-heal removed. /api/deps/status contract: {ok, missing_required, deps:{vina,obabel,gmx,rdkit,meeko,vina_py}}. Required deps: vina, obabel, rdkit, meeko (all ok in current env). Optional: gmx, vina_py. Real docking Aspirin/PTGS1 → best_affinity=-6.517, 3 poses. Note: /api/deps/status reports vina path as /bin/vina in the preview supervisor env (not Docker) — /bin is symlinked to /usr/bin on Debian, so it's functionally identical. In a real Docker deployment the ENV VINA_EXECUTABLE=/usr/bin/vina from Dockerfile will kick in and the path will be /usr/bin/vina.",
+  "rca of the issue": "N/A — this iteration is a verification pass. Root cause of previous ENOENT (missing autodock-vina package) is now permanently mitigated by baking `autodock-vina` into the Dockerfile with a build-time `vina --version` smoke test, a runtime HEALTHCHECK using shutil.which, a startup dependency probe (deps_check.check_all + selftest_vina), a graceful 503 response on /api/docking/run when required deps are missing, and a configurable VINA_EXECUTABLE env override for non-Docker deployments."
+}

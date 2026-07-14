@@ -358,8 +358,16 @@ async def dock_pair(job_dir: Path, receptor_pdbqt: Path, receptor_pdb: Path,
                           log_path="", job_id=job_dir.name, pair_id=pair_id, error=str(e))
     out_pdbqt = pair_dir / "out.pdbqt"
     log_path = pair_dir / "vina.log"
+    # Resolve the vina binary path from env / deps_check (never hardcoded)
+    try:
+        import deps_check
+        vina_bin = deps_check.vina_path()
+    except Exception as _e:
+        return DockResult(ligand["name"], ligand["smiles"], ligand["uniprot_id"], receptor_pdb.stem,
+                          best_affinity=0.0, poses=[], interactions={}, pose_pdbqt_path="",
+                          log_path="", job_id=job_dir.name, pair_id=pair_id, error=str(_e))
     cmd = [
-        "vina",
+        vina_bin,
         "--receptor", str(receptor_pdbqt),
         "--ligand", str(ligand_pdbqt),
         "--center_x", f"{box['center_x']:.3f}",

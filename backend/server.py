@@ -26,6 +26,7 @@ import md_service
 import execution_engines
 import report_service
 import projects_service
+import deps_check
 
 
 ROOT_DIR = Path(__file__).parent
@@ -1390,6 +1391,19 @@ async def docking_pdb_candidates(payload: DockPDBCandidatesRequest):
 
 @api_router.post("/docking/run")
 async def docking_run(payload: DockRunRequest):
+    # Fail fast with a clear message if the scientific tooling isn't installed.
+    missing = deps_check.get_missing_required()
+    blockers = [m for m in missing if m in {"vina", "obabel", "rdkit", "meeko"}]
+    if blockers:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                f"Docking service unavailable — missing required dependencies: "
+                f"{', '.join(blockers)}. Rebuild the backend image with "
+                f"`autodock-vina` + `openbabel` (see /app/Dockerfile) or set "
+                f"VINA_EXECUTABLE / OBABEL_EXECUTABLE to a valid path."
+            ),
+        )
     try:
         res = await docking_service.run_docking_batch(
             compounds=[c.model_dump() for c in payload.compounds],
@@ -1457,6 +1471,23 @@ class MDBuildRequest(BaseModel):
 @api_router.get("/md/engines")
 async def md_engines():
     return {"engines": execution_engines.list_engines()}
+
+
+@api_router.get("/deps/status")
+async def deps_status():
+    """Expose the startup dependency check result — used by ops + frontend
+    "system health" panels. Never raises."""
+    return {
+        "ok": len(deps_check.get_missing_required()) == 0,
+        "missing_required": deps_check.get_missing_required(),
+        "deps": {
+            k: {
+                "ok": s.ok, "required": s.required, "kind": s.kind,
+                "path": s.path, "version": s.version, "error": s.error,
+            }
+            for k, s in deps_check.DEPS_STATUS.items()
+        },
+    }
 
 
 @api_router.post("/md/estimate")
@@ -1621,22 +1652,25 @@ async def _startup():
     except Exception as e:
         logger.warning(f"Projects init failed (non-fatal): {e}")
 
-    # Self-heal: ensure the AutoDock Vina CLI binary is present so /api/docking/run
-    # doesn't fail with ENOENT after a container recycle.
+    # ── Scientific-tool dependency check (fails GRACEFULLY, never installs) ──
+    # AutoDock Vina, Open Babel, GROMACS, RDKit, Meeko must be baked into the
+    # image (see /app/Dockerfile). If missing we log a clear diagnostic; the
+    # docking / MD endpoints will return 503 with the same message instead of
+    # exploding mid-batch with ENOENT.
     try:
-        import shutil, subprocess
-        if not shutil.which("vina"):
-            logger.warning("autodock-vina CLI not found on PATH — attempting install")
-            r = subprocess.run(
-                ["apt-get", "install", "-y", "--no-install-recommends", "autodock-vina"],
-                capture_output=True, text=True, timeout=120,
+        import deps_check
+        deps_check.check_all()
+        deps_check.selftest_vina()
+        missing = deps_check.get_missing_required()
+        if missing:
+            logger.error(
+                "[startup] Backend booting with MISSING required scientific "
+                "dependencies: %s. Docking/MD endpoints will refuse requests "
+                "until the container image is rebuilt with these packages.",
+                ", ".join(missing),
             )
-            if shutil.which("vina"):
-                logger.info("autodock-vina installed successfully on startup")
-            else:
-                logger.error(f"autodock-vina install failed: {r.stderr[-400:]}")
     except Exception as e:
-        logger.warning(f"Vina self-heal skipped (non-fatal): {e}")
+        logger.warning(f"Dependency check failed (non-fatal): {e}")
 
 
 @app.on_event("shutdown")
