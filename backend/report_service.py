@@ -95,13 +95,33 @@ Return **only Markdown**, no code fences, no meta commentary.
 
 async def generate_report(workflow: Dict[str, Any],
                           model: str = "claude-sonnet-4-5-20250929") -> Dict[str, Any]:
+    prompt = _build_prompt(workflow)
+    session_id = uuid.uuid4().hex
+    # ── Try Groq first (fastest + cheapest scientific writer) ──────────────
+    try:
+        import llm_groq
+        if llm_groq.is_configured():
+            md = await llm_groq.scientific_writer(SYSTEM_PROMPT, prompt, temperature=0.3)
+            return {
+                "markdown": md.strip(),
+                "meta": {
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "model": f"groq/{os.environ.get('GROQ_MODEL', 'llama-3.3-70b-versatile')}",
+                    "plant": workflow.get("plant_name"),
+                    "disease": workflow.get("disease_name"),
+                    "session_id": session_id,
+                },
+            }
+    except Exception as e:
+        logger.warning(f"Groq scientific writer failed, falling back to Emergent: {e}")
+
+    # ── Fallback: Emergent LLM key (Claude Sonnet) ──────────────
     api_key = os.environ.get("EMERGENT_LLM_KEY")
     if not api_key:
-        return {"error": "EMERGENT_LLM_KEY not configured", "markdown": "", "meta": {}}
-    session_id = uuid.uuid4().hex
+        return {"error": "No LLM configured (set GROQ_API_KEY or EMERGENT_LLM_KEY)",
+                "markdown": "", "meta": {}}
     chat = LlmChat(api_key=api_key, session_id=session_id,
                    system_message=SYSTEM_PROMPT).with_model("anthropic", model)
-    prompt = _build_prompt(workflow)
     msg = UserMessage(text=prompt)
     try:
         response = await chat.send_message(msg)

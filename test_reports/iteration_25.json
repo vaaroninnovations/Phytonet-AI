@@ -1,0 +1,39 @@
+{
+  "summary": "Phase A production hardening (Groq LLM + Resend + PhytoNet AI Assistant + homepage) fully verified. Both backend and frontend passed. All 8 review-request checks are green: (1) /app/backend/.env has GROQ_API_KEY(gsk_…), GROQ_MODEL=llama-3.3-70b-versatile, EMAIL_PROVIDER=resend, SMTP_HOST=smtp.resend.com, SMTP_USERNAME=resend, SMTP_PASSWORD(re_…), EMAIL_FROM contains onboarding@resend.dev, GOOGLE_CLIENT_ID set. (2) llm_groq.is_configured()==True and report_service.generate_report(...) prefers Groq — verified end-to-end: meta.model == 'groq/llama-3.3-70b-versatile', 200-word markdown returned. (3) GET /api/assistant/eligibility: admin→{eligible:true,is_admin:true}, fresh user→{eligible:true,is_admin:false,free_used:false}, unauthenticated→401. (4) POST /api/assistant/run as admin returns 200 with id, status='running', current_stage='collect_phytochemicals', progress=0, plant_name, disease_name, user_id. (5) Free-tier gating verified: first POST=200, second POST=402 with detail containing 'Upgrade to run again'. (6) GET /api/assistant/status/{id} returns run state with stages array; invalid id → 400/404. (7) Frontend /ai-assistant page renders correctly in all 3 states — GUEST: assistant-signin + assistant-plant + assistant-disease; ADMIN: assistant-badge-admin 'Admin — unlimited Assistant runs' + assistant-start (Launch AI Assistant); FRESH USER W/ USED QUOTA: assistant-badge-used 'Free run used — Upgrade to run again' + disabled Launch button. Live progress card polls every 2.5s and populated to 80% within a few seconds during admin test. (8) Homepage has assistant-hero ('Meet the PhytoNet AI Assistant', 'Free One-Time Use' badge, Launch AI Assistant CTA → /ai-assistant) and assistant-compare (7 rows: Workflow, User Input, Customization, Report Generation, Figure Interpretation, Publication PDF, Intended Users). Header nav has 'AI Assistant' link. All 10 legacy routes return 200. Full regression: 83/83 pytest tests passed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/assistant/run pipeline", "issue": "Internal helpers (imppat_search_by_plant_name, chembl_targets_for_smiles, open_targets_for_disease, go_enrich_helper, kegg_enrich_helper) referenced from assistant_service._run_workflow do NOT exist in server.py. The try/except swallows the ImportError so the pipeline still succeeds, but n_compounds/n_targets/n_intersect are all 0. This means the Report stage generates on an EMPTY workflow payload — Groq still writes a manuscript, but with placeholder numbers only. Documented as acceptable per problem statement's agent-to-agent context note (ImportError is acceptable; only the report step is critical)."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_assistant.py",
+    "/app/test_reports/pytest/pytest_iter25.xml",
+    "/app/test_reports/pytest/pytest_iter25_full.xml"
+  ],
+  "action_items": [
+    "OPTIONAL (not blocking): Implement the real helpers referenced by assistant_service._run_workflow (imppat_search_by_plant_name, chembl_targets_for_smiles, open_targets_for_disease, go_enrich_helper, kegg_enrich_helper) so the pipeline produces real numbers instead of zeros. Currently every stage's `extra` reports 0 counts because the ImportError silently skips the work."
+  ],
+  "critical_code_review_comments": [
+    "assistant_service.py: Free-tier gate is idempotent and correct — sets users.assistant_free_used BEFORE background task so a crash still counts, matches the design intent.",
+    "assistant_service.py: 402 detail message contains 'Upgrade to run again' — matches frontend copy and eligibility badge.",
+    "assistant_service.py L52-67 _serialize correctly avoids exposing MongoDB _id — converts to string id.",
+    "assistant_service.py L108-196: All internal helper imports are wrapped in try/except so unknown helpers won't crash the pipeline, but this hides real bugs. Consider logging warnings so ops can spot missing helpers.",
+    "report_service.py L100-116: Groq-first + Emergent-fallback is clean; meta.model prefix distinguishes providers.",
+    "AIAssistant.jsx polling: uses 2.5s interval and clears on done/failed — good. However there's no max-timeout (if status stays 'running' forever, the poll runs indefinitely). Consider adding a max poll count / abort after N minutes.",
+    "AIAssistant.jsx line 61: after successful start, optimistically flips eligibility to used for non-admins — this is correct because the backend consumes the free tier immediately.",
+    "server.py L1597-1603: assistant router is mounted under /api/assistant via nested APIRouter — clean pattern.",
+    "Nit: /api/auth/register requires first_name + last_name (not `name`). Frontend & tests must send both fields. Documented for next agent."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_assistant.py (NEW — 14 test functions covering eligibility, admin unlimited runs, free-tier 402 gate, status endpoint, invalid-id handling, runs list, and regression)"
+  ],
+  "success_rate": {"backend": "100% (83/83 pytest, incl. 14 new assistant tests)", "frontend": "100% (guest/admin/used-quota states + homepage sections + header nav all pass)"},
+  "test_credentials": "Admin: admin@phytonet.ai / Admin123! (from /app/memory/test_credentials.md). Fresh users registered via /api/auth/register with fields email/password/first_name/last_name (NOT `name`).",
+  "seed_data_creation": "Test-prefixed users TEST_<uuid>@phytonet.ai created for free-tier gating tests. Assistant runs created in `assistant_runs` collection. No cleanup performed — safe test-only data.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 25 (Phase A): Groq (llama-3.3-70b-versatile) is wired as PRIMARY for report_service; Emergent Claude is fallback. Verified via direct call — meta.model returns 'groq/llama-3.3-70b-versatile'. Assistant endpoints under /api/assistant/ (run, status/{id}, eligibility, runs, report/{id}/{fmt}). Free-tier gate consumes assistant_free_used BEFORE running. Frontend /ai-assistant page uses data-testids: ai-assistant-page, assistant-plant, assistant-disease, assistant-signin (guest only), assistant-start (auth), assistant-badge-admin/free/used, assistant-progress, assistant-stage-{key}, assistant-done, assistant-dl-{md,html,pdf,docx}, assistant-preview. Homepage has assistant-hero and assistant-compare data-testids. Registration API requires first_name+last_name; NOT `name`. Google OAuth button is not wired yet (per problem statement — expected). Known caveat: assistant pipeline internal helpers don't exist in server.py, so intermediate stages produce zeros — this is intentionally caught by try/except and doesn't block the report stage.",
+  "rca of the issue": "No issues to RCA in this iteration. Every review-request check passed. The only observation is that the assistant pipeline's intermediate stages currently produce zero counts because helpers imppat_search_by_plant_name / chembl_targets_for_smiles / open_targets_for_disease / go_enrich_helper / kegg_enrich_helper are not defined in server.py. The problem statement explicitly says this is acceptable for MVP and 'the pipeline gracefully catches Exception and continues; only the report step is critical'. The report step is proven to work end-to-end with Groq."
+}

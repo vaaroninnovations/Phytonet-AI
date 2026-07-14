@@ -137,3 +137,16 @@ export const verifyEmailToken = (token) =>
 export const resendVerificationPublic = (email, password) =>
   api.post("/auth/resend-verification-public", { email, password }).then((r) => r.data);
 
+// ─────────────────────────── PhytoNet AI Assistant ─────────────────
+export const assistantEligibility = () =>
+  authApi.get("/assistant/eligibility").then((r) => r.data);
+export const assistantRun = (plant_name, disease_name, lcms_uploaded = false, lcms_compounds = null) =>
+  authApi.post("/assistant/run",
+    { plant_name, disease_name, lcms_uploaded, lcms_compounds }).then((r) => r.data);
+export const assistantStatus = (run_id) =>
+  authApi.get(`/assistant/status/${encodeURIComponent(run_id)}`).then((r) => r.data);
+export const assistantRuns = () =>
+  authApi.get("/assistant/runs").then((r) => r.data);
+export const assistantReportURL = (run_id, fmt) =>
+  `${BACKEND_URL}/api/assistant/report/${encodeURIComponent(run_id)}/${fmt}`;
+

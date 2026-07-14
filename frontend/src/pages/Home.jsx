@@ -441,6 +441,110 @@ function PlantPreview() {
   );
 }
 
+/* ─────────────────────────── AI ASSISTANT HERO ─────────────────────────── */
+function AssistantHero() {
+  return (
+    <section id="assistant" data-testid="assistant-hero" className="relative overflow-hidden py-24">
+      <div aria-hidden className="absolute inset-0 -z-10">
+        <div className="absolute inset-0 bg-gradient-to-br from-[#5139ED] via-[#395AED] to-[#8139ED]" />
+      </div>
+      <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-10 px-6 lg:grid-cols-2">
+        <div className="text-white">
+          <span className="inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1.5 text-[11px] font-bold uppercase tracking-widest text-white backdrop-blur">
+            <Sparkles className="h-3.5 w-3.5" /> New · One-Click Analysis
+          </span>
+          <h2 className="font-headline mt-4 text-[36px] leading-[1.05] tracking-tight sm:text-[48px]">
+            Meet the PhytoNet AI Assistant
+          </h2>
+          <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-white/90">
+            Skip the module-by-module workflow. Enter a plant and a disease — the Assistant runs the
+            entire pipeline (compounds → targets → PPI → enrichment → docking → manuscript) and delivers
+            a publication-ready PDF automatically.
+          </p>
+          <div className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#2BB673] px-3 py-1.5 text-[12px] font-extrabold text-white">
+            🎁 Free One-Time Use
+          </div>
+          <p className="mt-3 max-w-lg text-[12.5px] text-white/80">
+            Every registered user receives one complimentary Assistant run. Additional runs will be
+            enabled through subscription plans soon.
+          </p>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <Link data-testid="assistant-launch" to="/ai-assistant"
+                  className="inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 text-[14px] font-extrabold text-[#5139ED] shadow-[0_20px_50px_-15px_rgba(0,0,0,0.4)] hover:-translate-y-0.5">
+              Launch AI Assistant<ArrowRight className="h-4 w-4" />
+            </Link>
+            <a href="#assistant-compare" className="inline-flex items-center gap-2 rounded-full border border-white/40 bg-white/10 px-6 py-3 text-[14px] font-semibold text-white backdrop-blur hover:bg-white/20">
+              Compare with Agent
+            </a>
+          </div>
+        </div>
+        <div className="relative">
+          <div className="mx-auto max-w-md rounded-3xl border border-white/20 bg-white/10 p-6 backdrop-blur-xl">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-white/70">Input</p>
+            <div className="mt-3 space-y-2">
+              <div className="rounded-lg border border-white/25 bg-white/10 px-3 py-2 text-[12px] text-white">
+                Plant · <span className="font-mono">Withania somnifera</span>
+              </div>
+              <div className="rounded-lg border border-white/25 bg-white/10 px-3 py-2 text-[12px] text-white">
+                Disease · <span className="font-mono">Type 2 Diabetes</span>
+              </div>
+            </div>
+            <div className="my-4 border-t border-white/20" />
+            <p className="text-[10px] font-bold uppercase tracking-widest text-white/70">Auto-generated</p>
+            <ul className="mt-3 space-y-1.5 text-[12px] text-white">
+              {["Phytochemical extraction", "ADMET screening", "Target prediction", "Disease intersection",
+                "PPI + hub scoring", "GO / KEGG enrichment", "Publication manuscript"].map((t) => (
+                <li key={t} className="flex items-center gap-2">
+                  <Check className="h-3 w-3 text-[#2BB673]" strokeWidth={3.5} />{t}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────────────────── AGENT vs ASSISTANT ─────────────────────────── */
+function AgentVsAssistant() {
+  const rows = [
+    ["Workflow",             "Module-by-module",         "Fully automated"],
+    ["User Input",           "Multiple selections",      "Plant + Disease + LC-MS (optional)"],
+    ["Customization",        "Full manual control",      "Publication-ready defaults"],
+    ["Report Generation",    "Manual",                    "Automatic"],
+    ["Figure Interpretation","Optional",                  "Automatic"],
+    ["Publication PDF",      "Manual export",             "Generated automatically"],
+    ["Intended Users",       "Advanced researchers",     "Beginners, clinicians, rapid analysis"],
+  ];
+  return (
+    <section id="assistant-compare" data-testid="assistant-compare" className="py-24">
+      <div className="mx-auto max-w-5xl px-6">
+        <div className="mx-auto max-w-2xl text-center">
+          <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">Two ways to work</p>
+          <h2 className="font-headline mt-3 text-[32px] leading-[1.08] tracking-tight text-[#111827] sm:text-[40px]">
+            PhytoNet AI Agent vs Assistant
+          </h2>
+        </div>
+        <div className="mt-10 overflow-hidden rounded-3xl border border-[#E7E7F3] bg-white">
+          <div className="grid grid-cols-3 border-b border-[#E7E7F3] bg-[#FAFAFF]">
+            <div className="p-5 text-[11px] font-bold uppercase tracking-widest text-[#6B7280]">Feature</div>
+            <div className="p-5 text-[13px] font-extrabold text-[#0B0B18]">PhytoNet AI Agent</div>
+            <div className="p-5 text-[13px] font-extrabold text-[#5139ED]">PhytoNet AI Assistant</div>
+          </div>
+          {rows.map(([f, a, b]) => (
+            <div key={f} className="grid grid-cols-3 border-b border-[#F1F1FA] last:border-0">
+              <div className="p-5 text-[13px] font-semibold text-[#0B0B18]">{f}</div>
+              <div className="p-5 text-[13px] text-[#374151]">{a}</div>
+              <div className="p-5 text-[13px] font-semibold text-[#5139ED]">{b}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /* ─────────────────────────── HOW IT WORKS ─────────────────────────── */
 function HowItWorks() {
   const steps = [
@@ -648,6 +752,8 @@ export default function Home() {
   return (
     <main data-testid="home-page" className="relative overflow-hidden bg-white">
       <Hero />
+      <AssistantHero />
+      <AgentVsAssistant />
       <Stats />
       <Features />
       <WorkflowTimeline />

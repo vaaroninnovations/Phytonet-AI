@@ -12,6 +12,7 @@ import MolecularDynamics from "@/pages/MolecularDynamics";
 import AIScientificReport from "@/pages/AIScientificReport";
 import MyProjects from "@/pages/MyProjects";
 import VerifyEmail from "@/pages/VerifyEmail";
+import AIAssistant from "@/pages/AIAssistant";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import { SelectionProvider } from "@/context/SelectionContext";
@@ -55,6 +56,7 @@ function App() {
                       <Route path="/ai-scientific-report" element={<AIScientificReport />} />
                       <Route path="/projects" element={<MyProjects />} />
                       <Route path="/verify-email" element={<VerifyEmail />} />
+                      <Route path="/ai-assistant" element={<AIAssistant />} />
                       <Route path="/tool/:slug" element={<ComingSoon />} />
                     </Routes>
                     <SiteFooter />

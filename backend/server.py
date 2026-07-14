@@ -26,6 +26,7 @@ import md_service
 import execution_engines
 import report_service
 import projects_service
+import assistant_service
 import deps_check
 
 
@@ -1593,6 +1594,14 @@ api_router_projects = APIRouter(prefix="/api")
 api_router_projects.include_router(_projects_router)
 app.include_router(api_router_projects)
 
+# PhytoNet AI Assistant router (mounted under /api/assistant, auth-protected)
+_assistant_router = assistant_service.build_router(
+    db, get_current_user=auth_service.make_get_current_user(db)
+)
+api_router_assistant = APIRouter(prefix="/api")
+api_router_assistant.include_router(_assistant_router)
+app.include_router(api_router_assistant)
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
@@ -1651,6 +1660,12 @@ async def _startup():
         await projects_service.initialize(db)
     except Exception as e:
         logger.warning(f"Projects init failed (non-fatal): {e}")
+
+    # Initialize assistant indexes
+    try:
+        await assistant_service.initialize(db)
+    except Exception as e:
+        logger.warning(f"Assistant init failed (non-fatal): {e}")
 
     # ── Scientific-tool dependency check (fails GRACEFULLY, never installs) ──
     # AutoDock Vina, Open Babel, GROMACS, RDKit, Meeko must be baked into the
