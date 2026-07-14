@@ -167,11 +167,16 @@ fields; sortable/searchable/paginated results table; export CSV/XLSX/JSON.
 - **Backend `GoRequest`** model fixed to accept `significance_method` (silently ignored before iter-17). Backend pytest 5/5 pass (test_ppi_network, test_kegg_enrich, test_go_enrich_all_ontologies, test_go_enrich_has_fold_enrichment_gene_ratio_rich_factor, test_go_enrich_accepts_correction_and_threshold_params).
 
 ## Backlog / Next Actions
-- P2: Step 6 — Molecular Docking (AutoDock Vina)
-- P2: Step 7 — Molecular Dynamics (GROMACS)
-- P2: Step 8 — AI Scientific Report generation
-- P3: SaaS auth + billing tiers
-- Refactor (HIGH): `NetworkAnalysis.jsx` still contains ~500 lines of unused legacy GOPanel/KEGGPanel functions — dead code, safe to delete
-- Refactor: DrugLikeness.jsx (1772 lines) + TargetPrediction.jsx + DiseaseTargets.jsx → extract shared FilterCard / ResultsTable / AutoSelectCard / ProceedBar
-- Refactor: split `server.py` into `/app/backend/routes/*`, models into `/app/backend/models/*`
-- Optional: seed-via-URL bootstrap for /network-analysis so E2E tests can reach downstream panels without walking the full 5-step workflow
+- ✅ 2026-07-14 — P1: ChartStyleDrawer expansion — 5 themes (Light/Dark/Nature/Cell/B&W), per-chart overrides for 13 chart types, palette editor, grid/border/font/legend controls; wired into GO/KEGG bar+dot+lollipop charts.
+- ✅ 2026-07-14 — P2: DOCX report exports fixed & upgraded (title param, tables, inline bold/italic/code, blockquotes, numbered lists).
+- ✅ 2026-07-14 — Refactor: server.py 1755 → 1433 lines. Extracted `/app/backend/routes/{disease,network,docking,md,report}.py` using build_router() factory; 68/68 pytest passing, iteration_29.json all-green.
+
+- P2 (remaining): Extend ChartStyle wiring to Cytoscape networks (PPI/Hub/Compound-Target/PCTDP/Gene-Pathway) — currently only enrichment charts consume it. Requires patching each Cytoscape stylesheet builder to read useAppliedStyle.
+- P2: Add rate limiting (slowapi) + basic abuse protection (IP-based) on `/api/report/generate` and `/api/docking/run*`.
+- P3: Accessibility audit (a11y) and security audit per production readiness checklist (Msg 379).
+- P3: SaaS billing tier integration (Stripe) — gate deep computation behind paid plans.
+- Refactor: continue extracting plants / lotus / admet / target routes from `server.py` (still 1433 lines).
+
+**Manual (user-only) actions still pending:**
+- 🔴 Verify Google OAuth end-to-end by clicking "Continue with Google" on the live URL.
+- 🔴 Ship `/app/Dockerfile` via "Save to Github" so the deploy pipeline picks up AutoDock Vina.
