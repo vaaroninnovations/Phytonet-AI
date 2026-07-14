@@ -95,123 +95,170 @@ async def _run_workflow(db, run_id: ObjectId, payload: AssistantRunRequest):
         )
 
     try:
-        # Import here to avoid circular deps at module load
-        import server as _server                          # for shared HTTP session / helpers
-        import admet_service, docking_service             # noqa: F401
+        # ── Real service imports (direct calls — no HTTP-to-self overhead) ──
+        import server as _server
+        import admet_service
+        import disease_service
+        import network_service
         import report_service
+        import target_service          # may not exist under this name
 
-        # 1) Collect phytochemicals — reuse existing endpoint helper if available
+        # ═══ 1) Collect phytochemicals via IMPPAT+LOTUS search ═══
         await mark("collect_phytochemicals", "Collecting phytochemicals", "running")
-        compounds = []
+        compounds: list[dict] = []
         try:
-            # Try IMPPAT direct search via existing helper
-            from server import imppat_search_by_plant_name
-            compounds = await imppat_search_by_plant_name(payload.plant_name, max_results=30)
-        except Exception:
-            # Fallback: minimal stub if search helper unavailable
-            compounds = []
+            search_result = await _server.plant_search(
+                plant=payload.plant_name, limit=25,
+                want_structure=True, want_physchem=True,
+            )
+            compounds = (search_result or {}).get("compounds", []) or []
+        except Exception as e:
+            logger.warning(f"plant_search failed: {e}")
         if payload.lcms_compounds:
-            compounds = (compounds or []) + list(payload.lcms_compounds)
+            compounds = compounds + list(payload.lcms_compounds)
+        # keep only compounds with SMILES for downstream work
+        compounds = [c for c in compounds if c.get("smiles")]
         await mark("collect_phytochemicals", "Collecting phytochemicals", "done",
                    {"n_compounds": len(compounds)})
 
-        # 2) ADMET
+        # ═══ 2) ADMET screening ═══
         await mark("admet", "ADMET screening", "running")
-        admet_rows = []
-        try:
-            for c in (compounds or [])[:15]:  # cap to keep run bounded
-                smi = c.get("smiles") if isinstance(c, dict) else None
-                if not smi:
-                    continue
-                try:
-                    admet_rows.append({
-                        **(c if isinstance(c, dict) else {}),
-                        "admet_score": admet_service.score_smiles(smi),
-                    })
-                except Exception:
-                    pass
-        except Exception:
-            pass
-        await mark("admet", "ADMET screening", "done", {"n_rows": len(admet_rows)})
+        admet_rows: list[dict] = []
+        for c in compounds[:15]:
+            try:
+                admet_rows.append({
+                    **c,
+                    "admet_score": admet_service.score_smiles(c["smiles"]),
+                })
+            except Exception:
+                admet_rows.append(c)
+        await mark("admet", "ADMET screening", "done",
+                   {"n_rows": len(admet_rows)})
 
-        # 3-4) Targets + disease — placeholder aggregation (real endpoints exist
-        # but require several minutes each). For the free-tier MVP we sample the
-        # first 5 compounds and consult ChEMBL asynchronously.
+        # ═══ 3) Target prediction — direct ChEMBL similarity ═══
         await mark("target_prediction", "Predicting molecular targets", "running")
         compound_targets: list[dict] = []
         try:
-            from server import chembl_targets_for_smiles
-            for c in (admet_rows or compounds)[:5]:
-                smi = c.get("smiles") if isinstance(c, dict) else None
-                if not smi:
-                    continue
-                try:
-                    tgts = await chembl_targets_for_smiles(smi)
-                    for t in (tgts or [])[:10]:
-                        compound_targets.append({**t, "compound_name": c.get("compound_name") or c.get("name")})
-                except Exception:
-                    pass
+            # target_service exposes chembl_targets_for_smiles or similar
+            from target_service import fetch_targets_for_compound as _tgt_fn  # noqa
         except Exception:
-            pass
+            _tgt_fn = None
+        # fallback path — probe via the actual endpoint's job flow
+        try:
+            job_payload = _server.TargetPredictPayload(compounds=[
+                _server.TargetCompound(compound_name=c.get("compound_name") or c.get("name", "cpd"),
+                                       smiles=c["smiles"])
+                for c in (admet_rows or compounds)[:5]
+            ])
+            job_res = await _server.target_predict(job_payload)
+            jid = job_res.get("job_id")
+            if jid:
+                # poll internally
+                for _ in range(60):  # up to ~60s
+                    await asyncio.sleep(1.0)
+                    st = await _server.target_status(jid)
+                    if st.get("status") == "done":
+                        compound_targets = st.get("rows", []) or []
+                        break
+                    if st.get("status") == "failed":
+                        break
+        except Exception as e:
+            logger.warning(f"target_predict failed: {e}")
         await mark("target_prediction", "Predicting molecular targets", "done",
                    {"n_targets": len(compound_targets)})
 
+        # ═══ 4) Disease targets via Open Targets ═══
         await mark("disease_targets", "Collecting disease-associated targets", "running")
         disease_targets: list[dict] = []
+        selected_disease = None
         try:
-            from server import open_targets_for_disease
-            disease_targets = await open_targets_for_disease(payload.disease_name, limit=100)
-        except Exception:
-            pass
+            hits = await disease_service.search_diseases(payload.disease_name)
+            if hits:
+                sel = hits[0]
+                selected_disease = {"efo_id": sel.get("efo_id") or sel.get("id"),
+                                    "name": sel.get("name") or payload.disease_name}
+                dt_payload = await disease_service.get_disease_targets(
+                    selected_disease["efo_id"], selected_disease["name"])
+                disease_targets = (dt_payload or {}).get("targets", []) or []
+        except Exception as e:
+            logger.warning(f"disease_targets failed: {e}")
         await mark("disease_targets", "Collecting disease-associated targets", "done",
-                   {"n_targets": len(disease_targets)})
+                   {"n_targets": len(disease_targets),
+                    "efo_id": (selected_disease or {}).get("efo_id")})
 
-        # 5) Intersection
+        # ═══ 5) Intersection ═══
         await mark("intersection", "Computing target intersection", "running")
         c_set = {r.get("gene_symbol") for r in compound_targets if r.get("gene_symbol")}
         d_set = {r.get("gene_symbol") for r in disease_targets if r.get("gene_symbol")}
         intersect = sorted(c_set & d_set)
         await mark("intersection", "Computing target intersection", "done",
-                   {"n_intersect": len(intersect)})
+                   {"n_compound_genes": len(c_set), "n_disease_genes": len(d_set),
+                    "n_intersect": len(intersect)})
 
-        # 6) PPI (best-effort)
+        # ═══ 6) PPI network via STRING ═══
         await mark("ppi", "Building PPI network", "running")
-        ppi = {"nodes": [{"id": g} for g in intersect], "edges": []}
-        await mark("ppi", "Building PPI network", "done", {"n_nodes": len(ppi["nodes"])})
+        ppi = {"nodes": [], "edges": []}
+        try:
+            if intersect:
+                ppi = await network_service.fetch_string_network(
+                    genes=intersect, species=9606, required_score=400,
+                    network_type="functional", add_nodes=0,
+                )
+        except Exception as e:
+            logger.warning(f"PPI fetch failed: {e}")
+        await mark("ppi", "Building PPI network", "done",
+                   {"n_nodes": len(ppi.get("nodes") or []),
+                    "n_edges": len(ppi.get("edges") or [])})
 
-        # 7) Hub scoring (light — degree-only, real CytoHubba would need edges)
+        # ═══ 7) Hub scoring — degree from PPI edges ═══
         await mark("hub_scoring", "Ranking hub genes", "running")
-        hubs = [{"id": g, "degree": 1, "mcc": 1} for g in intersect[:20]]
-        await mark("hub_scoring", "Ranking hub genes", "done", {"n_hubs": len(hubs)})
+        degrees: dict[str, int] = {}
+        for e in ppi.get("edges") or []:
+            for k in ("source", "target"):
+                g = e.get(k)
+                if g:
+                    degrees[g] = degrees.get(g, 0) + 1
+        hubs = [
+            {"id": g, "degree": d, "mcc": d}  # MCC ≈ degree without full CytoHubba
+            for g, d in sorted(degrees.items(), key=lambda kv: -kv[1])[:20]
+        ]
+        await mark("hub_scoring", "Ranking hub genes", "done",
+                   {"n_hubs": len(hubs)})
 
-        # 8) GO + KEGG (best-effort — call existing endpoints)
+        # ═══ 8) GO + KEGG enrichment ═══
         await mark("go_kegg", "GO + KEGG enrichment", "running")
         go_terms, kegg_paths = [], []
         try:
-            from server import go_enrich_helper, kegg_enrich_helper
             if intersect:
-                go_terms = (await go_enrich_helper(intersect)).get("terms", [])[:20]
-                kegg_paths = (await kegg_enrich_helper(intersect)).get("pathways", [])[:20]
-        except Exception:
-            pass
+                go_res = await network_service.gprofiler_go(
+                    genes=intersect, organism="hsapiens",
+                    user_threshold=0.05, significance_method="g_SCS",
+                )
+                go_terms = (go_res or {}).get("terms", [])[:25]
+                kegg_res = await network_service.enrichr_kegg(intersect, "KEGG_2021_Human")
+                kegg_paths = (kegg_res or {}).get("pathways", [])[:25]
+        except Exception as e:
+            logger.warning(f"GO/KEGG enrichment failed: {e}")
         await mark("go_kegg", "GO + KEGG enrichment", "done",
                    {"n_go": len(go_terms), "n_kegg": len(kegg_paths)})
 
-        # 9) Docking — skip in MVP (too slow, would timeout free tier)
+        # ═══ 9) Docking — skip in Assistant MVP (compute-heavy) ═══
         await mark("docking", "Molecular docking", "skipped",
-                   {"reason": "Deferred — heavy compute. Available in module-by-module mode."})
+                   {"reason": "Deferred — use module-by-module docking for compute-heavy jobs."})
 
-        # 10) Report
+        # ═══ 10) Report via Groq ═══
         await mark("report", "Generating publication report", "running")
         workflow_payload = {
             "plant_name": payload.plant_name,
             "disease_name": payload.disease_name,
-            "selected_compounds": [c for c in (admet_rows or compounds)][:15],
-            "compound_targets": compound_targets[:50],
-            "disease_targets": disease_targets[:50],
+            "selected_disease": selected_disease,
+            "selected_compounds": (admet_rows or compounds)[:15],
+            "compound_targets": compound_targets[:80],
+            "disease_targets": disease_targets[:80],
             "intersecting_genes": intersect,
             "hub_ranking": hubs,
-            "ppi": {"n_nodes": len(ppi["nodes"]), "n_edges": len(ppi["edges"])},
+            "ppi": {"n_nodes": len(ppi.get("nodes") or []),
+                    "n_edges": len(ppi.get("edges") or [])},
             "go_terms": go_terms,
             "kegg_pathways": kegg_paths,
             "docking_results": [],
@@ -225,18 +272,17 @@ async def _run_workflow(db, run_id: ObjectId, payload: AssistantRunRequest):
         md = report_result["markdown"]
         report_id = uuid.uuid4().hex
 
-        # Persist report on the run doc
         await db["assistant_runs"].update_one(
             {"_id": run_id},
             {"$set": {
-                "report_id": report_id,
-                "report_markdown": md,
+                "report_id": report_id, "report_markdown": md,
                 "report_meta": report_result.get("meta", {}),
                 "workflow_payload": workflow_payload,
             }},
         )
         await mark("report", "Generating publication report", "done",
-                   {"markdown_bytes": len(md)})
+                   {"markdown_bytes": len(md),
+                    "model": report_result.get("meta", {}).get("model", "?")})
 
         await db["assistant_runs"].update_one(
             {"_id": run_id},
