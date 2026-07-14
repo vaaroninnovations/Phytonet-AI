@@ -101,7 +101,6 @@ async def _run_workflow(db, run_id: ObjectId, payload: AssistantRunRequest):
         import disease_service
         import network_service
         import report_service
-        import target_service          # may not exist under this name
 
         # ═══ 1) Collect phytochemicals via IMPPAT+LOTUS search ═══
         await mark("collect_phytochemicals", "Collecting phytochemicals", "running")
@@ -124,43 +123,49 @@ async def _run_workflow(db, run_id: ObjectId, payload: AssistantRunRequest):
         # ═══ 2) ADMET screening ═══
         await mark("admet", "ADMET screening", "running")
         admet_rows: list[dict] = []
-        for c in compounds[:15]:
-            try:
-                admet_rows.append({
-                    **c,
-                    "admet_score": admet_service.score_smiles(c["smiles"]),
-                })
-            except Exception:
-                admet_rows.append(c)
+        picks = compounds[:15]
+        try:
+            preds = await admet_service.predict_batch([c["smiles"] for c in picks])
+        except Exception as e:
+            logger.warning(f"admet predict_batch failed: {e}")
+            preds = [{} for _ in picks]
+        for c, p in zip(picks, preds or []):
+            admet_rows.append({**c, "admet": p or {}})
+        # Sort compounds by drug-likeness proxy (MW closer to 400, logP closer to 3)
+        # so top-15 chosen for target prediction are more likely to hit ChEMBL.
+        def _drug_score(row):
+            a = row.get("admet") or {}
+            mw = a.get("molecular_weight") or row.get("mw") or 400
+            lp = a.get("logp") or row.get("logp") or 3
+            return -(abs(mw - 400) * 0.5 + abs(lp - 3) * 20)
+        admet_rows.sort(key=_drug_score, reverse=True)
         await mark("admet", "ADMET screening", "done",
                    {"n_rows": len(admet_rows)})
 
-        # ═══ 3) Target prediction — direct ChEMBL similarity ═══
+        # ═══ 3) Target prediction — via ChEMBL similarity ═══
+        # Send top-15 drug-like compounds (sorted above) to maximise the chance
+        # of hitting real ChEMBL bioactivities (monoterpenes rarely match).
         await mark("target_prediction", "Predicting molecular targets", "running")
         compound_targets: list[dict] = []
         try:
-            # target_service exposes chembl_targets_for_smiles or similar
-            from target_service import fetch_targets_for_compound as _tgt_fn  # noqa
-        except Exception:
-            _tgt_fn = None
-        # fallback path — probe via the actual endpoint's job flow
-        try:
+            picks_for_targets = (admet_rows or compounds)[:15]
             job_payload = _server.TargetPredictPayload(compounds=[
                 _server.TargetCompound(compound_name=c.get("compound_name") or c.get("name", "cpd"),
                                        smiles=c["smiles"])
-                for c in (admet_rows or compounds)[:5]
+                for c in picks_for_targets if c.get("smiles")
             ])
             job_res = await _server.target_predict(job_payload)
             jid = job_res.get("job_id")
             if jid:
-                # poll internally
-                for _ in range(60):  # up to ~60s
+                # poll up to ~180s to accommodate slow ChEMBL responses
+                for _ in range(180):
                     await asyncio.sleep(1.0)
                     st = await _server.target_status(jid)
                     if st.get("status") == "done":
                         compound_targets = st.get("rows", []) or []
                         break
                     if st.get("status") == "failed":
+                        logger.warning(f"target_predict job failed: {st.get('error')}")
                         break
         except Exception as e:
             logger.warning(f"target_predict failed: {e}")

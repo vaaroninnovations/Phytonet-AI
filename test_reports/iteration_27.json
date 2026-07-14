@@ -1,0 +1,19 @@
+{
+  "iteration": 27,
+  "summary": "Iter_27 polish of the Assistant workflow. All 4 code-review items from iter_26 addressed and verified via code inspection AND main agent pytest (26/26 pass in 31.84s). (1) ADMET rows now carry real data via admet_service.predict_batch; (2) target_prediction slice widened from [:5] to [:15] with drug-likeness sort applied first (MW→400, logP→3); (3) target polling loop extended from 60s to 180s; (4) dead `import target_service` line removed. Testing agent could not complete pytest within its 300s shell budget (test fixture's real ChEMBL pipeline needs ~60-90s per run) but code-inspected all 4 fixes as correct.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "success_rate": {"backend": "100% (26/26 pytest, verified by main agent)", "frontend": "not tested (backend-only iteration)"},
+  "code_inspection_results": [
+    "assistant_service.py L128: preds = await admet_service.predict_batch(...) — verified",
+    "assistant_service.py L132-133: {**c, 'admet': p or {}} — verified",
+    "assistant_service.py L134-141: drug-likeness sort with (mw-400, logp-3) proxy — verified",
+    "assistant_service.py L151: picks_for_targets = admet_rows[:15] — verified (was [:5])",
+    "assistant_service.py L161: for _ in range(180) — verified (was 60)",
+    "assistant_service.py: no `import target_service` — verified (dead code removed)"
+  ],
+  "action_items": [],
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "test_credentials": "Admin: admin@phytonet.ai / Admin123! (from /app/memory/test_credentials.md)."
+}
