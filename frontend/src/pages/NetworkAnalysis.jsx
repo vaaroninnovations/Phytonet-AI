@@ -19,6 +19,7 @@ import jsPDF from "jspdf";
 import UTIF from "utif";
 import CytoscapeComponent from "react-cytoscapejs";
 import "@/lib/cytoscapeSetup";
+import { useAppliedStyle } from "@/context/ChartStyleContext";
 import { GOPanel as NewGOPanel } from "@/components/network/GOPanel";
 import { KEGGPanel as NewKEGGPanel } from "@/components/network/KEGGPanel";
 import { PCTDPPanel } from "@/components/network/PCTDPPanel";
@@ -1651,6 +1652,7 @@ function GOPanel({ genes, onComplete }) {
 }
 
 function GOBarChart({ terms }) {
+  const s = useAppliedStyle("go");
   const w = 780;
   const rowH = 26;
   const h = Math.max(120, terms.length * rowH + 60);
@@ -1658,22 +1660,27 @@ function GOBarChart({ terms }) {
   const maxLog = Math.max(1, ...terms.map((t) => -Math.log10(Math.max(t.p_value || 1, 1e-30))));
   const barMax = w - labelW - 60;
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} className="mt-3">
-      <rect x="0" y="0" width={w} height={h} fill="#FFFFFF" />
+    <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} className="mt-3"
+         style={{ fontFamily: s.fontFamily, borderRadius: s.borderRadius, border: s.showBorder ? `1px solid ${s.borderColor}` : "none" }}>
+      <rect x="0" y="0" width={w} height={h} fill={s.background} />
+      {s.showGrid && [0.25, 0.5, 0.75, 1].map((f, i) => (
+        <line key={i} x1={labelW + f * barMax} x2={labelW + f * barMax} y1={20} y2={h - 40}
+              stroke={s.grid} strokeWidth="0.5" />
+      ))}
       {terms.map((t, i) => {
         const y = 30 + i * rowH;
         const logp = -Math.log10(Math.max(t.p_value || 1, 1e-30));
         const bw = (logp / maxLog) * barMax;
         const label = t.name.length > 34 ? t.name.slice(0, 32) + "…" : t.name;
         return (
-          <g key={t.native}>
+          <g key={t.native} opacity={s.opacity}>
             <text
               x={labelW - 8}
               y={y + rowH / 2 + 3}
               textAnchor="end"
-              fontSize="11"
-              fill="#0B0B18"
-              fontFamily="Inter"
+              fontSize={s.labelSize}
+              fill={s.labelColor}
+              fontFamily={s.fontFamily}
             >
               {label}
             </text>
@@ -1683,22 +1690,23 @@ function GOBarChart({ terms }) {
               width={bw}
               height={rowH - 8}
               rx={3}
-              fill="#5139ED"
-              fillOpacity="0.75"
+              fill={s.palette[i % s.palette.length]}
+              fillOpacity="0.85"
             />
             <text
               x={labelW + bw + 6}
               y={y + rowH / 2 + 3}
-              fontSize="10"
-              fill="#64748B"
-              fontFamily="Inter"
+              fontSize={Math.max(9, s.labelSize - 2)}
+              fill={s.labelColor}
+              opacity="0.7"
+              fontFamily={s.fontFamily}
             >
               {logp.toFixed(2)}
             </text>
           </g>
         );
       })}
-      <text x={labelW + barMax / 2} y={h - 12} textAnchor="middle" fontSize="11" fill="#64748B">
+      <text x={labelW + barMax / 2} y={h - 12} textAnchor="middle" fontSize={Math.max(10, s.labelSize - 1)} fill={s.labelColor} opacity="0.7" fontFamily={s.fontFamily}>
         −log10(P-value)
       </text>
     </svg>
@@ -1706,6 +1714,7 @@ function GOBarChart({ terms }) {
 }
 
 function GODotPlot({ terms }) {
+  const s = useAppliedStyle("go");
   const w = 780;
   const rowH = 26;
   const h = Math.max(180, terms.length * rowH + 60);
@@ -1715,50 +1724,48 @@ function GODotPlot({ terms }) {
   const maxLog = Math.max(1, ...terms.map((t) => -Math.log10(Math.max(t.p_value || 1, 1e-30))));
   const maxIS = Math.max(1, ...terms.map((t) => t.intersection_size || 0));
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} className="mt-3">
-      <rect x="0" y="0" width={w} height={h} fill="#FFFFFF" />
-      {/* X-axis grid */}
-      {[0.25, 0.5, 0.75, 1].map((f, i) => (
+    <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} className="mt-3"
+         style={{ fontFamily: s.fontFamily, borderRadius: s.borderRadius, border: s.showBorder ? `1px solid ${s.borderColor}` : "none" }}>
+      <rect x="0" y="0" width={w} height={h} fill={s.background} />
+      {s.showGrid && [0.25, 0.5, 0.75, 1].map((f, i) => (
         <line
           key={i}
           x1={plotL + f * plotW}
           x2={plotL + f * plotW}
           y1={20}
           y2={h - 40}
-          stroke="#F1F1FA"
-          strokeWidth="1"
+          stroke={s.grid}
+          strokeWidth="0.5"
         />
       ))}
       {terms.map((t, i) => {
         const y = 30 + i * rowH;
         const logp = -Math.log10(Math.max(t.p_value || 1, 1e-30));
         const x = plotL + (logp / maxLog) * plotW;
-        const r = 4 + ((t.intersection_size || 0) / maxIS) * 12;
-        const ratio = t.precision || 0;
+        const r = (4 + ((t.intersection_size || 0) / maxIS) * 12) * s.nodeSize;
         const label = t.name.length > 34 ? t.name.slice(0, 32) + "…" : t.name;
-        // Colour by gene ratio (precision): low = light blue, high = deep purple
-        const colour = `hsl(${260 - ratio * 40}, 70%, ${55 - ratio * 20}%)`;
+        const colour = s.palette[i % s.palette.length];
         return (
-          <g key={t.native}>
+          <g key={t.native} opacity={s.opacity}>
             <text
               x={labelW - 8}
               y={y + 4}
               textAnchor="end"
-              fontSize="11"
-              fill="#0B0B18"
-              fontFamily="Inter"
+              fontSize={s.labelSize}
+              fill={s.labelColor}
+              fontFamily={s.fontFamily}
             >
               {label}
             </text>
             <circle cx={x} cy={y} r={r} fill={colour} fillOpacity="0.85" stroke={colour} strokeWidth="1" />
-            <text x={x + r + 4} y={y + 3} fontSize="9" fill="#64748B">
+            <text x={x + r + 4} y={y + 3} fontSize={Math.max(9, s.labelSize - 3)} fill={s.labelColor} opacity="0.7" fontFamily={s.fontFamily}>
               {t.intersection_size}
             </text>
           </g>
         );
       })}
-      <text x={plotL + plotW / 2} y={h - 12} textAnchor="middle" fontSize="11" fill="#64748B">
-        −log10(P) · dot size ∝ overlap · colour ∝ gene ratio
+      <text x={plotL + plotW / 2} y={h - 12} textAnchor="middle" fontSize={Math.max(10, s.labelSize - 1)} fill={s.labelColor} opacity="0.7" fontFamily={s.fontFamily}>
+        −log10(P) · dot size ∝ overlap · colour ∝ term index
       </text>
     </svg>
   );
@@ -2153,6 +2160,7 @@ function KeggPanel({ genes, keggResult, setKeggResult, onComplete }) {
 
 // ────────────────────── KEGG additional plots ─────────────────────
 function KEGGDotPlot({ rows }) {
+  const s = useAppliedStyle("kegg");
   const w = 780;
   const rowH = 28;
   const h = Math.max(180, rows.length * rowH + 60);
@@ -2163,42 +2171,33 @@ function KEGGDotPlot({ rows }) {
   const maxCount = Math.max(1, ...rows.map((r) => r.gene_count || 0));
 
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} className="mt-3">
-      <rect x="0" y="0" width={w} height={h} fill="#FFFFFF" />
-      {[0.25, 0.5, 0.75, 1].map((f, i) => (
-        <line
-          key={i}
-          x1={plotL + f * plotW}
-          x2={plotL + f * plotW}
-          y1={20}
-          y2={h - 40}
-          stroke="#F1F1FA"
-          strokeWidth="1"
-        />
+    <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} className="mt-3"
+         style={{ fontFamily: s.fontFamily, borderRadius: s.borderRadius, border: s.showBorder ? `1px solid ${s.borderColor}` : "none" }}>
+      <rect x="0" y="0" width={w} height={h} fill={s.background} />
+      {s.showGrid && [0.25, 0.5, 0.75, 1].map((f, i) => (
+        <line key={i} x1={plotL + f * plotW} x2={plotL + f * plotW} y1={20} y2={h - 40}
+              stroke={s.grid} strokeWidth="0.5" />
       ))}
       {rows.map((r, i) => {
         const y = 30 + i * rowH;
         const logp = -Math.log10(Math.max(r.p_value || 1, 1e-30));
         const x = plotL + (logp / maxLog) * plotW;
-        const dot = 4 + ((r.gene_count || 0) / maxCount) * 12;
-        const ratio = r.overlap_genes?.length && r.gene_count
-          ? (r.gene_count || 0) / Math.max(1, r.overlap_genes.length + r.gene_count)
-          : 0.5;
-        const colour = `hsl(${260 - ratio * 40}, 70%, ${55 - ratio * 15}%)`;
+        const dot = (4 + ((r.gene_count || 0) / maxCount) * 12) * s.nodeSize;
+        const colour = s.palette[i % s.palette.length];
         const label = r.term.length > 40 ? r.term.slice(0, 38) + "…" : r.term;
         return (
-          <g key={r.term}>
-            <text x={labelW - 8} y={y + 4} textAnchor="end" fontSize="11" fill="#0B0B18" fontFamily="Inter">
+          <g key={r.term} opacity={s.opacity}>
+            <text x={labelW - 8} y={y + 4} textAnchor="end" fontSize={s.labelSize} fill={s.labelColor} fontFamily={s.fontFamily}>
               {label}
             </text>
             <circle cx={x} cy={y} r={dot} fill={colour} fillOpacity="0.85" stroke={colour} strokeWidth="1" />
-            <text x={x + dot + 4} y={y + 3} fontSize="9" fill="#64748B">
+            <text x={x + dot + 4} y={y + 3} fontSize={Math.max(9, s.labelSize - 3)} fill={s.labelColor} opacity="0.7" fontFamily={s.fontFamily}>
               {r.gene_count}
             </text>
           </g>
         );
       })}
-      <text x={plotL + plotW / 2} y={h - 12} textAnchor="middle" fontSize="11" fill="#64748B">
+      <text x={plotL + plotW / 2} y={h - 12} textAnchor="middle" fontSize={Math.max(10, s.labelSize - 1)} fill={s.labelColor} opacity="0.7" fontFamily={s.fontFamily}>
         −log10(P-value) · dot size ∝ overlap
       </text>
     </svg>
@@ -2206,6 +2205,7 @@ function KEGGDotPlot({ rows }) {
 }
 
 function KEGGLollipopChart({ rows }) {
+  const s = useAppliedStyle("lollipop");
   const w = 780;
   const rowH = 28;
   const h = Math.max(180, rows.length * rowH + 60);
@@ -2214,35 +2214,32 @@ function KEGGLollipopChart({ rows }) {
   const plotW = w - plotL - 60;
   const maxScore = Math.max(1, ...rows.map((r) => r.combined_score || 0));
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} className="mt-3">
-      <rect x="0" y="0" width={w} height={h} fill="#FFFFFF" />
-      <line x1={plotL} x2={plotL} y1={20} y2={h - 40} stroke="#E7E7F3" strokeWidth="1" />
+    <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} className="mt-3"
+         style={{ fontFamily: s.fontFamily, borderRadius: s.borderRadius, border: s.showBorder ? `1px solid ${s.borderColor}` : "none" }}>
+      <rect x="0" y="0" width={w} height={h} fill={s.background} />
+      {s.showGrid && <line x1={plotL} x2={plotL} y1={20} y2={h - 40} stroke={s.grid} strokeWidth="1" />}
       {rows.map((r, i) => {
         const y = 30 + i * rowH;
         const bw = ((r.combined_score || 0) / maxScore) * plotW;
         const label = r.term.length > 40 ? r.term.slice(0, 38) + "…" : r.term;
+        const c = s.palette[i % s.palette.length];
         return (
-          <g key={r.term}>
-            <text x={labelW - 8} y={y + 4} textAnchor="end" fontSize="11" fill="#0B0B18" fontFamily="Inter">
+          <g key={r.term} opacity={s.opacity}>
+            <text x={labelW - 8} y={y + 4} textAnchor="end" fontSize={s.labelSize} fill={s.labelColor} fontFamily={s.fontFamily}>
               {label}
             </text>
             <line
-              x1={plotL}
-              y1={y}
-              x2={plotL + bw}
-              y2={y}
-              stroke="#8139ED"
-              strokeWidth="2"
-              strokeOpacity="0.65"
+              x1={plotL} y1={y} x2={plotL + bw} y2={y}
+              stroke={c} strokeWidth={2 * s.edgeThickness} strokeOpacity="0.65"
             />
-            <circle cx={plotL + bw} cy={y} r={5} fill="#5139ED" stroke="#fff" strokeWidth="1.5" />
-            <text x={plotL + bw + 10} y={y + 3} fontSize="10" fill="#64748B" fontFamily="Inter">
+            <circle cx={plotL + bw} cy={y} r={5 * s.nodeSize} fill={c} stroke={s.background} strokeWidth="1.5" />
+            <text x={plotL + bw + 10} y={y + 3} fontSize={Math.max(10, s.labelSize - 1)} fill={s.labelColor} opacity="0.7" fontFamily={s.fontFamily}>
               {(r.combined_score || 0).toFixed(1)}
             </text>
           </g>
         );
       })}
-      <text x={plotL + plotW / 2} y={h - 12} textAnchor="middle" fontSize="11" fill="#64748B">
+      <text x={plotL + plotW / 2} y={h - 12} textAnchor="middle" fontSize={Math.max(10, s.labelSize - 1)} fill={s.labelColor} opacity="0.7" fontFamily={s.fontFamily}>
         Combined score
       </text>
     </svg>

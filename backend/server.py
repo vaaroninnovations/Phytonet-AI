@@ -1273,365 +1273,43 @@ async def target_status(job_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Disease Target Identification
+# Disease Target Identification — routes moved to /app/backend/routes/disease.py
 # ---------------------------------------------------------------------------
-disease_cache_col = db["disease_cache_v1"]
-
-
-@api_router.get("/disease/search")
-async def disease_search(q: str = Query(..., min_length=2)):
-    hits = await disease_service.search_diseases(q)
-    return {"query": q, "hits": hits}
-
-
-@api_router.get("/disease/targets")
-async def disease_targets(
-    efo_id: str = Query(...), name: str = Query("")
-):
-    """Return disease → targets, cached in Mongo for CACHE_TTL_SECONDS."""
-    doc = await disease_cache_col.find_one({"_id": efo_id})
-    now = time.time()
-    if doc and (now - doc.get("cached_at", 0)) < CACHE_TTL_SECONDS:
-        return doc.get("payload", {})
-    payload = await disease_service.get_disease_targets(efo_id, name)
-    try:
-        await disease_cache_col.replace_one(
-            {"_id": efo_id},
-            {"_id": efo_id, "payload": payload, "cached_at": now},
-            upsert=True,
-        )
-    except Exception:
-        pass
-    return payload
+disease_cache_col = db["disease_cache_v1"]  # kept for backwards-compat imports
 
 
 # ---------------------------------------------------------------------------
-# Network Analysis — PPI (STRING) & KEGG (Enrichr)
+# Network Analysis (PPI / KEGG / GO) — routes moved to /app/backend/routes/network.py
+# Molecular Docking — routes moved to /app/backend/routes/docking.py
+# Molecular Dynamics — routes moved to /app/backend/routes/md.py
+# AI Scientific Report — routes moved to /app/backend/routes/report.py
 # ---------------------------------------------------------------------------
-class PPIRequest(BaseModel):
-    genes: List[str]
-    species: int = 9606
-    required_score: int = 400
-    network_type: str = "functional"
-    add_nodes: int = 0
-
-
-class KeggRequest(BaseModel):
-    genes: List[str]
-    library: str = "KEGG_2021_Human"
-
-
-@api_router.post("/ppi/network")
-async def ppi_network(payload: PPIRequest):
-    return await network_service.fetch_string_network(
-        genes=payload.genes,
-        species=payload.species,
-        required_score=payload.required_score,
-        network_type=payload.network_type,
-        add_nodes=payload.add_nodes,
-    )
-
-
-@api_router.post("/kegg/enrich")
-async def kegg_enrich(payload: KeggRequest):
-    return await network_service.enrichr_kegg(payload.genes, payload.library)
-
-
-class GoRequest(BaseModel):
-    genes: List[str]
-    organism: str = "hsapiens"
-    sources: Optional[List[str]] = None
-    user_threshold: float = 0.05
-    significance_method: str = "g_SCS"
-
-
-@api_router.post("/go/enrich")
-async def go_enrich(payload: GoRequest):
-    return await network_service.gprofiler_go(
-        genes=payload.genes,
-        organism=payload.organism,
-        sources=payload.sources,
-        user_threshold=payload.user_threshold,
-        significance_method=payload.significance_method,
-    )
 
 
 # ---------------------------------------------------------------------------
-# Molecular Docking (AutoDock Vina)
+# Network, Docking, MD, Report routes now live in /app/backend/routes/*
+# See app wiring section below for router mounts.
 # ---------------------------------------------------------------------------
-class DockCompound(BaseModel):
-    name: str
-    smiles: str
-
-class DockTarget(BaseModel):
-    uniprot_id: str
-    gene_symbol: Optional[str] = None
-    pdb_id: Optional[str] = None
-
-class DockPDBCandidatesRequest(BaseModel):
-    uniprot_ids: List[str]
-    limit: int = 5
-
-class DockRunRequest(BaseModel):
-    compounds: List[DockCompound]
-    targets: List[DockTarget]
-    exhaustiveness: int = 8
-    num_modes: int = 9
-    box_padding: float = 8.0
-
-
-@api_router.post("/docking/pdb-candidates")
-async def docking_pdb_candidates(payload: DockPDBCandidatesRequest):
-    result: dict = {}
-    for uid in payload.uniprot_ids:
-        try:
-            result[uid] = await docking_service.rcsb_candidates_for_uniprot(uid, limit=payload.limit)
-        except Exception as e:
-            result[uid] = {"error": str(e)}
-    return {"candidates": result}
-
-
-@api_router.post("/docking/run")
-async def docking_run(payload: DockRunRequest):
-    # Fail fast with a clear message if the scientific tooling isn't installed.
-    missing = deps_check.get_missing_required()
-    blockers = [m for m in missing if m in {"vina", "obabel", "rdkit", "meeko"}]
-    if blockers:
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                f"Docking service unavailable — missing required dependencies: "
-                f"{', '.join(blockers)}. Rebuild the backend image with "
-                f"`autodock-vina` + `openbabel` (see /app/Dockerfile) or set "
-                f"VINA_EXECUTABLE / OBABEL_EXECUTABLE to a valid path."
-            ),
-        )
-    try:
-        res = await docking_service.run_docking_batch(
-            compounds=[c.model_dump() for c in payload.compounds],
-            targets=[t.model_dump() for t in payload.targets],
-            exhaustiveness=payload.exhaustiveness,
-            num_modes=payload.num_modes,
-            box_padding=payload.box_padding,
-        )
-        return res
-    except Exception as e:
-        logging.exception("Docking batch failed")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@api_router.post("/docking/pose/{job_id}/{pair_id}")
-async def docking_pose_alias(job_id: str, pair_id: str, fmt: str = "pdbqt"):
-    # Legacy alias
-    return await docking_pose(job_id, pair_id, fmt)
-
-
-@api_router.post("/docking/run/stream")
-async def docking_run_stream(payload: DockRunRequest):
-    """SSE per-pair progress stream for docking runs. Emits events:
-    `queued` (start of batch), `pair_start` (per pair), `pair_done` (per pair
-    result), `error` (per pair failure), `done` (final batch payload).
-    """
-    from fastapi.responses import StreamingResponse
-    import json as _json
-
-    missing = deps_check.get_missing_required()
-    blockers = [m for m in missing if m in {"vina", "obabel", "rdkit", "meeko"}]
-    if blockers:
-        raise HTTPException(status_code=503,
-                            detail=f"Docking dependencies missing: {', '.join(blockers)}")
-
-    compounds = [c.model_dump() for c in payload.compounds]
-    targets   = [t.model_dump() for t in payload.targets]
-    pairs     = [(c, t) for c in compounds for t in targets]
-    total     = len(pairs)
-
-    async def event_gen():
-        started = time.time()
-        yield f"event: queued\ndata: {_json.dumps({'total': total})}\n\n"
-        results = []
-        for i, (c, t) in enumerate(pairs):
-            elapsed = time.time() - started
-            payload_start = {
-                "index": i, "total": total,
-                "compound": c.get("name"), "target": t.get("gene_symbol") or t.get("uniprot_id"),
-                "elapsed_s": round(elapsed, 1),
-            }
-            yield f"event: pair_start\ndata: {_json.dumps(payload_start)}\n\n"
-            try:
-                r = await docking_service.run_docking_batch(
-                    compounds=[c], targets=[t],
-                    exhaustiveness=payload.exhaustiveness,
-                    num_modes=payload.num_modes,
-                    box_padding=payload.box_padding,
-                )
-                res = (r.get("results") or [{}])[0]
-                results.append(res)
-                yield f"event: pair_done\ndata: {_json.dumps({**payload_start, 'result': res})}\n\n"
-            except Exception as e:
-                yield f"event: error\ndata: {_json.dumps({**payload_start, 'error': str(e)})}\n\n"
-        yield f"event: done\ndata: {_json.dumps({'results': results, 'n': len(results)})}\n\n"
-
-    return StreamingResponse(event_gen(), media_type="text/event-stream")
-
-
-@api_router.get("/docking/pose/{job_id}/{pair_id}")
-async def docking_pose(job_id: str, pair_id: str, fmt: str = "pdbqt"):
-    from fastapi.responses import Response
-    try:
-        content, mime = docking_service.get_pose_content(job_id, pair_id, fmt=fmt)
-        return Response(content=content, media_type=mime,
-                        headers={"Content-Disposition": f"attachment; filename={pair_id}.{fmt}"})
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Pose not found")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ---------------------------------------------------------------------------
-# Molecular Dynamics — GROMACS project generator (setup-only)
-# ---------------------------------------------------------------------------
-class MDCompound(BaseModel):
-    name: str
-    smiles: str
-
-class MDTarget(BaseModel):
-    uniprot_id: str
-    gene_symbol: Optional[str] = None
-    pdb_id: Optional[str] = None
-
-class MDConfigModel(BaseModel):
-    force_field: str = "amber99sb-ildn"
-    water_model: str = "tip3p"
-    box_type: str = "dodecahedron"
-    box_padding_nm: float = 1.0
-    ion_concentration: float = 0.15
-    positive_ion: str = "NA"
-    negative_ion: str = "CL"
-    temperature_K: float = 300.0
-    pressure_bar: float = 1.0
-    em_steps: int = 50000
-    nvt_ps: int = 100
-    npt_ps: int = 100
-    production_ns: int = 100
-    dt_fs: float = 2.0
-
-class MDBuildRequest(BaseModel):
-    compound: MDCompound
-    target: MDTarget
-    config: MDConfigModel = MDConfigModel()
-    receptor_pdb_content: Optional[str] = None    # if omitted, backend downloads from RCSB
-    engine: Optional[str] = None                  # local | hpc_slurm | cloud
-    engine_options: Dict[str, Any] = Field(default_factory=dict)
-
-
-@api_router.get("/md/engines")
-async def md_engines():
-    return {"engines": execution_engines.list_engines()}
-
-
-@api_router.get("/deps/status")
-async def deps_status():
-    """Expose the startup dependency check result — used by ops + frontend
-    "system health" panels. Never raises."""
-    return {
-        "ok": len(deps_check.get_missing_required()) == 0,
-        "missing_required": deps_check.get_missing_required(),
-        "deps": {
-            k: {
-                "ok": s.ok, "required": s.required, "kind": s.kind,
-                "path": s.path, "version": s.version, "error": s.error,
-            }
-            for k, s in deps_check.DEPS_STATUS.items()
-        },
-    }
-
-
-@api_router.post("/md/estimate")
-async def md_estimate(payload: MDConfigModel):
-    cfg = md_service.MDConfig(**payload.model_dump())
-    return md_service.estimate_runtime(cfg, atoms=30000)
-
-
-@api_router.post("/md/build")
-async def md_build(payload: MDBuildRequest):
-    from fastapi.responses import Response
-    cfg = md_service.MDConfig(**payload.config.model_dump())
-    receptor_content = payload.receptor_pdb_content
-    if not receptor_content and payload.target.pdb_id:
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                r = await client.get(docking_service.RCSB_FILE.format(pdb=payload.target.pdb_id))
-                r.raise_for_status()
-                receptor_content = r.text
-        except Exception as e:
-            logging.warning(f"MD receptor fetch failed: {e}")
-    project, zip_bytes = md_service.build_md_project(
-        compound=payload.compound.model_dump(),
-        target=payload.target.model_dump(),
-        receptor_pdb_content=receptor_content,
-        ligand_smiles_or_mol2=payload.compound.smiles,
-        cfg=cfg,
-        engine_key=payload.engine,
-        engine_opts=payload.engine_options or {},
-    )
-    return Response(content=zip_bytes, media_type="application/zip",
-                    headers={"Content-Disposition": f"attachment; filename={project}.zip"})
-
-
-# ---------------------------------------------------------------------------
-# AI Scientific Report generation
-# ---------------------------------------------------------------------------
-class ReportGenerateRequest(BaseModel):
-    workflow: Dict[str, Any]                # everything from previous modules
-    model: str = "claude-sonnet-4-5-20250929"
-
-
-_REPORT_CACHE: Dict[str, Dict[str, Any]] = {}   # id -> {markdown, meta}
-
-
-@api_router.post("/report/generate")
-async def report_generate(payload: ReportGenerateRequest):
-    result = await report_service.generate_report(payload.workflow, model=payload.model)
-    if result.get("error"):
-        raise HTTPException(status_code=500, detail=result["error"])
-    rid = uuid.uuid4().hex
-    _REPORT_CACHE[rid] = result
-    return {"report_id": rid, "markdown": result["markdown"], "meta": result["meta"]}
-
-
-@api_router.get("/report/download/{report_id}")
-async def report_download(report_id: str, fmt: str = "md"):
-    from fastapi.responses import Response
-    rec = _REPORT_CACHE.get(report_id)
-    if not rec:
-        raise HTTPException(status_code=404, detail="Report not found or expired")
-    md = rec["markdown"]
-    title = rec.get("meta", {}).get("plant") or "PhytoNet AI Report"
-    if fmt == "md":
-        return Response(content=md, media_type="text/markdown",
-                        headers={"Content-Disposition": f"attachment; filename=report.md"})
-    if fmt == "html":
-        html = report_service.markdown_to_html(md, title=f"{title} — Research Report")
-        return Response(content=html, media_type="text/html",
-                        headers={"Content-Disposition": f"attachment; filename=report.html"})
-    if fmt == "pdf":
-        html = report_service.markdown_to_html(md, title=f"{title} — Research Report")
-        pdf = report_service.html_to_pdf(html)
-        return Response(content=pdf, media_type="application/pdf",
-                        headers={"Content-Disposition": f"attachment; filename=report.pdf"})
-    if fmt == "docx":
-        docx_bytes = report_service.markdown_to_docx(md)
-        return Response(content=docx_bytes,
-                        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                        headers={"Content-Disposition": f"attachment; filename=report.docx"})
-    raise HTTPException(status_code=400, detail=f"Unsupported format {fmt}")
 
 
 # ---------------------------------------------------------------------------
 # App wiring
 # ---------------------------------------------------------------------------
 app.include_router(api_router)
+
+# Extracted routers (moved from server.py to /app/backend/routes/*)
+from routes import (  # noqa: E402
+    disease as _disease_routes,
+    docking as _docking_routes,
+    md as _md_routes,
+    network as _network_routes,
+    report as _report_routes,
+)
+app.include_router(_disease_routes.build_router(db, cache_ttl_seconds=CACHE_TTL_SECONDS))
+app.include_router(_network_routes.build_router())
+app.include_router(_docking_routes.build_router())
+app.include_router(_md_routes.build_router())
+app.include_router(_report_routes.build_router())
 
 # ---------------------------------------------------------------------------
 # Auth router (mounted under /api/auth)

@@ -1,0 +1,62 @@
+{
+  "iteration": 29,
+  "summary": "Iter-29 validated the server.py -> routes/{disease,network,docking,md,report}.py extraction and the DOCX title-kwarg fix. All 5 route groups mount correctly and every listed endpoint responds with correct contract: /api/deps/status ok+deps, /api/md/engines lists {local,hpc_slurm,cloud}, /api/md/estimate accepts default MDConfigModel, /api/ppi/network returns nodes/edges for [AKT1,MTOR], /api/kegg/enrich returns pathways (found 3+ for [AKT1,MTOR,TP53]), /api/go/enrich returns GO terms, /api/disease/search returns hits for 'diabetes', /api/disease/targets caches Mongo replies keyed on EFO id (2nd call served from Mongo), /api/docking/pdb-candidates for P04637 returns candidate dict. DOCX title kwarg verified in three ways: (1) direct inspect.signature -> (md:str, title:Optional[str]=None); (2) TestClient POST /api/report/generate -> GET /api/report/download/{id}?fmt=docx returns 37KB DOCX with 'Withania somnifera' embedded in word/document.xml; (3) /api/assistant/report/{bad_id}/docx returns 404 with authenticated session (no 500 kwarg error). All 4 download formats verified end-to-end (md, html, docx, pdf — pdf %PDF magic; docx PK magic + valid zip). Invalid fmt=xls correctly returns 400. Regression: plants popular/autocomplete/plant-search + /api/health + auth login+me all pass. Full pytest suite: 101 passed / 0 failed / 56s (79 existing tests kept green after the refactor). Note: assistant + assistant_workflow tests are excluded from the run (as in iter-28) because they hit long ChEMBL + LLM fixtures.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "/api/report/generate (live URL)",
+        "issue": "Live LLM path (claude-sonnet-4-5-20250929 via Emergent LLM key + Groq fallback) intermittently returns 502 Bad Gateway from the preview ingress because the upstream LLM is currently rate-limited/timing out. This is NOT a refactor bug — the route + report_service pipeline is verified via TestClient with a mocked LLM. Once LLM budget/upstream is healthy, real end-to-end will work."
+      },
+      {
+        "endpoint": "server.py",
+        "issue": "Still uses deprecated @app.on_event('startup'/'shutdown') — Pydantic V2 & FastAPI both emit DeprecationWarnings on every test run. Non-blocking, but a future lifespan-handler migration would clean up log noise."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter29_refactor.py",
+    "/app/test_reports/pytest/iter29_refactor.xml",
+    "/app/test_reports/pytest/iter29_full.xml"
+  ],
+  "code_inspection_results": [
+    "routes/__init__.py: docstring only; each module exposes build_router() factory. Clean separation.",
+    "routes/md.py: build_router() takes no args; deps_status now lives here (was in server.py). Contract preserved: {ok, missing_required, deps:{...}}.",
+    "routes/network.py: build_router() no args; PPI/KEGG/GO all thin wrappers over network_service — no state leak.",
+    "routes/docking.py: build_router() no args; _check_deps() -> 503 with missing deps names — good UX. run/stream is SSE with correct 'event: <name>\\ndata: <json>\\n\\n' framing. Public (no auth) — same as iter-28 note.",
+    "routes/disease.py: build_router(db, cache_ttl_seconds) — cache_col isolated inside factory. Uses replace_one upsert with cached_at timestamp. Good.",
+    "routes/report.py: build_router() no args; cache dict {report_id: {markdown, meta}} lives inside factory closure => process-local, not shared across gunicorn workers. Acceptable for MVP; call this out for HA (same as OAuth _STATE_STORE note in iter-28).",
+    "report_service.markdown_to_docx: signature is (md: str, title: Optional[str] = None) -> bytes. Renders title as add_heading(level=0) when provided. Directly tested and confirmed working with title='Withania somnifera — Research Report'.",
+    "assistant_service.py L406: report_service.markdown_to_docx(md, title=<plant_name>) — signature now matches; no kwarg error possible."
+  ],
+  "action_items": [
+    "No action required for the refactor / DOCX fix. All contracts verified.",
+    "Optional: migrate server.py @app.on_event -> lifespan(context manager) to silence FastAPI DeprecationWarnings.",
+    "Optional (HA): move routes/report.py per-process cache dict to Mongo TTL collection so DOCX/PDF downloads survive worker rebalance.",
+    "Optional: /api/docking/run/stream (routes/docking.py) is still public — flag from iter-28 still stands.",
+    "Ops note: preview LLM (Emergent) currently returns 502 for large report generations. Once quota/upstream is healthy, re-run /api/report/generate end-to-end with a real workflow to fully validate the LLM path (backend refactor itself is verified)."
+  ],
+  "critical_code_review_comments": [
+    "routes/report.py cache is a Python dict inside the factory closure — good for MVP tests, but any second gunicorn worker will 404 on downloads generated by worker A. If server is scaled >1 worker, move to Mongo or Redis (mirror pattern already in disease.py Mongo cache).",
+    "routes/docking.py: docking_run and docking_run_stream duplicate the payload preparation (compounds/targets model_dump()). Could be a shared helper. Not a bug, just DRY.",
+    "server.py is now 1433 lines — still large. Next extraction candidates: admet + standardize + lcms + plants (all @api_router endpoints at L299/L580/L908/L1088/L1115). Following the same build_router() pattern would drop server.py under 700 lines.",
+    "assistant_service.py L406 wraps a bare markdown_to_docx() with no try/except — if title becomes required-only in future, endpoint will 500 without a clean error. Consider try/except around the docx call and return HTTPException(500, 'DOCX export failed: ...') so the frontend gets a JSON error instead of the FastAPI HTML 500 page."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter29_refactor.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (22/22 new iter-29 tests, 101/101 combined regression)",
+    "frontend": "not tested (review requested backend only)"
+  },
+  "test_credentials": "Admin: admin@phytonet.ai / Admin123! (from /app/memory/test_credentials.md).",
+  "seed_data_creation": "None. TestClient tests use mocked LLM output; live tests use existing seed data.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The routes/* extraction is verified end-to-end (all 22 iter-29 tests + full 101-test regression pass in ~56s). To rerun: `cd /app/backend && BASE_URL=$REACT_APP_BACKEND_URL python -m pytest tests/ -q --ignore=tests/test_assistant_workflow.py --ignore=tests/test_assistant.py`. The report-download tests intentionally use FastAPI TestClient with a mocked report_service.generate_report (because the live preview LLM is intermittently 502'ing due to upstream rate-limits) — this still exercises the routes/report.py router + markdown_to_html/docx/pdf pipeline for real, only the LLM call is faked. Once the LLM upstream is healthy the same test file also has a live-URL sanity test (test_report_generate_route_exists_live) that only asserts NOT 404. The DOCX title kwarg fix (previously calling markdown_to_docx with title=... would 500) is verified three separate ways — see summary."
+}

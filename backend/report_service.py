@@ -6,9 +6,11 @@ IMRAD-style manuscript in Markdown. The report is then converted to HTML / PDF
 / DOCX on demand.
 """
 from __future__ import annotations
+import io
 import json
 import logging
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -193,25 +195,98 @@ def html_to_pdf(html: str) -> bytes:
         return buf.getvalue()
 
 
-def markdown_to_docx(md: str) -> bytes:
-    """Markdown → DOCX via python-docx (paragraph-level parsing)."""
+_INLINE_RE = re.compile(r"(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|\[[^\]]+\]\([^)]+\))")
+
+
+def _add_inline_runs(paragraph, text: str):
+    """Parse a line of Markdown inline formatting (bold **, italic *, code `, links) into DOCX runs."""
+    import re as _re
+    parts = _INLINE_RE.split(text) if text else [text]
+    for part in parts:
+        if not part:
+            continue
+        if part.startswith("**") and part.endswith("**") and len(part) > 4:
+            r = paragraph.add_run(part[2:-2]); r.bold = True
+        elif part.startswith("*") and part.endswith("*") and len(part) > 2 and not part.startswith("**"):
+            r = paragraph.add_run(part[1:-1]); r.italic = True
+        elif part.startswith("`") and part.endswith("`") and len(part) > 2:
+            r = paragraph.add_run(part[1:-1]); r.font.name = "Consolas"
+        else:
+            m = _re.match(r"\[([^\]]+)\]\(([^)]+)\)", part)
+            if m:
+                paragraph.add_run(m.group(1))  # DOCX hyperlinks require deeper OOXML — text-only
+            else:
+                paragraph.add_run(part)
+
+
+def markdown_to_docx(md: str, title: Optional[str] = None) -> bytes:
+    """Markdown → DOCX via python-docx.
+
+    Supports: headings (#..####), bullet/numbered lists, blockquotes, tables
+    (pipe syntax), horizontal rules, inline bold/italic/code.
+    """
     from docx import Document
-    from docx.shared import Pt
-    import io, re
+    from docx.shared import Pt, RGBColor
     doc = Document()
-    style = doc.styles["Normal"]; style.font.name = "Georgia"; style.font.size = Pt(11)
-    for line in md.splitlines():
-        s = line.rstrip()
-        if not s:
+    normal = doc.styles["Normal"]
+    normal.font.name = "Georgia"
+    normal.font.size = Pt(11)
+
+    if title:
+        h = doc.add_heading(title, level=0)
+        for run in h.runs:
+            run.font.color.rgb = RGBColor(0x51, 0x39, 0xED)
+
+    lines = md.splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i].rstrip()
+        # Table detection: pipe-separated header + separator + body rows
+        if (
+            line.startswith("|")
+            and i + 1 < len(lines)
+            and re.match(r"^\s*\|[-:\s|]+\|\s*$", lines[i + 1])
+        ):
+            header = [c.strip() for c in line.strip("|").split("|")]
+            i += 2
+            body = []
+            while i < len(lines) and lines[i].startswith("|"):
+                body.append([c.strip() for c in lines[i].strip("|").split("|")])
+                i += 1
+            tbl = doc.add_table(rows=1 + len(body), cols=len(header))
+            tbl.style = "Light Grid Accent 1"
+            for c, cell in enumerate(header):
+                p = tbl.rows[0].cells[c].paragraphs[0]
+                r = p.add_run(cell); r.bold = True
+            for ri, row in enumerate(body):
+                for c, val in enumerate(row[: len(header)]):
+                    p = tbl.rows[ri + 1].cells[c].paragraphs[0]
+                    _add_inline_runs(p, val)
+            continue
+
+        if not line:
             doc.add_paragraph("")
-            continue
-        m = re.match(r"^(#{1,4})\s+(.*)$", s)
-        if m:
-            lvl = min(len(m.group(1)), 4)
-            doc.add_heading(m.group(2), level=lvl)
-            continue
-        if s.startswith("- ") or s.startswith("* "):
-            doc.add_paragraph(s[2:], style="List Bullet")
-            continue
-        doc.add_paragraph(s)
+        elif re.match(r"^-{3,}$", line) or re.match(r"^\*{3,}$", line):
+            doc.add_paragraph("─" * 30)
+        elif line.startswith(">"):
+            p = doc.add_paragraph(style="Intense Quote")
+            _add_inline_runs(p, line.lstrip("> ").strip())
+        else:
+            m = re.match(r"^(#{1,4})\s+(.*)$", line)
+            if m:
+                lvl = min(len(m.group(1)), 4)
+                h = doc.add_heading(m.group(2), level=lvl)
+                for run in h.runs:
+                    run.font.color.rgb = RGBColor(0x51, 0x39, 0xED) if lvl <= 2 else RGBColor(0x0B, 0x0B, 0x18)
+            elif line.lstrip().startswith(("- ", "* ")):
+                p = doc.add_paragraph(style="List Bullet")
+                _add_inline_runs(p, line.lstrip()[2:])
+            elif re.match(r"^\d+\.\s", line.lstrip()):
+                p = doc.add_paragraph(style="List Number")
+                _add_inline_runs(p, re.sub(r"^\d+\.\s", "", line.lstrip()))
+            else:
+                p = doc.add_paragraph()
+                _add_inline_runs(p, line)
+        i += 1
+
     buf = io.BytesIO(); doc.save(buf); return buf.getvalue()
