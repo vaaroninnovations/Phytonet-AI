@@ -299,6 +299,24 @@ export function useChartStyle() {
 }
 
 /**
+ * Mix a hex colour toward another hex colour by fraction `t` (0…1).
+ * Used to derive gradient low-end shades (e.g. Cytoscape mapData interpolation)
+ * from the theme's node colour.
+ */
+export function mixHex(hex, target = "#FFFFFF", t = 0.75) {
+  const parse = (h) => {
+    const s = h.replace("#", "");
+    if (s.length !== 6) return [0, 0, 0];
+    return [parseInt(s.slice(0, 2), 16), parseInt(s.slice(2, 4), 16), parseInt(s.slice(4, 6), 16)];
+  };
+  const [r1, g1, b1] = parse(hex);
+  const [r2, g2, b2] = parse(target);
+  const m = (a, b) => Math.round(a + (b - a) * t);
+  const h = (n) => n.toString(16).padStart(2, "0");
+  return `#${h(m(r1, r2))}${h(m(g1, g2))}${h(m(b1, b2))}`;
+}
+
+/**
  * Convenience hook: universal style merged with per-chart-type overrides.
  * Chart components should use this and treat it as their live style.
  *

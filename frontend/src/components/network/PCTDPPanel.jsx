@@ -13,6 +13,7 @@ import { HelpTip } from "@/components/network/HelpTip";
 import { TableToolbar } from "@/components/network/TableToolbar";
 import { CyToolbar } from "@/components/network/CyToolbar";
 import { DataTable } from "@/components/network/DataTable";
+import { useAppliedStyle } from "@/context/ChartStyleContext";
 
 const TYPE_META = {
   plant:    { color: "#10B981", shape: "round-rectangle", label: "Plant" },
@@ -98,32 +99,35 @@ export function PCTDPPanel({ intersectingGenes = [], selectedKeggPathways = [], 
     try { cy.layout(opts).run(); } catch (e) {}
   }, [layout, elements]);
 
+  const chartStyle = useAppliedStyle("cpdTarget");
   const stylesheet = useMemo(() => [
     { selector: "node", style: {
       "background-color": "data(color)",
       "shape": "data(shape)",
       "label": "data(label)",
-      "font-size": 10,
-      "color": "#0B0B18",
+      "font-size": chartStyle.labelSize,
+      "font-family": chartStyle.fontFamily,
+      "color": chartStyle.labelColor,
       "text-valign": "center",
       "text-halign": "center",
       "text-wrap": "wrap",
       "text-max-width": 100,
-      "width": "mapData(degree, 1, 30, 26, 66)",
-      "height": "mapData(degree, 1, 30, 26, 66)",
+      "width":  `mapData(degree, 1, 30, ${26 * chartStyle.nodeSize}, ${66 * chartStyle.nodeSize})`,
+      "height": `mapData(degree, 1, 30, ${26 * chartStyle.nodeSize}, ${66 * chartStyle.nodeSize})`,
       "border-width": 1,
-      "border-color": "#FFFFFF",
+      "border-color": chartStyle.background,
+      "opacity": chartStyle.opacity,
     }},
     { selector: "edge", style: {
       "line-color": "data(edgeColor)",
       "target-arrow-color": "data(edgeColor)",
-      "width": "mapData(weight, 0, 1, 0.5, 3)",
+      "width": `mapData(weight, 0, 1, ${0.5 * chartStyle.edgeThickness}, ${3 * chartStyle.edgeThickness})`,
       "curve-style": "bezier",
-      "opacity": 0.7,
+      "opacity": 0.7 * chartStyle.opacity,
     }},
     { selector: ".faded", style: { "opacity": 0.15 } },
     { selector: ":selected", style: { "border-color": "#F97316", "border-width": 3 } },
-  ], []);
+  ], [chartStyle]);
 
   const nodeTableRows = useMemo(() => graph.nodes.map((n) => {
     const c = centrality?.get(n.id) || {};
@@ -262,7 +266,7 @@ export function PCTDPPanel({ intersectingGenes = [], selectedKeggPathways = [], 
             No data available yet. Complete the previous Network Analysis steps to populate compounds, targets, disease and pathways.
           </div>
         ) : (
-          <div className="h-[620px] w-full rounded-2xl border border-[#F1F1FA] bg-[#FAFAFF]">
+          <div className="h-[620px] w-full rounded-2xl border border-[#F1F1FA]" style={{ background: chartStyle.background }}>
             <CytoscapeComponent
               key={"pctdp-" + elements.length}
               cy={(cy) => { cyRef.current = cy; }}

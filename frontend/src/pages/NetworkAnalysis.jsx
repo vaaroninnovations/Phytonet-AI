@@ -19,7 +19,7 @@ import jsPDF from "jspdf";
 import UTIF from "utif";
 import CytoscapeComponent from "react-cytoscapejs";
 import "@/lib/cytoscapeSetup";
-import { useAppliedStyle } from "@/context/ChartStyleContext";
+import { useAppliedStyle, mixHex } from "@/context/ChartStyleContext";
 import { GOPanel as NewGOPanel } from "@/components/network/GOPanel";
 import { KEGGPanel as NewKEGGPanel } from "@/components/network/KEGGPanel";
 import { PCTDPPanel } from "@/components/network/PCTDPPanel";
@@ -893,28 +893,30 @@ function PPIPanel({ genes, ppiResult, setPpiResult, onComplete }) {
     ];
   }, [filteredResult]);
 
-  const stylesheet = [
+  const ppiStyle = useAppliedStyle("ppi");
+  const stylesheet = useMemo(() => [
     {
       selector: "node",
       style: {
-        "background-color": "#5139ED",
+        "background-color": ppiStyle.node,
         label: "data(label)",
-        color: "#0B0B18",
-        "font-size": 10,
-        "font-family": "Inter, sans-serif",
+        color: ppiStyle.labelColor,
+        "font-size": ppiStyle.labelSize,
+        "font-family": ppiStyle.fontFamily,
         "font-weight": 700,
-        "text-outline-color": "#fff",
+        "text-outline-color": ppiStyle.background,
         "text-outline-width": 2,
-        width: 22,
-        height: 22,
+        width: 22 * ppiStyle.nodeSize,
+        height: 22 * ppiStyle.nodeSize,
+        opacity: ppiStyle.opacity,
       },
     },
     {
       selector: "edge",
       style: {
-        "line-color": "#8139ED",
-        opacity: 0.4,
-        width: "mapData(weight, 0.4, 1, 1, 4)",
+        "line-color": ppiStyle.edge,
+        opacity: 0.4 * ppiStyle.opacity,
+        width: `mapData(weight, 0.4, 1, ${1 * ppiStyle.edgeThickness}, ${4 * ppiStyle.edgeThickness})`,
         "curve-style": "haystack",
       },
     },
@@ -922,7 +924,7 @@ function PPIPanel({ genes, ppiResult, setPpiResult, onComplete }) {
       selector: ":selected",
       style: { "background-color": "#f5b301", "line-color": "#f5b301" },
     },
-  ];
+  ], [ppiStyle]);
 
   const exportEdges = () => {
     if (!filteredResult) return;
@@ -1059,7 +1061,7 @@ function PPIPanel({ genes, ppiResult, setPpiResult, onComplete }) {
             <CytoscapeComponent
               key={`ppi-${elements.length}`}
               elements={elements}
-              style={{ width: "100%", height: "520px" }}
+              style={{ width: "100%", height: "520px", background: ppiStyle.background }}
               layout={{ name: ppiLayout, animate: false, fit: true, padding: 30 }}
               stylesheet={stylesheet}
               cy={(cy) => {
@@ -1321,16 +1323,25 @@ function HubSubgraphNetwork({ ppiResult, scores, metric, topN }) {
     try { cy.layout({ name: layout, animate: false, fit: true, padding: 30, concentric: (n) => n.data("scoreNorm") || 0.1, levelWidth: () => 2, minNodeSpacing: 30 }).run(); } catch (e) {}
   }, [layout, elements]);
 
+  const hubStyle = useAppliedStyle("hub");
+  const hubNodeLow = useMemo(() => mixHex(hubStyle.node, hubStyle.background, 0.72), [hubStyle.node, hubStyle.background]);
   const stylesheet = useMemo(() => [
     { selector: "node", style: {
-      "background-color": "mapData(scoreNorm, 0, 1, #B2AFE8, #5139ED)",
-      "label": "data(label)", "font-size": 10, "color": "#0B0B18", "text-valign": "center", "text-halign": "center",
-      "width": "mapData(scoreNorm, 0, 1, 30, 70)",
-      "height": "mapData(scoreNorm, 0, 1, 30, 70)",
-      "border-width": 1, "border-color": "#FFFFFF", "shape": "ellipse",
+      "background-color": `mapData(scoreNorm, 0, 1, ${hubNodeLow}, ${hubStyle.node})`,
+      "label": "data(label)", "font-size": hubStyle.labelSize, "color": hubStyle.labelColor,
+      "font-family": hubStyle.fontFamily,
+      "text-valign": "center", "text-halign": "center",
+      "width":  `mapData(scoreNorm, 0, 1, ${30 * hubStyle.nodeSize}, ${70 * hubStyle.nodeSize})`,
+      "height": `mapData(scoreNorm, 0, 1, ${30 * hubStyle.nodeSize}, ${70 * hubStyle.nodeSize})`,
+      "border-width": 1, "border-color": hubStyle.background, "shape": "ellipse",
+      "opacity": hubStyle.opacity,
     }},
-    { selector: "edge", style: { "width": "mapData(weight, 0, 1, 0.5, 3)", "line-color": "#B2AFE8", "curve-style": "bezier", "opacity": 0.6 } },
-  ], []);
+    { selector: "edge", style: {
+      "width": `mapData(weight, 0, 1, ${0.5 * hubStyle.edgeThickness}, ${3 * hubStyle.edgeThickness})`,
+      "line-color": hubStyle.edge, "curve-style": "bezier",
+      "opacity": 0.6 * hubStyle.opacity,
+    } },
+  ], [hubStyle, hubNodeLow]);
 
   if (subgraph.nodes.length === 0) return null;
   return (
@@ -1354,7 +1365,7 @@ function HubSubgraphNetwork({ ppiResult, scores, metric, topN }) {
       <CytoscapeComponent
         key={`hub-${elements.length}`}
         elements={elements}
-        style={{ width: "100%", height: "500px" }}
+        style={{ width: "100%", height: "500px", background: hubStyle.background }}
         layout={{ name: layout, animate: false, fit: true, padding: 30 }}
         stylesheet={stylesheet}
         cy={(cy) => { cyRef.current = cy; cy.userZoomingEnabled(true); cy.userPanningEnabled(true); }}
