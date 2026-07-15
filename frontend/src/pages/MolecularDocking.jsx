@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { TableToolbar } from "@/components/network/TableToolbar";
 import { DataTable } from "@/components/network/DataTable";
 import { HelpTip } from "@/components/network/HelpTip";
+import DockingViewer from "@/components/DockingViewer";
 import { requireAuth } from "@/context/AuthContext";
 import { ArrowLeft, ArrowRight, Beaker, Loader2, Download, Play, ExternalLink, Star } from "lucide-react";
 
@@ -520,6 +521,24 @@ export default function MolecularDocking() {
               <div className="mt-4">
                 <DataTable rows={resultRows} columns={cols} testidPrefix="dock-dt" pageSize={25} />
               </div>
+            </div>
+
+            {/* Complex viewers per successful pair */}
+            <div data-testid="dock-viewers" className="space-y-4">
+              {result.results
+                .filter((r) => !r.error && r.pair_id)
+                .slice(0, 10)                                       // safety cap
+                .map((r) => (
+                  <DockingViewer
+                    key={r.pair_id}
+                    jobId={r.job_id}
+                    pairId={r.pair_id}
+                    ligandName={r.ligand_name}
+                    receptor={r.receptor_pdb}
+                    bestAffinity={r.best_affinity}
+                    interactions={r.interactions}
+                  />
+                ))}
             </div>
 
             {/* Auto-select for MD */}

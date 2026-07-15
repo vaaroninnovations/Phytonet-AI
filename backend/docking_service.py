@@ -282,7 +282,18 @@ def _parse_vina_log(log_text: str) -> List[DockPose]:
 
 
 def _analyse_pose_interactions(pose_pdb: Path, receptor_pdb: Path) -> Dict[str, Any]:
-    """Very lightweight H-bond / hydrophobic detection (proximity-based)."""
+    """Publication-grade non-covalent interaction detection.
+
+    Detects four interaction classes using distance / geometric criteria:
+      - hydrogen bonds       (polar donor–acceptor, d ≤ 3.5 Å)
+      - hydrophobic contacts (C–C in aliphatic/aromatic side chains, d ≤ 4.5 Å)
+      - salt bridges         (Lys/Arg N⁺ ↔ Asp/Glu COO⁻, d ≤ 4.0 Å)
+      - π-stacking           (aromatic ring centroid ↔ ligand aromatic centroid,
+                              d ≤ 6.0 Å)
+
+    Returns dict with lists (each row: ligand_atom / residue / chain / distance /
+    type). Also includes a flat `all` list for CSV export convenience.
+    """
     def _read_atoms(path: Path):
         atoms = []
         for line in path.read_text().splitlines():
@@ -293,44 +304,121 @@ def _analyse_pose_interactions(pose_pdb: Path, receptor_pdb: Path) -> Dict[str, 
                 atom = line[12:16].strip()
                 resn = line[17:20].strip()
                 resi = line[22:26].strip()
-                chain = line[21].strip()
+                chain = line[21].strip() or "A"
                 atoms.append({"atom": atom, "resn": resn, "resi": resi, "chain": chain, "x": x, "y": y, "z": z})
             except Exception:
                 continue
         return atoms
+
+    def _dist(a, b):
+        return ((a["x"] - b["x"]) ** 2 + (a["y"] - b["y"]) ** 2 + (a["z"] - b["z"]) ** 2) ** 0.5
+
     lig = _read_atoms(pose_pdb)
     rec = _read_atoms(receptor_pdb)
+
+    # ── Constants ──────────────────────────────────────────────────
+    HBOND_ACCEPTOR_ATOMS = {"N", "O", "F", "NE", "ND1", "ND2", "NE1", "NE2",
+                            "NH1", "NH2", "NZ", "OD1", "OD2", "OE1", "OE2",
+                            "OG", "OG1", "OH"}
+    HYDROPHOBIC = {"CA", "CB", "CG", "CD", "CE", "CZ", "CH2",
+                   "CD1", "CD2", "CG1", "CG2", "CE1", "CE2", "CE3", "CZ2", "CZ3"}
+    POS_CHARGED = {"LYS": {"NZ"}, "ARG": {"NH1", "NH2", "NE"},
+                   "HIS": {"ND1", "NE2"}}
+    NEG_CHARGED = {"ASP": {"OD1", "OD2"}, "GLU": {"OE1", "OE2"}}
+    AROMATIC_RES = {"PHE": {"CG", "CD1", "CD2", "CE1", "CE2", "CZ"},
+                    "TYR": {"CG", "CD1", "CD2", "CE1", "CE2", "CZ"},
+                    "TRP": {"CG", "CD1", "CD2", "NE1", "CE2", "CE3", "CZ2", "CZ3", "CH2"},
+                    "HIS": {"CG", "ND1", "CD2", "CE1", "NE2"}}
+
     hbonds: List[Dict[str, Any]] = []
     hydrophobic: List[Dict[str, Any]] = []
-    HBOND_ATOMS = {"N", "O", "F", "NE", "ND1", "ND2", "NE1", "NE2", "NH1", "NH2", "NZ",
-                   "OD1", "OD2", "OE1", "OE2", "OG", "OG1", "OH"}
-    HYDROPHOBIC = {"CA", "CB", "CG", "CD", "CE", "CZ", "CH2", "CD1", "CD2", "CG1", "CG2",
-                   "CE1", "CE2", "CE3", "CZ2", "CZ3"}
+    salt_bridges: List[Dict[str, Any]] = []
+    pi_stacks: List[Dict[str, Any]] = []
+
+    # ── H-bond + hydrophobic (per-atom pair) ────────────────────────
     for la in lig:
         la_polar = la["atom"][:1] in ("N", "O", "F")
         for ra in rec:
-            dx = la["x"] - ra["x"]; dy = la["y"] - ra["y"]; dz = la["z"] - ra["z"]
-            d2 = dx * dx + dy * dy + dz * dz
-            if d2 > 25:  # >5 Å
+            d = _dist(la, ra)
+            if d > 5.0:
                 continue
-            d = d2 ** 0.5
-            ra_polar = ra["atom"] in HBOND_ATOMS
+            ra_polar = ra["atom"] in HBOND_ACCEPTOR_ATOMS
             if la_polar and ra_polar and d <= 3.5:
                 hbonds.append({"ligand_atom": la["atom"], "residue": f"{ra['resn']}{ra['resi']}",
-                               "chain": ra["chain"], "distance": round(d, 2)})
-            elif not la_polar and ra["atom"] in HYDROPHOBIC and d <= 4.5:
+                               "chain": ra["chain"], "distance": round(d, 2),
+                               "type": "hydrogen_bond"})
+            elif (not la_polar) and ra["atom"] in HYDROPHOBIC and d <= 4.5:
                 hydrophobic.append({"ligand_atom": la["atom"], "residue": f"{ra['resn']}{ra['resi']}",
-                                    "chain": ra["chain"], "distance": round(d, 2)})
-    # Deduplicate by residue for readability
-    def _dedup(rows, key="residue"):
-        seen = {}
+                                    "chain": ra["chain"], "distance": round(d, 2),
+                                    "type": "hydrophobic"})
+
+    # ── Salt bridges: charged N⁺ (Lys/Arg/His) ↔ charged COO⁻ (Asp/Glu)
+    lig_neg = [a for a in lig if a["atom"][:1] == "O"]     # loose: any O could be charged in COO/OH
+    lig_pos = [a for a in lig if a["atom"][:1] == "N"]
+    for ra in rec:
+        atoms_for_res = POS_CHARGED.get(ra["resn"]) or NEG_CHARGED.get(ra["resn"])
+        if not atoms_for_res or ra["atom"] not in atoms_for_res:
+            continue
+        pos = ra["resn"] in POS_CHARGED
+        counterparts = lig_neg if pos else lig_pos
+        for la in counterparts:
+            d = _dist(la, ra)
+            if d <= 4.0:
+                salt_bridges.append({"ligand_atom": la["atom"],
+                                     "residue": f"{ra['resn']}{ra['resi']}",
+                                     "chain": ra["chain"], "distance": round(d, 2),
+                                     "type": "salt_bridge"})
+
+    # ── π-stacking: aromatic ring centroids ─────────────────────────
+    # Ligand aromatic centroid: mean of all C atoms (approximation for small
+    # ligands — Vina writes ATOM records with all heavy atoms).
+    lig_arom = [a for a in lig if a["atom"][:1] == "C"]
+    if lig_arom:
+        lx = sum(a["x"] for a in lig_arom) / len(lig_arom)
+        ly = sum(a["y"] for a in lig_arom) / len(lig_arom)
+        lz = sum(a["z"] for a in lig_arom) / len(lig_arom)
+        # Group receptor atoms by (resn, resi, chain) to compute ring centroids
+        rings: Dict[str, List[Dict[str, float]]] = {}
+        for ra in rec:
+            atoms_for_res = AROMATIC_RES.get(ra["resn"])
+            if atoms_for_res and ra["atom"] in atoms_for_res:
+                k = f"{ra['chain']}:{ra['resn']}{ra['resi']}"
+                rings.setdefault(k, []).append(ra)
+        for k, atoms in rings.items():
+            if len(atoms) < 3:
+                continue
+            cx = sum(a["x"] for a in atoms) / len(atoms)
+            cy = sum(a["y"] for a in atoms) / len(atoms)
+            cz = sum(a["z"] for a in atoms) / len(atoms)
+            d = ((lx - cx) ** 2 + (ly - cy) ** 2 + (lz - cz) ** 2) ** 0.5
+            if d <= 6.0:
+                chain, resid = k.split(":")
+                pi_stacks.append({"ligand_atom": "ring_centroid",
+                                  "residue": resid, "chain": chain,
+                                  "distance": round(d, 2),
+                                  "type": "pi_stacking"})
+
+    # Deduplicate by residue (best distance)
+    def _dedup(rows):
+        seen: Dict[str, Dict[str, Any]] = {}
         for r in rows:
-            k = r[key]
+            k = r["residue"]
             if k not in seen or r["distance"] < seen[k]["distance"]:
                 seen[k] = r
         return sorted(seen.values(), key=lambda r: r["distance"])
-    return {"hydrogen_bonds": _dedup(hbonds)[:10],
-            "hydrophobic_contacts": _dedup(hydrophobic)[:10]}
+
+    hbonds       = _dedup(hbonds)[:15]
+    hydrophobic  = _dedup(hydrophobic)[:15]
+    salt_bridges = _dedup(salt_bridges)[:10]
+    pi_stacks    = _dedup(pi_stacks)[:10]
+
+    return {
+        "hydrogen_bonds": hbonds,
+        "hydrophobic_contacts": hydrophobic,
+        "salt_bridges": salt_bridges,
+        "pi_stacking": pi_stacks,
+        "all": hbonds + hydrophobic + salt_bridges + pi_stacks,
+    }
 
 
 def _pdbqt_to_pdb(pdbqt_path: Path, pdb_path: Path) -> Path:
@@ -340,6 +428,75 @@ def _pdbqt_to_pdb(pdbqt_path: Path, pdb_path: Path) -> Path:
     if conv.ReadFile(mol, str(pdbqt_path)):
         conv.WriteFile(mol, str(pdb_path))
     return pdb_path
+
+
+def _extract_best_pose_pdbqt(out_pdbqt: Path, best_pdbqt: Path) -> Path:
+    """Write MODEL 1 of the multi-mode Vina output into a standalone PDBQT."""
+    text = out_pdbqt.read_text()
+    lines: List[str] = []
+    in_model_1 = False
+    for line in text.splitlines():
+        if line.startswith("MODEL 1"):
+            in_model_1 = True
+            lines.append(line)
+            continue
+        if line.startswith("MODEL ") and not line.startswith("MODEL 1"):
+            break
+        if in_model_1:
+            lines.append(line)
+            if line.startswith("ENDMDL"):
+                break
+    best_pdbqt.write_text("\n".join(lines) + "\n")
+    return best_pdbqt
+
+
+def _build_complex_pdb(receptor_pdb: Path, ligand_pdb: Path, out_path: Path) -> Path:
+    """Concatenate receptor + ligand PDB into a single complex.pdb.
+
+    Renames the ligand chain to ``L`` and residue name to ``LIG`` to make it
+    trivial to select from the pose in viewers (3Dmol/NGL/Mol*).
+    """
+    rec_lines: List[str] = []
+    for ln in receptor_pdb.read_text().splitlines():
+        if ln.startswith(("ATOM", "HETATM", "TER")) and not ln.startswith("HETATM  HOH"):
+            rec_lines.append(ln)
+        elif ln.startswith("HETATM") and ln[17:20].strip() == "HOH":
+            continue
+
+    lig_lines: List[str] = []
+    for ln in ligand_pdb.read_text().splitlines():
+        if not ln.startswith(("ATOM", "HETATM")):
+            continue
+        # Force chain L, residue name LIG, HETATM
+        remade = "HETATM" + ln[6:17] + "LIG" + " L" + ln[22:]
+        lig_lines.append(remade)
+
+    parts = [
+        "REMARK   1 CREATED BY PhytoNet AI docking pipeline",
+        "REMARK   1 CONTENT: receptor + best docking pose (ligand chain L, resn LIG)",
+        *rec_lines,
+        "TER",
+        *lig_lines,
+        "END",
+    ]
+    out_path.write_text("\n".join(parts) + "\n")
+    return out_path
+
+
+def _write_interactions_csv(interactions: Dict[str, Any], csv_path: Path) -> Path:
+    rows = interactions.get("all") or []
+    header = ["residue", "chain", "ligand_atom", "type", "distance_A"]
+    lines = [",".join(header)]
+    for r in rows:
+        lines.append(",".join([
+            r.get("residue", ""),
+            r.get("chain", ""),
+            r.get("ligand_atom", ""),
+            r.get("type", ""),
+            f"{r.get('distance', ''):.2f}" if isinstance(r.get("distance"), (int, float)) else "",
+        ]))
+    csv_path.write_text("\n".join(lines) + "\n")
+    return csv_path
 
 
 async def dock_pair(job_dir: Path, receptor_pdbqt: Path, receptor_pdb: Path,
@@ -401,9 +558,31 @@ async def dock_pair(job_dir: Path, receptor_pdbqt: Path, receptor_pdb: Path,
                           error=f"Vina exited {proc.returncode}: {stderr.decode(errors='ignore')[:200]}")
     poses = _parse_vina_log(log_text)
     best = poses[0].affinity if poses else 0.0
+    # Full multi-mode pose (all poses in one PDB)
     pose_pdb = pair_dir / "pose.pdb"
     _pdbqt_to_pdb(out_pdbqt, pose_pdb)
+    # Best pose only (MODEL 1) → both PDBQT and PDB — used by 3D viewer
+    best_pose_pdbqt = pair_dir / "best_pose.pdbqt"
+    best_pose_pdb   = pair_dir / "best_pose.pdb"
+    try:
+        _extract_best_pose_pdbqt(out_pdbqt, best_pose_pdbqt)
+        _pdbqt_to_pdb(best_pose_pdbqt, best_pose_pdb)
+    except Exception as _e:
+        logger.warning(f"best-pose extraction failed for {pair_id}: {_e}")
+    # Analyse non-covalent interactions against the receptor
     interactions = _analyse_pose_interactions(pose_pdb, receptor_pdb)
+    # Full protein-ligand complex PDB (chain L / resn LIG) — used by viewer
+    complex_pdb = pair_dir / "complex.pdb"
+    try:
+        _build_complex_pdb(receptor_pdb, best_pose_pdb if best_pose_pdb.exists() else pose_pdb, complex_pdb)
+    except Exception as _e:
+        logger.warning(f"complex.pdb build failed for {pair_id}: {_e}")
+    # Persist interactions to disk (used by /api/docking/interactions endpoints)
+    try:
+        (pair_dir / "interactions.json").write_text(json.dumps(interactions, indent=2))
+        _write_interactions_csv(interactions, pair_dir / "interactions.csv")
+    except Exception as _e:
+        logger.warning(f"interactions export failed for {pair_id}: {_e}")
     return DockResult(ligand["name"], ligand["smiles"], ligand["uniprot_id"], receptor_pdb.stem,
                       best_affinity=best, poses=poses, interactions=interactions,
                       pose_pdbqt_path=str(out_pdbqt), log_path=str(log_path),
@@ -475,12 +654,33 @@ async def run_docking_batch(compounds: List[Dict[str, str]],
 
 
 def get_pose_content(job_id: str, pair_id: str, fmt: str = "pdbqt") -> Tuple[bytes, str]:
-    """Read the pose file for download."""
+    """Return pose / complex / interactions artifact for download.
+
+    Supported ``fmt`` values (all files live in the pair_dir on disk):
+      - ``pdbqt``            → out.pdbqt          (all Vina modes, chemical/x-pdbqt)
+      - ``pdb``              → pose.pdb           (all modes, PDB format)
+      - ``best_pdbqt``       → best_pose.pdbqt    (MODEL 1 only)
+      - ``best_pdb``         → best_pose.pdb      (MODEL 1 only, PDB)
+      - ``complex_pdb``      → complex.pdb        (receptor + best pose)
+      - ``interactions_json``→ interactions.json
+      - ``interactions_csv`` → interactions.csv
+    """
     safe_job = re.sub(r"[^A-Za-z0-9_.-]", "", job_id)
     safe_pair = re.sub(r"[^A-Za-z0-9_.-]", "", pair_id)
     pair_dir = DOCK_ROOT / safe_job / safe_pair
-    if fmt == "pdb":
-        p = pair_dir / "pose.pdb"
-        return p.read_bytes(), "chemical/x-pdb"
-    p = pair_dir / "out.pdbqt"
-    return p.read_bytes(), "chemical/x-pdbqt"
+    _FMT_MAP = {
+        "pdbqt":            ("out.pdbqt",           "chemical/x-pdbqt"),
+        "pdb":              ("pose.pdb",            "chemical/x-pdb"),
+        "best_pdbqt":       ("best_pose.pdbqt",     "chemical/x-pdbqt"),
+        "best_pdb":         ("best_pose.pdb",       "chemical/x-pdb"),
+        "complex_pdb":      ("complex.pdb",         "chemical/x-pdb"),
+        "interactions_json":("interactions.json",   "application/json"),
+        "interactions_csv": ("interactions.csv",    "text/csv"),
+    }
+    if fmt not in _FMT_MAP:
+        raise ValueError(f"Unsupported docking pose format: {fmt!r}")
+    fname, mime = _FMT_MAP[fmt]
+    p = pair_dir / fname
+    if not p.exists():
+        raise FileNotFoundError(f"{fname} not generated for job={safe_job} pair={safe_pair}")
+    return p.read_bytes(), mime
