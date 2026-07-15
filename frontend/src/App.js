@@ -25,7 +25,6 @@ import { ProjectProvider } from "@/context/ProjectContext";
 import { ChartStyleProvider } from "@/context/ChartStyleContext";
 import { AuthModal } from "@/components/AuthModal";
 import ResumeSessionModal from "@/components/ResumeSessionModal";
-import ChartStyleDrawer from "@/components/ChartStyleDrawer";
 import { Toaster } from "sonner";
 
 function App() {
@@ -67,7 +66,6 @@ function App() {
                     <SiteFooter />
                     <AuthModal />
                     <ResumeSessionModal />
-                    <ChartStyleDrawer />
                     </ChartStyleProvider>
                   </ProjectProvider>
                 </NetworkProvider>

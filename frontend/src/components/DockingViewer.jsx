@@ -18,6 +18,7 @@ import {
   downloadPNG, downloadSVG, downloadTIFF, downloadPDF,
   canvasToTIFF, canvasToPDF, canvasToPNG,
 } from "@/lib/figureExporters";
+import { CustomizeFigureButton } from "@/components/CustomizeFigureButton";
 
 const INTERACTION_STYLE = {
   hydrogen_bond:   { color: "#2BB673", stroke: "#0F7A47", label: "H-Bond" },
@@ -51,6 +52,12 @@ export default function DockingViewer({ jobId, pairId, ligandName, receptor, bes
           <Expand className="h-3.5 w-3.5" /> {expanded ? "Collapse" : "Expand viewer"}
         </button>
       </div>
+
+      {expanded && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <CustomizeFigureButton chartType="docking" testid={`customize-figure-docking-${pairId}`} />
+        </div>
+      )}
 
       {expanded && (
         <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">

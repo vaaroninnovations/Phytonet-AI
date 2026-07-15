@@ -1,0 +1,49 @@
+{
+  "iteration": 30,
+  "summary": "Iter-30 verified the ChartStyleDrawer removal from Home + per-figure Customize Figure button refactor. Bug reported: global ChartStyle drawer was mounted at App root and appeared on the Homepage. Fix verified via (a) source-code inspection and (b) live browser negative tests on 6 routes. Static verification: App.js L1-82 no longer imports or renders <ChartStyleDrawer/> — it only imports ChartStyleProvider (context). ChartStyleDrawer.jsx L16 is now `export default function ChartStyleDrawer({open=false, onClose, chartType='global'})` returning `null` when !open (L56) — pure controlled component, no floating trigger. CustomizeFigureButton.jsx renders per-figure trigger with `data-testid=customize-figure-<chartType>` (L14-16) and mounts its own <ChartStyleDrawer/> instance locally (L28). CHART_FIELD_SCHEMAS in ChartStyleContext.jsx L48-136 correctly gates controls: ppi/hub/cpdTarget expose {node,edge,nodeSize,edgeThickness} but grid:false; go/kegg/docking expose grid:true, palette:true, but omit nodeSize/edgeThickness from sizes[]; heatmap has palette:true with drawer rendering it as 'Colour scale' (L200); admet expose {node,label,grid} for radar. Theme (L104) and Font (L170) sections are gated on `applyToAll` — only render when checkbox is checked. `data-testid=chart-style-apply-all` exists on the scope-toggle checkbox at L87. Placement audit — CustomizeFigureButton is embedded inside figure cards at: NetworkAnalysis.jsx L1037 (PPI, chartType='ppi'), L1356 (hub subgraph, chartType='hub'), L1480 (GO controls, testid='customize-figure-go'), L1980 (KEGG, testid='customize-figure-kegg'); network/PCTDPPanel.jsx L254 (testid='customize-figure-pctdp'); DockingViewer.jsx L58 (only when expanded, testid='customize-figure-docking-<pairId>'). Live browser tests against REACT_APP_BACKEND_URL: 6 routes fetched with Playwright — for every route including / (Home), /network-analysis, /molecular-docking, /molecular-dynamics, /ai-assistant, /drug-likeness — `[data-testid=chart-style-open]` returned None, `[data-testid=chart-style-drawer]` returned None (drawer is NOT globally mounted), `[data-testid=chart-style-backdrop]` returned None, and `[data-testid^=customize-figure-]` returned 0 on Home. The visualization pages also returned 0 customize-figure-* buttons in their guard/empty states — expected because those pages render figure cards only after upstream workflow steps produce data (per main agent's note that walking the 9-step workflow is out of scope). No runtime JS console errors captured on any page. Home renders correctly: hero ('AI Scientist for Medicinal Plant Drug Discovery'), feature cards, footer visible; ResumeSessionModal is expected auto-saved-session prompt.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "code_inspection_results": [
+    "App.js L1-82: ChartStyleDrawer import removed, ChartStyleProvider only. No <ChartStyleDrawer/> at any level of the JSX tree. Global drawer mount definitively gone.",
+    "ChartStyleDrawer.jsx L16-56: controlled component signature `{open, onClose, chartType}`; returns null when !open; no internal button that opens itself. Scope toggle checkbox at L87 with data-testid=chart-style-apply-all. Theme (L104) + Font (L170) gated on applyToAll — inherently global-only.",
+    "CustomizeFigureButton.jsx L14-33: exports named + default `CustomizeFigureButton({chartType, label, testid})`; renders button with computed testid `customize-figure-<chartType>` and mounts local <ChartStyleDrawer/>; open state is local useState so each figure controls its own drawer.",
+    "ChartStyleContext.jsx CHART_FIELD_SCHEMAS L48-136: verified per-chart schemas — ppi/hub/cpdTarget: {palette,legend,grid:false,border,font} with nodeSize+edgeThickness; go/kegg: {palette,legend,grid:true} sizes ONLY [labelSize, opacity] (no node/edge sliders); docking: legend:false, grid:true; heatmap: grid:false, palette:true rendered as 'Colour scale' (drawer L200 conditional label); admet: colors ['node','background','label','grid'], sizes [labelSize, opacity].",
+    "NetworkAnalysis.jsx: CustomizeFigureButton placements verified at PPI L1037 (inside `filteredResult && (...)` block — only when data), Hub L1356 (inside HubSubgraphNetwork — subgraph.nodes>0 guard L1348), GO L1480, KEGG L1980. All inside their respective figure card headers.",
+    "components/network/PCTDPPanel.jsx L254 uses testid='customize-figure-pctdp' with chartType='cpdTarget'. DockingViewer.jsx L58 uses testid='customize-figure-docking-<pairId>' — placed inside expanded viewer only."
+  ],
+  "browser_negative_tests": {
+    "Home /": {"chart-style-open": false, "drawer-mounted": false, "backdrop-mounted": false, "customize-figure-count": 0},
+    "/network-analysis": {"chart-style-open": false, "drawer-mounted": false, "customize-figure-count": 0, "note": "guard state (no upstream workflow) — expected"},
+    "/molecular-docking": {"chart-style-open": false, "drawer-mounted": false, "customize-figure-count": 0, "note": "guard state"},
+    "/molecular-dynamics": {"chart-style-open": false, "drawer-mounted": false, "customize-figure-count": 0, "note": "guard state"},
+    "/ai-assistant": {"chart-style-open": false, "drawer-mounted": false, "customize-figure-count": 0},
+    "/drug-likeness": {"chart-style-open": false, "drawer-mounted": false, "customize-figure-count": 0, "note": "ADMET/toxicity — no visualizations by design, per spec"}
+  },
+  "action_items": [
+    "No action required — bug fix verified. The global ChartStyleDrawer has been fully removed from Home and every route; per-figure CustomizeFigureButton is correctly wired on all visualization pages; context-aware schema (CHART_FIELD_SCHEMAS) drives which controls appear."
+  ],
+  "critical_code_review_comments": [
+    "Minor: ChartStyleDrawer.jsx L36 `setForChart(chartType, {})` inside the applyToAll write branch effectively wipes the entire per-chart override every time a global patch is applied. This is intentional (comment L30-32) but the `void nextOverride;` line at L38 is dead code. Consider removing the unused block and just doing setForChart(chartType, {}) directly.",
+    "Minor: ChartStyleDrawer palette PaletteEditor L296-320 uses index-based key `key={i}` which will re-mount the color input on reorder. Not a bug because palette is not reorderable in the current UI, but flag if drag-reorder is added later.",
+    "Minor: CustomizeFigureButton mounts its own <ChartStyleDrawer/> per instance. If a page has 5 figure cards, 5 drawer components live in React tree at once (each returns null when closed, so DOM cost is 0). Fine for MVP; if perf becomes a concern, hoist a single drawer per page with a shared open+chartType state.",
+    "Minor: DockingViewer L58 places CustomizeFigureButton with pair-scoped testid `customize-figure-docking-<pairId>`. Testing this end-to-end requires an expanded docking run. Not tested in this iter due to workflow-seed cost."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "not tested (frontend-only iteration per request)",
+    "frontend": "100% for negative tests (0 chart-style-open detected on 6 routes) + 100% source-code acceptance (all 15 acceptance items in the request confirmed)"
+  },
+  "test_credentials": "Not used — AUTH_GATE_ENABLED=false; all pages accessible without login.",
+  "seed_data_creation": "None. Positive-path verification of customize-figure-* buttons on live pages would require walking the 9-step workflow (target prediction → disease targets → intersection → PPI → hub → GO → KEGG → PCTDP → docking) which is out of scope for this bug-fix iter. Source-code verification is sufficient per main agent's guidance.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "To positively verify the drawer opens on a customize-figure-* click, seed NetworkContext with compoundTargets+diseaseTargets via localStorage (key patterns visible in NetworkContext.jsx) or complete Target Prediction + Disease Targets in the UI, then navigate to /network-analysis → PPI tab. Clicking [data-testid=customize-figure-ppi] should reveal [data-testid=chart-style-drawer] with [data-testid=chart-style-apply-all] checkbox at top. Checking that checkbox should then reveal [data-testid=theme-light], [data-testid=font-Inter], etc., which are hidden by default. This iteration only verified the STATIC schema + NEGATIVE test on Home + placement in source; the interactive drawer flow itself was not exercised in the browser."
+}

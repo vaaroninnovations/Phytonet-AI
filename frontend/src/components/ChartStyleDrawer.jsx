@@ -1,26 +1,49 @@
-// Floating "Customize" drawer — comprehensive chart / network style controls.
+// Figure-scoped chart customization drawer.
 //
-// Structure:
-//   Global tab   → theme, colors, sizes, legend, grid, font, borders
-//   Per-chart tab→ override any of the above for one of 13 chart types
+// Controlled component. Consumers embed it as:
+//    <ChartStyleDrawer open={open} onClose={...} chartType="go" />
 //
-// Consumers use `useChartStyle()` for global, or `useAppliedStyle(type)` for a
-// merged style that already respects both global + per-chart overrides.
+// The drawer:
+//   • Shows only options relevant to the given chartType (schema-driven).
+//   • Writes changes to `byChart[chartType]` by default (this figure only).
+//   • Offers a "Apply current style to all figures in this project" toggle
+//     that instead writes to global scope + clears the per-chart override so
+//     changes propagate everywhere.
 import { useMemo, useState } from "react";
 import { Palette, RotateCcw, X, Grid, Type as TypeIcon, LayoutGrid } from "lucide-react";
 import { useChartStyle, THEMES, CHART_TYPES, schemaFor } from "@/context/ChartStyleContext";
 
-export default function ChartStyleDrawer() {
-  const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState("global");            // "global" | chartKey
+export default function ChartStyleDrawer({ open = false, onClose = () => {}, chartType = "global" }) {
+  const [applyToAll, setApplyToAll] = useState(false);
   const { style, raw, set, setForChart, resetChart, reset } = useChartStyle();
 
-  const chartOverride = (raw.byChart || {})[tab] || {};
-  const schema = useMemo(() => schemaFor(tab), [tab]);
+  const scope = applyToAll ? "global" : chartType;
+  const chartOverride = (raw.byChart || {})[chartType] || {};
+  const schema = useMemo(() => schemaFor(chartType), [chartType]);
 
-  // Helper to write to the correct scope (global vs. per-chart)
-  const write = (patch) => tab === "global" ? set(patch) : setForChart(tab, patch);
-  const val = (k) => tab === "global" ? (raw[k] ?? null) : (chartOverride[k] ?? null);
+  // Write: either global raw.* or per-chart byChart[chartType]
+  const write = (patch) => {
+    if (applyToAll) {
+      // Push to global AND clear the per-chart override so the global change
+      // becomes visible on this figure.
+      set(patch);
+      const keysToClear = Object.keys(patch);
+      const nextOverride = { ...chartOverride };
+      keysToClear.forEach((k) => { delete nextOverride[k]; });
+      if (raw.byChart?.[chartType]) {
+        // resetChart wipes the entire override; we want a partial clear.
+        // Emulate by pushing an object where only the affected keys are gone.
+        setForChart(chartType, {});
+      }
+      void nextOverride;
+    } else {
+      setForChart(chartType, patch);
+    }
+  };
+  const val = (k) => {
+    if (applyToAll) return raw[k] ?? null;
+    return chartOverride[k] ?? raw[k] ?? null;
+  };
   const has = (section, field) => {
     if (!schema[section]) return false;
     if (field === undefined) return true;
@@ -28,211 +51,188 @@ export default function ChartStyleDrawer() {
   };
 
   const chartMeta = useMemo(() =>
-    CHART_TYPES.find((c) => c.key === tab), [tab]);
+    CHART_TYPES.find((c) => c.key === chartType), [chartType]);
+
+  if (!open) return null;
 
   return (
-    <>
-      <button
-        data-testid="chart-style-open"
-        onClick={() => setOpen(true)}
-        aria-label="Customize charts"
-        className="fixed bottom-24 right-6 z-40 inline-flex items-center gap-2 rounded-full border border-[#E7E7F3] bg-white/95 px-4 py-2.5 text-[12px] font-bold text-[#0B0B18] shadow-[0_16px_36px_-14px_rgba(11,11,24,0.25)] backdrop-blur hover:border-[#5139ED]/40 hover:text-[#5139ED]">
-        <Palette className="h-4 w-4 text-[#5139ED]" /> Customize
-      </button>
-
-      {open && (
-        <div
-          data-testid="chart-style-backdrop"
-          className="fixed inset-0 z-[80] flex justify-end bg-[#0B0B18]/30 backdrop-blur-sm"
-          onClick={() => setOpen(false)}
-        >
-          <aside data-testid="chart-style-drawer"
-                 onClick={(e) => e.stopPropagation()}
-                 className="flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-[#E7E7F3] bg-white p-6 shadow-2xl">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-headline text-[11px] font-bold uppercase tracking-widest text-[#5139ED]">Visualization</p>
-                <h2 className="font-headline mt-1 text-[20px] text-[#0B0B18]">Chart customization</h2>
-              </div>
-              <button data-testid="chart-style-close" onClick={() => setOpen(false)}
-                      className="grid h-8 w-8 place-items-center rounded-full text-[#64748B] hover:bg-[#F8FAFC]">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            {/* Scope selector */}
-            <div className="mt-5 rounded-2xl border border-[#E7E7F3] bg-[#FAFAFF] p-1.5">
-              <label className="ml-2 block text-[10px] font-bold uppercase tracking-widest text-[#64748B]">Scope</label>
-              <select
-                data-testid="chart-style-scope"
-                value={tab}
-                onChange={(e) => setTab(e.target.value)}
-                className="mt-1 w-full rounded-xl border-none bg-white px-3 py-2 text-[12.5px] font-semibold text-[#0B0B18] focus:outline-none focus:ring-2 focus:ring-[#5139ED]/40"
-              >
-                <option value="global">Global (all charts)</option>
-                {["Networks", "Enrichment", "Charts"].map((cat) => (
-                  <optgroup key={cat} label={cat}>
-                    {CHART_TYPES.filter((c) => c.category === cat).map((c) => (
-                      <option key={c.key} value={c.key}>{c.label}</option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-            </div>
-
-            {chartMeta && (
-              <div className="mt-2 rounded-lg border border-[#5139ED]/20 bg-[#F5F3FE] p-2.5">
-                <p className="text-[11px] font-semibold text-[#0B0B18]">
-                  Editing <span className="font-bold text-[#5139ED]">{chartMeta.label}</span>
-                </p>
-                <p className="mt-0.5 text-[10px] text-[#64748B]">
-                  Only relevant options are shown for this chart type. Empty fields inherit from Global.
-                </p>
-              </div>
-            )}
-
-            {/* Theme (global only — themes are global) */}
-            {tab === "global" && (
-              <Section title="Theme" icon={<Palette className="h-3 w-3" />}>
-                <div className="grid grid-cols-1 gap-2">
-                  {Object.entries(THEMES).map(([k, t]) => (
-                    <button key={k} data-testid={`theme-${k}`} onClick={() => set({ themeKey: k })}
-                            className={`flex items-center gap-3 rounded-xl border p-2.5 text-left transition-all ${
-                              raw.themeKey === k
-                                ? "border-[#5139ED] bg-[#F5F3FE]"
-                                : "border-[#E7E7F3] bg-white hover:border-[#5139ED]/40"}`}>
-                      <div className="flex gap-0.5">
-                        {t.palette.slice(0, 5).map((c) => (
-                          <span key={c} className="h-4 w-2.5 rounded-sm" style={{ background: c }} />
-                        ))}
-                      </div>
-                      <p className="flex-1 text-[12px] font-bold text-[#0B0B18]">{t.label}</p>
-                      <span className="rounded-md border border-[#E7E7F3] px-2 py-0.5 text-[10px] text-[#64748B]" style={{ background: t.background, color: t.foreground }}>
-                        Aa
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </Section>
-            )}
-
-            {/* Colors */}
-            <Section title="Colors">
-              {has("colors", "node")       && <ColorRow label="Node"       testid={`${tab}-color-node`}  value={val("nodeColor") || style.node}      onChange={(v) => write({ nodeColor: v })} />}
-              {has("colors", "edge")       && <ColorRow label="Edge"       testid={`${tab}-color-edge`}  value={val("edgeColor") || style.edge}      onChange={(v) => write({ edgeColor: v })} />}
-              {has("colors", "background") && <ColorRow label="Background" testid={`${tab}-color-bg`}    value={val("backgroundColor") || style.background} onChange={(v) => write({ backgroundColor: v })} />}
-              {has("colors", "label")      && <ColorRow label="Label"      testid={`${tab}-color-label`} value={val("labelColor") || style.labelColor} onChange={(v) => write({ labelColor: v })} />}
-              {has("colors", "grid")       && <ColorRow label="Grid"       testid={`${tab}-color-grid`}  value={val("gridColor") || style.grid}      onChange={(v) => write({ gridColor: v })} />}
-            </Section>
-
-            {/* Sizes */}
-            <Section title="Sizes & opacity">
-              {has("sizes", "nodeSize")      && <SliderRow label="Node scale"     testid={`${tab}-size-node`}    min={0.3} max={3}   step={0.05} value={val("nodeSize") ?? style.nodeSize}         onChange={(v) => write({ nodeSize: v })} />}
-              {has("sizes", "edgeThickness") && <SliderRow label={tab === "md" ? "Line width" : "Edge thickness"} testid={`${tab}-size-edge`}    min={0.3} max={6}   step={0.1}  value={val("edgeThickness") ?? style.edgeThickness} onChange={(v) => write({ edgeThickness: v })} />}
-              {has("sizes", "labelSize")     && <SliderRow label="Label size"     testid={`${tab}-size-label`}   min={8}   max={22}  step={1}    value={val("labelSize") ?? style.labelSize}       onChange={(v) => write({ labelSize: v })} />}
-              {has("sizes", "opacity")       && <SliderRow label="Opacity"        testid={`${tab}-size-opacity`} min={0.2} max={1}   step={0.05} value={val("opacity") ?? style.opacity}           onChange={(v) => write({ opacity: v })} />}
-            </Section>
-
-            {/* Legend */}
-            {has("legend") && (
-              <Section title="Legend" icon={<LayoutGrid className="h-3 w-3" />}>
-                <ToggleRow label="Show legend" testid={`${tab}-show-legend`} value={val("showLegend") ?? style.showLegend} onChange={(v) => write({ showLegend: v })} />
-                <div className="grid grid-cols-5 gap-2">
-                  {["off","top","right","bottom","left"].map((p) => (
-                    <button key={p} data-testid={`legend-${tab}-${p}`}
-                            onClick={() => write({ legendPosition: p })}
-                            className={`rounded-lg border px-2 py-1.5 text-[11px] font-bold capitalize transition-all ${
-                              (val("legendPosition") ?? style.legendPosition) === p
-                                ? "border-[#5139ED] bg-[#F5F3FE] text-[#5139ED]"
-                                : "border-[#E7E7F3] bg-white text-[#0B0B18] hover:border-[#5139ED]/40"}`}>
-                      {p}
-                    </button>
-                  ))}
-                </div>
-              </Section>
-            )}
-
-            {/* Grid + Border */}
-            {(has("grid") || has("border")) && (
-              <Section title="Grid & border" icon={<Grid className="h-3 w-3" />}>
-                {has("grid")   && <ToggleRow label="Show grid"   testid={`${tab}-show-grid`}   value={val("showGrid") ?? style.showGrid}   onChange={(v) => write({ showGrid: v })} />}
-                {has("border") && <ToggleRow label="Show border" testid={`${tab}-show-border`} value={val("showBorder") ?? style.showBorder} onChange={(v) => write({ showBorder: v })} />}
-                {has("border") && <SliderRow label="Border radius" testid={`${tab}-border-radius`} min={0} max={32} step={1} value={val("borderRadius") ?? style.borderRadius} onChange={(v) => write({ borderRadius: v })} />}
-              </Section>
-            )}
-
-            {tab === "global" && has("font") && (
-              <Section title="Font family" icon={<TypeIcon className="h-3 w-3" />}>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { k: null, label: "Theme default" },
-                    { k: "'Inter', sans-serif", label: "Inter" },
-                    { k: "'Arial', 'Helvetica', sans-serif", label: "Arial" },
-                    { k: "'Georgia', serif", label: "Georgia" },
-                    { k: "'Times New Roman', serif", label: "Times" },
-                    { k: "'JetBrains Mono', monospace", label: "Mono" },
-                  ].map((f) => (
-                    <button
-                      key={f.label}
-                      data-testid={`font-${f.label}`}
-                      onClick={() => set({ fontFamily: f.k })}
-                      className={`rounded-lg border px-2 py-1.5 text-[11px] font-bold transition-all ${
-                        (raw.fontFamily || null) === (f.k || null)
-                          ? "border-[#5139ED] bg-[#F5F3FE] text-[#5139ED]"
-                          : "border-[#E7E7F3] bg-white text-[#0B0B18] hover:border-[#5139ED]/40"}`}
-                      style={f.k ? { fontFamily: f.k } : {}}
-                    >
-                      {f.label}
-                    </button>
-                  ))}
-                </div>
-              </Section>
-            )}
-
-            {/* Palette editor */}
-            {has("palette") && (
-              <Section title={tab === "heatmap" ? "Colour scale" : "Palette"}>
-                <PaletteEditor
-                  testidPrefix={`${tab}-palette`}
-                  palette={val("paletteOverride") ?? (tab === "global" ? style.palette : ((raw.byChart?.[tab]?.palette) || style.palette))}
-                  onChange={(next) => tab === "global"
-                    ? set({ paletteOverride: next })
-                    : setForChart(tab, { palette: next })}
-                />
-              </Section>
-            )}
-
-            {/* Preview */}
-            <Section title="Live preview">
-              <MiniPreview chartType={tab === "global" ? "ppi" : tab} />
-            </Section>
-
-            {/* Actions */}
-            <div className="mt-6 flex items-center justify-between gap-3">
-              {tab === "global" ? (
-                <button data-testid="chart-style-reset" onClick={reset}
-                        className="inline-flex items-center gap-1.5 rounded-full border border-[#E7E7F3] bg-white px-4 py-2 text-[12px] font-bold text-[#0B0B18] hover:border-[#5139ED]/40">
-                  <RotateCcw className="h-3.5 w-3.5" /> Reset all
-                </button>
-              ) : (
-                <button data-testid={`chart-style-reset-${tab}`} onClick={() => resetChart(tab)}
-                        className="inline-flex items-center gap-1.5 rounded-full border border-[#E7E7F3] bg-white px-4 py-2 text-[12px] font-bold text-[#0B0B18] hover:border-[#5139ED]/40">
-                  <RotateCcw className="h-3.5 w-3.5" /> Reset {chartMeta?.label}
-                </button>
-              )}
-              <button data-testid="chart-style-save" onClick={() => setOpen(false)}
-                      className="inline-flex items-center gap-1.5 rounded-full bg-[#5139ED] px-5 py-2 text-[12px] font-bold text-white hover:bg-[#4127c9]">
-                Save preferences
-              </button>
-            </div>
-            <p className="mt-2 text-[10px] text-[#94A3B8]">
-              Preferences are saved locally to your browser and applied automatically to every chart on this device.
+    <div
+      data-testid="chart-style-backdrop"
+      className="fixed inset-0 z-[80] flex justify-end bg-[#0B0B18]/30 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <aside
+        data-testid="chart-style-drawer"
+        onClick={(e) => e.stopPropagation()}
+        className="flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-[#E7E7F3] bg-white p-6 shadow-2xl"
+      >
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="font-headline text-[11px] font-bold uppercase tracking-widest text-[#5139ED]">
+              Figure customization
             </p>
-          </aside>
+            <h2 className="font-headline mt-1 text-[20px] text-[#0B0B18]">
+              {chartMeta?.label || "Figure style"}
+            </h2>
+          </div>
+          <button data-testid="chart-style-close" onClick={onClose}
+                  className="grid h-8 w-8 place-items-center rounded-full text-[#64748B] hover:bg-[#F8FAFC]">
+            <X className="h-4 w-4" />
+          </button>
         </div>
-      )}
-    </>
+
+        {/* Scope toggle */}
+        <label className="mt-4 flex items-center gap-2 rounded-2xl border border-[#5139ED]/20 bg-[#F5F3FE] p-3">
+          <input
+            data-testid="chart-style-apply-all"
+            type="checkbox"
+            checked={applyToAll}
+            onChange={(e) => setApplyToAll(e.target.checked)}
+            className="h-4 w-4 accent-[#5139ED]"
+          />
+          <div className="flex-1">
+            <p className="text-[12px] font-bold text-[#0B0B18]">Apply current style to all figures in this project</p>
+            <p className="mt-0.5 text-[10.5px] text-[#64748B]">
+              {applyToAll
+                ? "Changes propagate to every figure globally."
+                : "Changes apply only to this figure."}
+            </p>
+          </div>
+        </label>
+
+        {/* Theme (only meaningful in global mode) */}
+        {applyToAll && (
+          <Section title="Theme" icon={<Palette className="h-3 w-3" />}>
+            <div className="grid grid-cols-1 gap-2">
+              {Object.entries(THEMES).map(([k, t]) => (
+                <button key={k} data-testid={`theme-${k}`} onClick={() => set({ themeKey: k })}
+                        className={`flex items-center gap-3 rounded-xl border p-2.5 text-left transition-all ${
+                          raw.themeKey === k
+                            ? "border-[#5139ED] bg-[#F5F3FE]"
+                            : "border-[#E7E7F3] bg-white hover:border-[#5139ED]/40"}`}>
+                  <div className="flex gap-0.5">
+                    {t.palette.slice(0, 5).map((c) => (
+                      <span key={c} className="h-4 w-2.5 rounded-sm" style={{ background: c }} />
+                    ))}
+                  </div>
+                  <p className="flex-1 text-[12px] font-bold text-[#0B0B18]">{t.label}</p>
+                </button>
+              ))}
+            </div>
+          </Section>
+        )}
+
+        {/* Colors */}
+        <Section title="Colors">
+          {has("colors", "node")       && <ColorRow label={chartType === "admet" ? "Fill" : "Node"} testid={`${scope}-color-node`}  value={val("nodeColor") || style.node}      onChange={(v) => write({ nodeColor: v })} />}
+          {has("colors", "edge")       && <ColorRow label="Edge"        testid={`${scope}-color-edge`}  value={val("edgeColor") || style.edge}      onChange={(v) => write({ edgeColor: v })} />}
+          {has("colors", "background") && <ColorRow label="Background"  testid={`${scope}-color-bg`}    value={val("backgroundColor") || style.background} onChange={(v) => write({ backgroundColor: v })} />}
+          {has("colors", "label")      && <ColorRow label="Label"       testid={`${scope}-color-label`} value={val("labelColor") || style.labelColor} onChange={(v) => write({ labelColor: v })} />}
+          {has("colors", "grid")       && <ColorRow label="Grid"        testid={`${scope}-color-grid`}  value={val("gridColor") || style.grid}      onChange={(v) => write({ gridColor: v })} />}
+        </Section>
+
+        {/* Sizes */}
+        <Section title="Sizes & opacity">
+          {has("sizes", "nodeSize")      && <SliderRow label={chartType === "bubble" || chartType === "volcano" ? "Dot size" : "Node scale"} testid={`${scope}-size-node`}    min={0.3} max={3}   step={0.05} value={val("nodeSize") ?? style.nodeSize}         onChange={(v) => write({ nodeSize: v })} />}
+          {has("sizes", "edgeThickness") && <SliderRow label={chartType === "md" ? "Line width" : "Edge thickness"} testid={`${scope}-size-edge`}    min={0.3} max={6}   step={0.1}  value={val("edgeThickness") ?? style.edgeThickness} onChange={(v) => write({ edgeThickness: v })} />}
+          {has("sizes", "labelSize")     && <SliderRow label="Label size" testid={`${scope}-size-label`}   min={8}   max={22}  step={1}    value={val("labelSize") ?? style.labelSize}       onChange={(v) => write({ labelSize: v })} />}
+          {has("sizes", "opacity")       && <SliderRow label="Opacity"    testid={`${scope}-size-opacity`} min={0.2} max={1}   step={0.05} value={val("opacity") ?? style.opacity}           onChange={(v) => write({ opacity: v })} />}
+        </Section>
+
+        {/* Legend */}
+        {has("legend") && (
+          <Section title="Legend" icon={<LayoutGrid className="h-3 w-3" />}>
+            <ToggleRow label="Show legend" testid={`${scope}-show-legend`} value={val("showLegend") ?? style.showLegend} onChange={(v) => write({ showLegend: v })} />
+            <div className="grid grid-cols-5 gap-2">
+              {["off","top","right","bottom","left"].map((p) => (
+                <button key={p} data-testid={`legend-${scope}-${p}`}
+                        onClick={() => write({ legendPosition: p })}
+                        className={`rounded-lg border px-2 py-1.5 text-[11px] font-bold capitalize transition-all ${
+                          (val("legendPosition") ?? style.legendPosition) === p
+                            ? "border-[#5139ED] bg-[#F5F3FE] text-[#5139ED]"
+                            : "border-[#E7E7F3] bg-white text-[#0B0B18] hover:border-[#5139ED]/40"}`}>
+                  {p}
+                </button>
+              ))}
+            </div>
+          </Section>
+        )}
+
+        {/* Grid + Border */}
+        {(has("grid") || has("border")) && (
+          <Section title="Grid & border" icon={<Grid className="h-3 w-3" />}>
+            {has("grid")   && <ToggleRow label="Show gridlines" testid={`${scope}-show-grid`}   value={val("showGrid") ?? style.showGrid}   onChange={(v) => write({ showGrid: v })} />}
+            {has("border") && <ToggleRow label="Show border"    testid={`${scope}-show-border`} value={val("showBorder") ?? style.showBorder} onChange={(v) => write({ showBorder: v })} />}
+            {has("border") && <SliderRow label="Border radius"  testid={`${scope}-border-radius`} min={0} max={32} step={1} value={val("borderRadius") ?? style.borderRadius} onChange={(v) => write({ borderRadius: v })} />}
+          </Section>
+        )}
+
+        {applyToAll && has("font") && (
+          <Section title="Font family" icon={<TypeIcon className="h-3 w-3" />}>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { k: null, label: "Theme default" },
+                { k: "'Inter', sans-serif", label: "Inter" },
+                { k: "'Arial', 'Helvetica', sans-serif", label: "Arial" },
+                { k: "'Georgia', serif", label: "Georgia" },
+                { k: "'Times New Roman', serif", label: "Times" },
+                { k: "'JetBrains Mono', monospace", label: "Mono" },
+              ].map((f) => (
+                <button
+                  key={f.label}
+                  data-testid={`font-${f.label}`}
+                  onClick={() => set({ fontFamily: f.k })}
+                  className={`rounded-lg border px-2 py-1.5 text-[11px] font-bold transition-all ${
+                    (raw.fontFamily || null) === (f.k || null)
+                      ? "border-[#5139ED] bg-[#F5F3FE] text-[#5139ED]"
+                      : "border-[#E7E7F3] bg-white text-[#0B0B18] hover:border-[#5139ED]/40"}`}
+                  style={f.k ? { fontFamily: f.k } : {}}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </Section>
+        )}
+
+        {/* Palette editor */}
+        {has("palette") && (
+          <Section title={chartType === "heatmap" ? "Colour scale" : "Palette"}>
+            <PaletteEditor
+              testidPrefix={`${scope}-palette`}
+              palette={applyToAll
+                ? (raw.paletteOverride ?? style.palette)
+                : (chartOverride.palette || style.palette)}
+              onChange={(next) => applyToAll
+                ? set({ paletteOverride: next })
+                : setForChart(chartType, { palette: next })}
+            />
+          </Section>
+        )}
+
+        {/* Actions */}
+        <div className="mt-6 flex items-center justify-between gap-3">
+          {applyToAll ? (
+            <button data-testid="chart-style-reset" onClick={reset}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-[#E7E7F3] bg-white px-4 py-2 text-[12px] font-bold text-[#0B0B18] hover:border-[#5139ED]/40">
+              <RotateCcw className="h-3.5 w-3.5" /> Reset all figures
+            </button>
+          ) : (
+            <button data-testid={`chart-style-reset-${chartType}`} onClick={() => resetChart(chartType)}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-[#E7E7F3] bg-white px-4 py-2 text-[12px] font-bold text-[#0B0B18] hover:border-[#5139ED]/40">
+              <RotateCcw className="h-3.5 w-3.5" /> Reset this figure
+            </button>
+          )}
+          <button data-testid="chart-style-save" onClick={onClose}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-[#5139ED] px-5 py-2 text-[12px] font-bold text-white hover:bg-[#4127c9]">
+            Done
+          </button>
+        </div>
+        <p className="mt-2 text-[10px] text-[#94A3B8]">
+          Preferences are saved locally to your browser and applied to this figure on all devices logged into this account.
+        </p>
+      </aside>
+    </div>
   );
 }
 
@@ -315,50 +315,6 @@ function PaletteEditor({ testidPrefix, palette, onChange }) {
           </span>
         </label>
       ))}
-    </div>
-  );
-}
-
-/* ── Live preview ───────────────────────────────────────────────────── */
-function MiniPreview({ chartType }) {
-  const { style } = useChartStyle();
-  const isBarLike = ["go", "kegg", "docking", "lollipop"].includes(chartType);
-  const border = {
-    borderRadius: style.borderRadius,
-    border: style.showBorder ? `1px solid ${style.borderColor}` : "none",
-  };
-  return (
-    <div className="rounded-2xl p-3" style={{ ...border, background: style.background, fontFamily: style.fontFamily }}>
-      <svg viewBox="0 0 300 130" className="w-full">
-        {style.showGrid && [30, 60, 90].map((y) => (
-          <line key={y} x1="10" y1={y} x2="290" y2={y} stroke={style.grid} strokeWidth="0.5" />
-        ))}
-        {isBarLike ? (
-          [65, 40, 85, 55, 70, 90, 45].map((h, i) => (
-            <rect key={i} x={20 + i * 38} y={110 - h} width="26" height={h}
-                  fill={style.palette[i % style.palette.length]} opacity={style.opacity}
-                  rx={2} />
-          ))
-        ) : (
-          [
-            { x: 40, y: 60 }, { x: 100, y: 30 }, { x: 100, y: 90 },
-            { x: 180, y: 60 }, { x: 260, y: 60 },
-          ].map((n, i) => (
-            <g key={i} opacity={style.opacity}>
-              {i > 0 && (
-                <line x1={n.x} y1={n.y}
-                      x2={[null,40,40,100,180][i]} y2={[null,60,60,30,60][i]}
-                      stroke={style.edge} strokeWidth={1.5 * style.edgeThickness} />
-              )}
-              <circle cx={n.x} cy={n.y} r={8 * style.nodeSize}
-                      fill={style.palette[i % style.palette.length] || style.node} />
-              <text x={n.x} y={n.y + 8 * style.nodeSize + 12}
-                    textAnchor="middle" fontSize={style.labelSize}
-                    fill={style.labelColor}>N{i + 1}</text>
-            </g>
-          ))
-        )}
-      </svg>
     </div>
   );
 }

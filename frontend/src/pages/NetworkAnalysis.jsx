@@ -20,6 +20,7 @@ import UTIF from "utif";
 import CytoscapeComponent from "react-cytoscapejs";
 import "@/lib/cytoscapeSetup";
 import { useAppliedStyle, mixHex } from "@/context/ChartStyleContext";
+import { CustomizeFigureButton } from "@/components/CustomizeFigureButton";
 import { GOPanel as NewGOPanel } from "@/components/network/GOPanel";
 import { KEGGPanel as NewKEGGPanel } from "@/components/network/KEGGPanel";
 import { PCTDPPanel } from "@/components/network/PCTDPPanel";
@@ -1033,6 +1034,7 @@ function PPIPanel({ genes, ppiResult, setPpiResult, onComplete }) {
                 {filteredResult.edges.length} edges
               </p>
               <div data-testid="ppi-exports" className="flex flex-wrap items-center gap-2">
+                <CustomizeFigureButton chartType="ppi" />
                 <TableToolbar
                   rows={filteredResult.edges.map((e) => ({
                     source: e.source, target: e.target, score: e.score, ...(e.channels || {}),
@@ -1350,17 +1352,20 @@ function HubSubgraphNetwork({ ppiResult, scores, metric, topN }) {
         <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">
           Hub Subgraph · Top {subgraph.nodes.length} by {metric} · {subgraph.edges.length} edges
         </p>
-        <CyToolbar
-          getCy={() => cyRef.current}
-          containerRef={cardRef}
-          basename="hub_network"
-          graph={subgraph}
-          title={`Hub Subgraph · Top ${subgraph.nodes.length} by ${metric}`}
-          layout={layout}
-          onLayoutChange={setLayout}
-          onResetLayout={() => { const cy = cyRef.current; if (cy) cy.layout({ name: layout, animate: false, fit: true, padding: 30 }).run(); }}
-          testidPrefix="hub-net"
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <CustomizeFigureButton chartType="hub" />
+          <CyToolbar
+            getCy={() => cyRef.current}
+            containerRef={cardRef}
+            basename="hub_network"
+            graph={subgraph}
+            title={`Hub Subgraph · Top ${subgraph.nodes.length} by ${metric}`}
+            layout={layout}
+            onLayoutChange={setLayout}
+            onResetLayout={() => { const cy = cyRef.current; if (cy) cy.layout({ name: layout, animate: false, fit: true, padding: 30 }).run(); }}
+            testidPrefix="hub-net"
+          />
+        </div>
       </div>
       <CytoscapeComponent
         key={`hub-${elements.length}`}
@@ -1472,6 +1477,7 @@ function GOPanel({ genes, onComplete }) {
             </h2>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <CustomizeFigureButton chartType="go" testid="customize-figure-go" />
             <label className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-[#64748B]">
               Top
               <input
@@ -1971,6 +1977,7 @@ function KeggPanel({ genes, keggResult, setKeggResult, onComplete }) {
             </h2>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <CustomizeFigureButton chartType="kegg" testid="customize-figure-kegg" />
             <label className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-[#64748B]">
               Top
               <input

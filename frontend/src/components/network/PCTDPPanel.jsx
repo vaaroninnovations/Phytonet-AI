@@ -14,6 +14,7 @@ import { TableToolbar } from "@/components/network/TableToolbar";
 import { CyToolbar } from "@/components/network/CyToolbar";
 import { DataTable } from "@/components/network/DataTable";
 import { useAppliedStyle } from "@/context/ChartStyleContext";
+import { CustomizeFigureButton } from "@/components/CustomizeFigureButton";
 
 const TYPE_META = {
   plant:    { color: "#10B981", shape: "round-rectangle", label: "Plant" },
@@ -249,17 +250,20 @@ export function PCTDPPanel({ intersectingGenes = [], selectedKeggPathways = [], 
       <div data-testid="pctdp-network-card" className="rounded-3xl border border-[#E7E7F3] bg-white p-5 md:p-6">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">Integrative PCTDP Network</p>
-          <CyToolbar
-            getCy={() => cyRef.current}
-            containerRef={containerRef}
-            basename="pctdp_network"
-            graph={graph}
-            title="Plant-Compound-Target-Disease-Pathway Network"
-            layout={layout}
-            onLayoutChange={setLayout}
-            onResetLayout={() => { const cy = cyRef.current; if (cy) cy.layout(layoutOptions(layout, graph.nodes.length)).run(); }}
-            testidPrefix="pctdp-network"
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <CustomizeFigureButton chartType="cpdTarget" testid="customize-figure-pctdp" />
+            <CyToolbar
+              getCy={() => cyRef.current}
+              containerRef={containerRef}
+              basename="pctdp_network"
+              graph={graph}
+              title="Plant-Compound-Target-Disease-Pathway Network"
+              layout={layout}
+              onLayoutChange={setLayout}
+              onResetLayout={() => { const cy = cyRef.current; if (cy) cy.layout(layoutOptions(layout, graph.nodes.length)).run(); }}
+              testidPrefix="pctdp-network"
+            />
+          </div>
         </div>
         {graph.nodes.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-[#E7E7F3] bg-[#FAFAFF] p-10 text-center text-xs text-[#64748B]">
