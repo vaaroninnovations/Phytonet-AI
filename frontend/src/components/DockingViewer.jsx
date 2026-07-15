@@ -76,7 +76,8 @@ export default function DockingViewer({ jobId, pairId, ligandName, receptor, bes
 
 /* ── 3D Complex viewer (3Dmol.js) ─────────────────────────────────────── */
 function Complex3DViewer({ jobId, pairId, interactions }) {
-  const wrapRef = useRef(null);
+  const wrapRef = useRef(null);   // outer React div (holds loading overlay + host)
+  const hostRef = useRef(null);   // dedicated 3Dmol mount point — React never renders into this
   const viewerRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [style, setStyle] = useState("cartoon");        // cartoon | surface
@@ -144,19 +145,25 @@ function Complex3DViewer({ jobId, pairId, interactions }) {
       try {
         setLoading(true);
         const $3Dmol = (await import("3dmol")).default || (await import("3dmol"));
-        if (cancelled || !wrapRef.current) return;
+        if (cancelled || !hostRef.current) return;
         // Fetch complex.pdb
         const url = dockingPoseURL(jobId, pairId, "complex_pdb");
         const res = await fetch(url);
         if (!res.ok) throw new Error(`complex.pdb HTTP ${res.status}`);
         const pdbText = await res.text();
 
-        wrapRef.current.innerHTML = "";
-        viewerRef.current = $3Dmol.createViewer(wrapRef.current, {
+        // 3Dmol mounts INTO hostRef only. React never renders children into
+        // hostRef so 3Dmol's WebGL canvas manipulations are invisible to
+        // React's fiber tree — this prevents the classic
+        // "Failed to execute 'removeChild'" NotFoundError on unmount / route
+        // change.
+        if (viewerRef.current) {
+          try { viewerRef.current.clear(); } catch { /* ignore */ }
+          viewerRef.current = null;
+        }
+        viewerRef.current = $3Dmol.createViewer(hostRef.current, {
           backgroundColor: "white",
-          // Required for `getCanvas().toDataURL()` / `getImageData()` to work —
-          // without this WebGL clears the drawing buffer after each frame.
-          preserveDrawingBuffer: true,
+          preserveDrawingBuffer: true,  // required for canvas.toDataURL / getImageData
           antialias: true,
         });
         viewerRef.current.addModel(pdbText, "pdb");
@@ -168,7 +175,23 @@ function Complex3DViewer({ jobId, pairId, interactions }) {
         setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      // Tear down the 3Dmol viewer cleanly on unmount so React can safely
+      // reclaim hostRef's descendants. We deliberately leave the host div
+      // itself in place — React owns it.
+      if (viewerRef.current) {
+        try { viewerRef.current.clear(); } catch { /* ignore */ }
+        try {
+          // 3Dmol appends a WebGL canvas + label divs. Detach them by hand.
+          const host = hostRef.current;
+          if (host) {
+            while (host.firstChild) host.removeChild(host.firstChild);
+          }
+        } catch { /* ignore */ }
+        viewerRef.current = null;
+      }
+    };
   }, [jobId, pairId, applyStyle]);
 
   const reset = () => {
@@ -180,7 +203,7 @@ function Complex3DViewer({ jobId, pairId, interactions }) {
   };
 
   const fullscreen = () => {
-    const el = wrapRef.current;
+    const el = hostRef.current || wrapRef.current;
     if (!el) return;
     if (document.fullscreenElement) document.exitFullscreen();
     else el.requestFullscreen?.();
@@ -192,6 +215,7 @@ function Complex3DViewer({ jobId, pairId, interactions }) {
     try {
       const canvas =
         (viewerRef.current.getCanvas && viewerRef.current.getCanvas()) ||
+        hostRef.current?.querySelector("canvas") ||
         wrapRef.current?.querySelector("canvas");
       if (!canvas) throw new Error("3D canvas not available");
       viewerRef.current.render();
@@ -291,6 +315,14 @@ function Complex3DViewer({ jobId, pairId, interactions }) {
         </div>
       </div>
       <div ref={wrapRef} className="relative h-[420px] w-full rounded-xl bg-white">
+        {/* 3Dmol mount point — React never renders JSX children into this div,
+            so 3Dmol's WebGL canvas manipulations cannot break React's fiber
+            tree on unmount. */}
+        <div
+          ref={hostRef}
+          className="absolute inset-0 rounded-xl"
+          data-testid={`viewer-3dhost-${pairId}`}
+        />
         {loading && (
           <div className="absolute inset-0 grid place-items-center bg-white/60 backdrop-blur-sm">
             <div className="flex items-center gap-2 text-[12px] font-semibold text-[#5139ED]">
