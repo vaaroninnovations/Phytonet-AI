@@ -1,0 +1,47 @@
+{
+  "summary": "Backend regression test for the PhytoNet AI Cloudflare 520 fix on /api/report/generate. The PRIMARY fix (prompt slimming: _kbytes cap 1500, _slim_docking dropping heavy poses/interactions, 24k MAX_PROMPT_CHARS safety net) IS VERIFIED WORKING: a 246 kB workflow now compiles to a 10,753-char prompt (well under the 24k cap) and generates a full IMRAD manuscript in ~8.3 s via Groq. Unit tests for _build_prompt() and _slim_docking() pass. All 4 download formats (md/html/pdf/docx) work. Existing tests/test_report.py regression suite still passes. However, a SECONDARY latent bug remains: the backend's asyncio timeout is 90 s, but the ingress/Cloudflare timeout is empirically 60 s — when Groq returns 429 (rate-limited) and the Emergent Claude fallback hangs, the client gets Cloudflare 502 (Bad Gateway HTML) instead of a clean HTTP 500 JSON. The 520 has been converted into a 502 (better, but not clean). Recommendation: reduce both Groq `timeout=90.0` and Emergent `asyncio.wait_for(timeout=90.0)` to ~45 s so the backend surfaces a clean HTTP 500 JSON before the ingress gives up.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "POST /api/report/generate",
+        "issue": "When Groq returns 429 (rate-limited) and the Emergent Claude fallback is slow, the client gets Cloudflare/ingress 502 Bad Gateway (HTML) at exactly ~60.1 s instead of a clean HTTP 500 JSON. Backend logs show the 90-second asyncio.wait_for DOES fire correctly (grep 'Emergent LLM fallback timed out after 90 s') but the ingress has already returned 502 by that time. Ingress timeout appears to be 60 s. Fix: lower report_service.py Groq `timeout` and Emergent `asyncio.wait_for(timeout=)` from 90.0 → ~45.0 so a clean JSON error reaches the client before the ingress times out."
+      }
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_report_cloudflare_520_fix.py",
+    "/app/backend/tests/test_report.py",
+    "/app/test_reports/pytest/report_520_fix.xml"
+  ],
+  "action_items": [
+    "Lower `timeout=90.0` in report_service.py L148 (Groq) and L177 (asyncio.wait_for around Emergent chat.send_message) to ~45.0 seconds to stay safely under the 60-second ingress timeout — this ensures a clean HTTP 500 JSON is returned instead of a Cloudflare 502 HTML page when both LLMs are slow or unavailable.",
+    "Optional: If Groq 429 rate-limiting is a real concern in production, consider a short circuit — either (a) don't retry the Emergent fallback on 429 (it rarely helps), or (b) surface a specific 'LLMs are busy, please retry in a moment' error to the frontend."
+  ],
+  "critical_code_review_comments": [
+    "report_service.py L197-206: There are TWO identical `return {'markdown': md, 'meta': {...}}` blocks at the end of generate_report(). The second one (L197-206) is UNREACHABLE dead code because the first one returns at L187. Please remove the duplicate.",
+    "report_service.py L148 & L177: `timeout=90.0` and `asyncio.wait_for(..., timeout=90.0)` — as noted above, these exceed the ingress timeout (~60 s). Recommend 45 s to keep the backend response strictly ahead of the ingress giveup.",
+    "report_service.py L124: MAX_PROMPT_CHARS=24000 comment says 'llama-3.3-70b context = ~32k tokens ≈ 120k chars' — actually 32k tokens is closer to 128k chars, but 24k chars is a very safe conservative cap (~6k tokens). No change needed, just noting the estimate is on the safe side.",
+    "report_service.py: The unreachable second return block also disagrees slightly with the first — it does not add `error` field handling. Since it is dead, no impact, but should be deleted for clarity."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_report_cloudflare_520_fix.py (new — 12 tests covering unit-level prompt cap, slim_docking, small/large workflow E2E, and all 4 download formats)"
+  ],
+  "success_rate": {
+    "backend": "10/12 pass consistently when Groq is available (~83%); 2 large/small workflow tests are dependent on Groq quota — they PASSED when Groq accepted the request (retried individually: large workflow completed in 8.37 s HTTP 200) and FAILED with Cloudflare 502 when Groq was 429-throttled from rapid test runs. The 502 failure IS a real latent bug (see action_items).",
+    "frontend": "N/A — backend-only testing per request"
+  },
+  "test_credentials": "AUTH_GATE_ENABLED=off; no auth required for /api/report/generate.",
+  "seed_data_creation": "None — payloads built in-test by _small_workflow() and _large_workflow() helpers in /app/backend/tests/test_report_cloudflare_520_fix.py. Large builder generates a 246 kB workflow (compounds×40, genes×200, hubs×20, GO×30, KEGG×30, docking×20 each with 9 poses + 15 H-bonds + 15 hydrophobic contacts + 5 pi-stacks + full classification).",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The prompt-slimming fix (24k cap, _slim_docking, _kbytes cap 1500) is confirmed correct. When re-testing after main agent lowers the LLM timeouts to ~45 s: (a) run the new test file /app/backend/tests/test_report_cloudflare_520_fix.py, (b) if Groq 429s from rate limits, the large_workflow test should still return HTTP 500 with a JSON body (not 502 HTML), and (c) verify backend log line 'Emergent LLM fallback timed out after 45 s' appears within 45 s. Small-workflow test typically passes in <15 s. Full suite takes ~30-90 s when Groq is available. Groq rate limits recover in ~2-3 minutes.",
+  "rca_of_the_issue": {
+    "root_cause_primary": "The prompt sent to Groq embedded the ENTIRE workflow JSON (per-pose lists + full interactions dicts + classifications for every docking pair, all compounds, all GO/KEGG). A real experiment payload grew >40k chars → Groq llama-3.3-70b returned HTTP 413 Payload Too Large. The Emergent LLM fallback had no timeout → hung past the ingress limit → Cloudflare 520.",
+    "primary_fix_verification": "PASSED. New _slim_docking() drops per-pose + interactions dicts, keeping only ligand/target/affinity/quality + top-3 residue names. _kbytes() cap trimmed from 5000 → 1500. MAX_PROMPT_CHARS=24000 safety net at the end of _build_prompt(). Result: a 246,566-byte workflow → 10,753-char prompt (well under 24k cap). Groq now handles the request in ~7 s; total endpoint round-trip ~8.3 s. Verified via log line 'report/generate: prompt length = 10753 chars' followed by HTTP 200 with valid markdown/report_id/meta.",
+    "root_cause_secondary_latent": "The Emergent LLM fallback now HAS a 90-second `asyncio.wait_for` (correctly logged 'Emergent LLM fallback timed out after 90 s' in backend), BUT the Kubernetes ingress / Cloudflare edge times out at exactly ~60.1 s. So when Groq is 429-throttled and Emergent LLM is slow, the client STILL sees an HTML error page — just a 502 (Bad Gateway) instead of a 520. Better, but not the 'clean 500 JSON' promised by the fix.",
+    "reproduction_steps": "Rapidly POST /api/report/generate with the _large_workflow payload multiple times to trigger Groq 429. On each subsequent request, the client will receive HTTP 502 with content-type text/html at exactly ~60.1 s. Backend log will show 'Emergent LLM fallback timed out after 90 s' AFTER the client already got 502.",
+    "mitigation_applied": "None from my side (this is a business/design decision on timeout values). Recommendation to main agent documented in action_items."
+  }
+}

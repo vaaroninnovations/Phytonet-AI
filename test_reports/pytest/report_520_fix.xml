@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="5" tests="10" time="182.817" timestamp="2026-07-15T15:49:55.520954+00:00" hostname="agent-env-9d995150-1135-4ada-a6b3-bd790eddaba8"><testcase classname="tests.test_report_cloudflare_520_fix" name="test_prompt_stays_under_safety_cap_for_large_workflow" time="1.466" /><testcase classname="tests.test_report_cloudflare_520_fix" name="test_slim_docking_drops_poses_and_interactions" time="0.002" /><testcase classname="tests.test_report_cloudflare_520_fix" name="test_report_generate_small_workflow" time="60.199"><failure message="AssertionError: Expected JSON, got content-type=text/html; charset=UTF-8. First 400 bytes: &lt;!DOCTYPE html&gt;&#10;  &lt;!--[if lt IE 7]&gt; &lt;html class=&quot;no-js ie6 oldie&quot; lang=&quot;en-US&quot;&gt; &lt;![endif]--&gt;&#10;  &lt;!--[if IE 7]&gt;    &lt;html class=&quot;no-js ie7 oldie&quot; lang=&quot;en-US&quot;&gt; &lt;![endif]--&gt;&#10;  &lt;!--[if IE 8]&gt;    &lt;html class=&quot;no-js ie8 oldie&quot; lang=&quot;en-US&quot;&gt; &lt;![endif]--&gt;&#10;  &lt;!--[if gt IE 8]&gt;&lt;!--&gt; &lt;html class=&quot;no-js&quot; lang=&quot;en-US&quot;&gt; &lt;!--&lt;![endif]--&gt;&#10;  &lt;head&gt;&#10;  &#10;  &lt;title&gt;preview.emergentagent.com | 502: Bad gateway&lt;/title&gt;&#10;  &lt;meta charset=&quot;UT&#10;assert 'application/json' in 'text/html; charset=UTF-8'">http = &lt;httpx.Client object at 0xfe5bbcaefe10&gt;
+
+    def test_report_generate_small_workflow(http):
+        dt, r = _post_generate(http, _small_workflow())
+        print(f"small workflow: HTTP {r.status_code} in {dt:.1f}s")
+&gt;       _assert_json_response(r)
+
+tests/test_report_cloudflare_520_fix.py:182: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+r = &lt;Response [502 Bad Gateway]&gt;
+
+    def _assert_json_response(r: httpx.Response):
+        ct = r.headers.get("content-type", "")
+&gt;       assert "application/json" in ct, (
+            f"Expected JSON, got content-type={ct}. First 400 bytes: {r.text[:400]}"
+        )
+E       AssertionError: Expected JSON, got content-type=text/html; charset=UTF-8. First 400 bytes: &lt;!DOCTYPE html&gt;
+E         &lt;!--[if lt IE 7]&gt; &lt;html class="no-js ie6 oldie" lang="en-US"&gt; &lt;![endif]--&gt;
+E         &lt;!--[if IE 7]&gt;    &lt;html class="no-js ie7 oldie" lang="en-US"&gt; &lt;![endif]--&gt;
+E         &lt;!--[if IE 8]&gt;    &lt;html class="no-js ie8 oldie" lang="en-US"&gt; &lt;![endif]--&gt;
+E         &lt;!--[if gt IE 8]&gt;&lt;!--&gt; &lt;html class="no-js" lang="en-US"&gt; &lt;!--&lt;![endif]--&gt;
+E         &lt;head&gt;
+E         
+E         &lt;title&gt;preview.emergentagent.com | 502: Bad gateway&lt;/title&gt;
+E         &lt;meta charset="UT
+E       assert 'application/json' in 'text/html; charset=UTF-8'
+
+tests/test_report_cloudflare_520_fix.py:169: AssertionError</failure></testcase><testcase classname="tests.test_report_cloudflare_520_fix" name="test_report_generate_large_workflow_no_cloudflare_520" time="60.155"><failure message="AssertionError: Expected JSON, got content-type=text/html; charset=UTF-8. First 400 bytes: &lt;!DOCTYPE html&gt;&#10;  &lt;!--[if lt IE 7]&gt; &lt;html class=&quot;no-js ie6 oldie&quot; lang=&quot;en-US&quot;&gt; &lt;![endif]--&gt;&#10;  &lt;!--[if IE 7]&gt;    &lt;html class=&quot;no-js ie7 oldie&quot; lang=&quot;en-US&quot;&gt; &lt;![endif]--&gt;&#10;  &lt;!--[if IE 8]&gt;    &lt;html class=&quot;no-js ie8 oldie&quot; lang=&quot;en-US&quot;&gt; &lt;![endif]--&gt;&#10;  &lt;!--[if gt IE 8]&gt;&lt;!--&gt; &lt;html class=&quot;no-js&quot; lang=&quot;en-US&quot;&gt; &lt;!--&lt;![endif]--&gt;&#10;  &lt;head&gt;&#10;  &#10;  &lt;title&gt;preview.emergentagent.com | 502: Bad gateway&lt;/title&gt;&#10;  &lt;meta charset=&quot;UT&#10;assert 'application/json' in 'text/html; charset=UTF-8'">http = &lt;httpx.Client object at 0xfe5bbcaefe10&gt;
+
+    def test_report_generate_large_workflow_no_cloudflare_520(http):
+        """The core regression: a 100+ kB workflow must NOT cause a 520/hang."""
+        workflow = _large_workflow()
+        raw_bytes = len(json.dumps(workflow))
+        print(f"large workflow bytes = {raw_bytes}")
+        assert raw_bytes &gt; 50_000, "test payload should be large"
+    
+        dt, r = _post_generate(http, workflow)
+        print(f"large workflow: HTTP {r.status_code} in {dt:.1f}s")
+    
+        # Must complete within 90 s (upstream timeout in report_service is 90 s;
+        # allow some ingress overhead, but not so much that Cloudflare would 520).
+        assert dt &lt; 120.0, f"Took {dt:.1f}s — Cloudflare would 520"
+    
+        # Must NOT be a Cloudflare-styled HTML error page
+        body_prefix = r.text[:200].lower()
+        assert "cloudflare" not in body_prefix or "application/json" in r.headers.get("content-type", ""), \
+            f"Cloudflare error page returned: {r.text[:400]}"
+        assert r.status_code in (200, 500, 502, 503), f"Unexpected {r.status_code}"
+&gt;       _assert_json_response(r)
+
+tests/test_report_cloudflare_520_fix.py:215: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+r = &lt;Response [502 Bad Gateway]&gt;
+
+    def _assert_json_response(r: httpx.Response):
+        ct = r.headers.get("content-type", "")
+&gt;       assert "application/json" in ct, (
+            f"Expected JSON, got content-type={ct}. First 400 bytes: {r.text[:400]}"
+        )
+E       AssertionError: Expected JSON, got content-type=text/html; charset=UTF-8. First 400 bytes: &lt;!DOCTYPE html&gt;
+E         &lt;!--[if lt IE 7]&gt; &lt;html class="no-js ie6 oldie" lang="en-US"&gt; &lt;![endif]--&gt;
+E         &lt;!--[if IE 7]&gt;    &lt;html class="no-js ie7 oldie" lang="en-US"&gt; &lt;![endif]--&gt;
+E         &lt;!--[if IE 8]&gt;    &lt;html class="no-js ie8 oldie" lang="en-US"&gt; &lt;![endif]--&gt;
+E         &lt;!--[if gt IE 8]&gt;&lt;!--&gt; &lt;html class="no-js" lang="en-US"&gt; &lt;!--&lt;![endif]--&gt;
+E         &lt;head&gt;
+E         
+E         &lt;title&gt;preview.emergentagent.com | 502: Bad gateway&lt;/title&gt;
+E         &lt;meta charset="UT
+E       assert 'application/json' in 'text/html; charset=UTF-8'
+
+tests/test_report_cloudflare_520_fix.py:169: AssertionError</failure></testcase><testcase classname="tests.test_report_cloudflare_520_fix" name="test_download_md" time="60.140"><skipped type="pytest.skip" message="cannot obtain report_id (LLM upstream error 502: &lt;!DOCTYPE html&gt;&#10;&lt;!--[if lt IE 7]&gt; &lt;html class=&quot;no-js ie6 oldie&quot; lang=&quot;en-US&quot;&gt; &lt;![endif]--&gt;&#10;&lt;!--[if IE 7]&gt;    &lt;html class=&quot;no-js ie7 oldie&quot; lang=&quot;en-US&quot;&gt; &lt;![endif]--&gt;&#10;&lt;!--[if IE 8]&gt;    &lt;html class=&quot;no-)">/app/backend/tests/test_report_cloudflare_520_fix.py:240: cannot obtain report_id (LLM upstream error 502: &lt;!DOCTYPE html&gt;
+&lt;!--[if lt IE 7]&gt; &lt;html class="no-js ie6 oldie" lang="en-US"&gt; &lt;![endif]--&gt;
+&lt;!--[if IE 7]&gt;    &lt;html class="no-js ie7 oldie" lang="en-US"&gt; &lt;![endif]--&gt;
+&lt;!--[if IE 8]&gt;    &lt;html class="no-)</skipped></testcase><testcase classname="tests.test_report_cloudflare_520_fix" name="test_download_html" time="0.000"><skipped type="pytest.skip" message="cannot obtain report_id (LLM upstream error 502: &lt;!DOCTYPE html&gt;&#10;&lt;!--[if lt IE 7]&gt; &lt;html class=&quot;no-js ie6 oldie&quot; lang=&quot;en-US&quot;&gt; &lt;![endif]--&gt;&#10;&lt;!--[if IE 7]&gt;    &lt;html class=&quot;no-js ie7 oldie&quot; lang=&quot;en-US&quot;&gt; &lt;![endif]--&gt;&#10;&lt;!--[if IE 8]&gt;    &lt;html class=&quot;no-)">/app/backend/tests/test_report_cloudflare_520_fix.py:247: cannot obtain report_id (LLM upstream error 502: &lt;!DOCTYPE html&gt;
+&lt;!--[if lt IE 7]&gt; &lt;html class="no-js ie6 oldie" lang="en-US"&gt; &lt;![endif]--&gt;
+&lt;!--[if IE 7]&gt;    &lt;html class="no-js ie7 oldie" lang="en-US"&gt; &lt;![endif]--&gt;
+&lt;!--[if IE 8]&gt;    &lt;html class="no-)</skipped></testcase><testcase classname="tests.test_report_cloudflare_520_fix" name="test_download_pdf" time="0.000"><skipped type="pytest.skip" message="cannot obtain report_id (LLM upstream error 502: &lt;!DOCTYPE html&gt;&#10;&lt;!--[if lt IE 7]&gt; &lt;html class=&quot;no-js ie6 oldie&quot; lang=&quot;en-US&quot;&gt; &lt;![endif]--&gt;&#10;&lt;!--[if IE 7]&gt;    &lt;html class=&quot;no-js ie7 oldie&quot; lang=&quot;en-US&quot;&gt; &lt;![endif]--&gt;&#10;&lt;!--[if IE 8]&gt;    &lt;html class=&quot;no-)">/app/backend/tests/test_report_cloudflare_520_fix.py:255: cannot obtain report_id (LLM upstream error 502: &lt;!DOCTYPE html&gt;
+&lt;!--[if lt IE 7]&gt; &lt;html class="no-js ie6 oldie" lang="en-US"&gt; &lt;![endif]--&gt;
+&lt;!--[if IE 7]&gt;    &lt;html class="no-js ie7 oldie" lang="en-US"&gt; &lt;![endif]--&gt;
+&lt;!--[if IE 8]&gt;    &lt;html class="no-)</skipped></testcase><testcase classname="tests.test_report_cloudflare_520_fix" name="test_download_docx" time="0.000"><skipped type="pytest.skip" message="cannot obtain report_id (LLM upstream error 502: &lt;!DOCTYPE html&gt;&#10;&lt;!--[if lt IE 7]&gt; &lt;html class=&quot;no-js ie6 oldie&quot; lang=&quot;en-US&quot;&gt; &lt;![endif]--&gt;&#10;&lt;!--[if IE 7]&gt;    &lt;html class=&quot;no-js ie7 oldie&quot; lang=&quot;en-US&quot;&gt; &lt;![endif]--&gt;&#10;&lt;!--[if IE 8]&gt;    &lt;html class=&quot;no-)">/app/backend/tests/test_report_cloudflare_520_fix.py:262: cannot obtain report_id (LLM upstream error 502: &lt;!DOCTYPE html&gt;
+&lt;!--[if lt IE 7]&gt; &lt;html class="no-js ie6 oldie" lang="en-US"&gt; &lt;![endif]--&gt;
+&lt;!--[if IE 7]&gt;    &lt;html class="no-js ie7 oldie" lang="en-US"&gt; &lt;![endif]--&gt;
+&lt;!--[if IE 8]&gt;    &lt;html class="no-)</skipped></testcase><testcase classname="tests.test_report_cloudflare_520_fix" name="test_download_unknown_id_returns_404" time="0.108" /><testcase classname="tests.test_report_cloudflare_520_fix" name="test_download_unsupported_format" time="0.001"><skipped type="pytest.skip" message="cannot obtain report_id (LLM upstream error 502: &lt;!DOCTYPE html&gt;&#10;&lt;!--[if lt IE 7]&gt; &lt;html class=&quot;no-js ie6 oldie&quot; lang=&quot;en-US&quot;&gt; &lt;![endif]--&gt;&#10;&lt;!--[if IE 7]&gt;    &lt;html class=&quot;no-js ie7 oldie&quot; lang=&quot;en-US&quot;&gt; &lt;![endif]--&gt;&#10;&lt;!--[if IE 8]&gt;    &lt;html class=&quot;no-)">/app/backend/tests/test_report_cloudflare_520_fix.py:276: cannot obtain report_id (LLM upstream error 502: &lt;!DOCTYPE html&gt;
+&lt;!--[if lt IE 7]&gt; &lt;html class="no-js ie6 oldie" lang="en-US"&gt; &lt;![endif]--&gt;
+&lt;!--[if IE 7]&gt;    &lt;html class="no-js ie7 oldie" lang="en-US"&gt; &lt;![endif]--&gt;
+&lt;!--[if IE 8]&gt;    &lt;html class="no-)</skipped></testcase></testsuite></testsuites>

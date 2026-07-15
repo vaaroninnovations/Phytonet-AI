@@ -6,6 +6,7 @@ IMRAD-style manuscript in Markdown. The report is then converted to HTML / PDF
 / DOCX on demand.
 """
 from __future__ import annotations
+import asyncio
 import io
 import json
 import logging
@@ -32,15 +33,39 @@ SECTION_ORDER = [
 ]
 
 
-def _kbytes(x: Any) -> str:
-    """Truncate a large object to a compact JSON summary for LLM ingestion."""
+def _kbytes(x, cap: int = 1500) -> str:
+    """JSON-encode x, hard-cap at `cap` chars. Used to keep individual data
+    blobs from blowing up the LLM context window (Groq llama-3.3-70b is 32k)."""
     try:
         s = json.dumps(x, default=str)
-        if len(s) < 5000:
+        if len(s) < cap:
             return s
-        return s[:5000] + " …truncated"
+        return s[:cap] + " …truncated"
     except Exception:
-        return str(x)[:5000]
+        return str(x)[:cap]
+
+
+def _slim_docking(docking):
+    """Reduce docking results to only the fields the LLM needs — dropping the
+    per-pose list and heavy interactions dict which can otherwise dominate the
+    prompt (10s of KB per pair)."""
+    out = []
+    for r in (docking or [])[:10]:
+        top_hb = [h.get("residue") for h in (r.get("interactions", {}).get("hydrogen_bonds") or [])[:3]]
+        top_hp = [h.get("residue") for h in (r.get("interactions", {}).get("hydrophobic_contacts") or [])[:3]]
+        cls = r.get("classification") or {}
+        out.append({
+            "ligand": r.get("ligand_name"),
+            "target": r.get("receptor_uniprot"),
+            "pdb":    r.get("receptor_pdb"),
+            "affinity_kcal_mol": r.get("best_affinity"),
+            "quality": cls.get("class"),
+            "score":   cls.get("score"),
+            "top_hbond_residues":       top_hb,
+            "top_hydrophobic_residues": top_hp,
+            "n_poses": len(r.get("poses") or []),
+        })
+    return out
 
 
 def _build_prompt(workflow: Dict[str, Any]) -> str:
@@ -54,7 +79,7 @@ def _build_prompt(workflow: Dict[str, Any]) -> str:
     docking = workflow.get("docking_results") or []
     md_cfg = workflow.get("md_config") or {}
 
-    return f"""
+    prompt = f"""
 # Task
 Write a **publication-ready** IMRAD manuscript in Markdown for a network-pharmacology
 study of **{plant}** against **{disease}**.
@@ -82,28 +107,46 @@ study of **{plant}** against **{disease}**.
 {{
   "plant": "{plant}",
   "disease": "{disease}",
-  "selected_compounds": {_kbytes(compounds)},
-  "intersecting_genes": {_kbytes(intersect)},
-  "hub_ranking_top10": {_kbytes(hubs[:10])},
-  "top_go_terms": {_kbytes(go[:10])},
-  "top_kegg_pathways": {_kbytes(kegg[:10])},
-  "docking_results_top10": {_kbytes(docking[:10])},
-  "md_config": {_kbytes(md_cfg)}
+  "selected_compounds_top20": {_kbytes(compounds[:20], cap=2000)},
+  "intersecting_genes_top50": {_kbytes(intersect[:50], cap=1200)},
+  "hub_ranking_top10": {_kbytes(hubs[:10], cap=1200)},
+  "top_go_terms": {_kbytes(go[:10], cap=1500)},
+  "top_kegg_pathways": {_kbytes(kegg[:10], cap=1500)},
+  "docking_summary_top10": {_kbytes(_slim_docking(docking), cap=2500)},
+  "md_config": {_kbytes(md_cfg, cap=600)}
 }}
 ```
 Return **only Markdown**, no code fences, no meta commentary.
 """.strip()
+
+    # Safety net: if the assembled prompt is still huge, chop the data block.
+    # Groq llama-3.3-70b context = ~32k tokens ≈ 120k chars; keep us well under.
+    MAX_PROMPT_CHARS = 24000
+    if len(prompt) > MAX_PROMPT_CHARS:
+        prompt = prompt[:MAX_PROMPT_CHARS] + "\n… (data truncated to fit context window)\n\nReturn only Markdown."
+    return prompt
 
 
 async def generate_report(workflow: Dict[str, Any],
                           model: str = "claude-sonnet-4-5-20250929") -> Dict[str, Any]:
     prompt = _build_prompt(workflow)
     session_id = uuid.uuid4().hex
+    logger.info(f"report/generate: prompt length = {len(prompt)} chars, session={session_id[:8]}")
+
     # ── Try Groq first (fastest + cheapest scientific writer) ──────────────
     try:
         import llm_groq
         if llm_groq.is_configured():
-            md = await llm_groq.scientific_writer(SYSTEM_PROMPT, prompt, temperature=0.3)
+            # 4000 output tokens is enough for a full IMRAD manuscript and keeps
+            # us well within the ingress timeout (~100 s). 90 s upstream timeout
+            # so we surface a clean error before Cloudflare returns 520.
+            md = await llm_groq.chat_completion(
+                [{"role": "system", "content": SYSTEM_PROMPT},
+                 {"role": "user",   "content": prompt}],
+                temperature=0.3,
+                max_tokens=4000,
+                timeout=90.0,
+            )
             return {
                 "markdown": md.strip(),
                 "meta": {
@@ -115,6 +158,8 @@ async def generate_report(workflow: Dict[str, Any],
                 },
             }
     except Exception as e:
+        # Includes 413 Payload Too Large (workflow too big even after slimming),
+        # 401 (bad key), 429 (rate-limited), timeouts, etc. Log + fall through.
         logger.warning(f"Groq scientific writer failed, falling back to Emergent: {e}")
 
     # ── Fallback: Emergent LLM key (Claude Sonnet) ──────────────
@@ -126,11 +171,29 @@ async def generate_report(workflow: Dict[str, Any],
                    system_message=SYSTEM_PROMPT).with_model("anthropic", model)
     msg = UserMessage(text=prompt)
     try:
-        response = await chat.send_message(msg)
+        # Emergent LLM's chat SDK doesn't expose a timeout kwarg — wrap with
+        # asyncio.wait_for so a stuck upstream can't tie up the FastAPI worker
+        # long enough for Cloudflare to return a 520.
+        response = await asyncio.wait_for(chat.send_message(msg), timeout=90.0)
+    except asyncio.TimeoutError:
+        logger.error("Emergent LLM fallback timed out after 90 s")
+        return {"error": "Report generation timed out. Try shrinking the workflow inputs "
+                        "or splitting the run into fewer compounds/targets.",
+                "markdown": "", "meta": {}}
     except Exception as e:
         logger.exception("LLM call failed")
-        return {"error": str(e), "markdown": "", "meta": {}}
+        return {"error": f"Report generation failed: {e}", "markdown": "", "meta": {}}
     md = str(response).strip()
+    return {
+        "markdown": md,
+        "meta": {
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "model": f"anthropic/{model}",
+            "plant": workflow.get("plant_name"),
+            "disease": workflow.get("disease_name"),
+            "session_id": session_id,
+        },
+    }
     return {
         "markdown": md,
         "meta": {
