@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 import deps_check
 import docking_service
+import docking_render
 
 
 class DockCompound(BaseModel):
@@ -135,5 +136,32 @@ def build_router() -> APIRouter:
     @router.post("/docking/pose/{job_id}/{pair_id}")
     async def docking_pose_alias(job_id: str, pair_id: str, fmt: str = "pdbqt"):
         return await docking_pose(job_id, pair_id, fmt)
+
+    @router.get("/docking/render/{job_id}/{pair_id}")
+    async def docking_render_endpoint(
+        job_id: str,
+        pair_id: str,
+        dpi: int = 600,
+        fmt: str = "png",
+        labels: bool = True,
+    ):
+        """Server-side offscreen render of the docked complex at arbitrary DPI.
+
+        matplotlib-based Agg renderer — no browser / no GPU limits. Ideal for
+        journal-grade exports (600 DPI PNG, 1200 DPI TIFF, PDF, SVG).
+        """
+        try:
+            content, mime = docking_render.snapshot_for_pair(
+                job_id, pair_id, dpi=max(72, min(dpi, 1200)),
+                fmt=fmt, show_hbond_labels=labels,
+            )
+        except FileNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Render failed: {e}")
+        return Response(content=content, media_type=mime,
+                        headers={"Content-Disposition": f"attachment; filename={pair_id}_hires.{fmt}"})
 
     return router

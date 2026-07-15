@@ -407,100 +407,8 @@ async def plant_search(
 
 
 # ---------------------------------------------------------------------------
-# LOTUS API wrappers
+# LOTUS routes moved to /app/backend/routes/lotus.py
 # ---------------------------------------------------------------------------
-def _normalize_lotus(nps: list) -> List[dict]:
-    out = []
-    for np_ in nps:
-        out.append(
-            {
-                "source": "LOTUS",
-                "compound_name": np_.get("traditional_name") or np_.get("iupac_name"),
-                "lotus_id": np_.get("lotus_id"),
-                "smiles": np_.get("smiles") or np_.get("smiles2D"),
-                "inchi": np_.get("inchi"),
-                "inchi_key": np_.get("inchikey"),
-                "molecular_formula": np_.get("molecular_formula"),
-                "molecular_weight": np_.get("molecular_weight"),
-            }
-        )
-    return _merge_and_dedupe(out, [])
-
-
-@api_router.get("/lotus/simple")
-async def lotus_simple(query: str = Query(..., min_length=1)):
-    url = f"{LOTUS_BASE}/simple?query={quote(query)}"
-    async with httpx.AsyncClient() as c:
-        r = await c.get(url, timeout=30.0, headers={"User-Agent": USER_AGENT})
-    if r.status_code != 200:
-        raise HTTPException(status_code=502, detail="LOTUS upstream error")
-    data = r.json()
-    return {
-        "query": query,
-        "type": data.get("determinedInputType"),
-        "compounds": _normalize_lotus(data.get("naturalProducts", [])),
-    }
-
-
-@api_router.get("/lotus/exact")
-async def lotus_exact(
-    type: Literal["smiles", "inchi"] = Query("smiles"),
-    value: str = Query(..., min_length=1),
-):
-    url = f"{LOTUS_BASE}/exact-structure?type={type}&smiles={quote(value)}"
-    async with httpx.AsyncClient() as c:
-        r = await c.get(url, timeout=30.0, headers={"User-Agent": USER_AGENT})
-    if r.status_code != 200:
-        raise HTTPException(status_code=502, detail="LOTUS upstream error")
-    data = r.json()
-    nps = data.get("naturalProducts", []) if isinstance(data, dict) else data
-    return {"type": type, "value": value, "compounds": _normalize_lotus(nps or [])}
-
-
-@api_router.get("/lotus/substructure")
-async def lotus_substructure(
-    smiles: str = Query(..., min_length=1),
-    algorithm: Literal["default", "df", "vf"] = Query("default"),
-    max_hits: int = Query(100, ge=1, le=500),
-):
-    url = (
-        f"{LOTUS_BASE}/substructure"
-        f"?type={algorithm}&max-hits={max_hits}&smiles={quote(smiles)}"
-    )
-    async with httpx.AsyncClient() as c:
-        r = await c.get(url, timeout=60.0, headers={"User-Agent": USER_AGENT})
-    if r.status_code != 200:
-        raise HTTPException(status_code=502, detail="LOTUS upstream error")
-    data = r.json()
-    nps = data.get("naturalProducts", []) if isinstance(data, dict) else data
-    return {
-        "algorithm": algorithm,
-        "smiles": smiles,
-        "compounds": _normalize_lotus(nps or []),
-    }
-
-
-@api_router.get("/lotus/molweight")
-async def lotus_molweight(
-    min_mass: float = Query(..., alias="minMass"),
-    max_mass: float = Query(..., alias="maxMass"),
-    max_hits: int = Query(20, ge=1, le=500, alias="maxHits"),
-):
-    url = (
-        f"{LOTUS_BASE}/molweight"
-        f"?minMass={min_mass}&maxMass={max_mass}&maxHits={max_hits}"
-    )
-    async with httpx.AsyncClient() as c:
-        r = await c.get(url, timeout=45.0, headers={"User-Agent": USER_AGENT})
-    if r.status_code != 200:
-        raise HTTPException(status_code=502, detail="LOTUS upstream error")
-    data = r.json()
-    nps = data.get("naturalProducts", []) if isinstance(data, dict) else data
-    return {
-        "minMass": min_mass,
-        "maxMass": max_mass,
-        "compounds": _normalize_lotus(nps or []),
-    }
 
 
 @api_router.get("/health")
@@ -1177,99 +1085,8 @@ async def root():
 
 
 # ---------------------------------------------------------------------------
-# Target Prediction (Compound → Targets)
+# Target Prediction routes moved to /app/backend/routes/target.py
 # ---------------------------------------------------------------------------
-class TargetCompound(BaseModel):
-    compound_name: Optional[str] = None
-    canonical_smiles: Optional[str] = None
-    smiles: Optional[str] = None
-    molecular_formula: Optional[str] = None
-    molecular_weight: Optional[float] = None
-
-
-class TargetPredictPayload(BaseModel):
-    compounds: List[TargetCompound]
-
-
-target_cache_col = db["target_cache_v1"]  # smiles → cached rows
-_target_jobs: dict = {}
-
-
-async def _target_cache_lookup(smi: str) -> Optional[List[dict]]:
-    doc = await target_cache_col.find_one({"_id": smi})
-    if not doc:
-        return None
-    if (time.time() - doc.get("cached_at", 0)) > CACHE_TTL_SECONDS:
-        return None
-    return doc.get("rows", [])
-
-
-async def _target_cache_store(smi: str, rows: List[dict]):
-    try:
-        await target_cache_col.replace_one(
-            {"_id": smi},
-            {"_id": smi, "rows": rows, "cached_at": time.time()},
-            upsert=True,
-        )
-    except Exception as e:
-        logging.debug(f"target cache store failed: {e}")
-
-
-async def _run_target_job(job_id: str, compounds: List[dict]):
-    async def on_progress(done: int, total: int):
-        j = _target_jobs.get(job_id)
-        if j:
-            j["done"] = done
-
-    try:
-        rows = await target_service.run_target_prediction_job(
-            compounds,
-            on_progress,
-            cache_lookup=_target_cache_lookup,
-            cache_store=_target_cache_store,
-        )
-        _target_jobs[job_id]["rows"] = rows
-        _target_jobs[job_id]["status"] = "done"
-    except Exception as e:
-        _target_jobs[job_id]["status"] = "failed"
-        _target_jobs[job_id]["error"] = str(e)
-        logging.exception(f"Target job {job_id} failed: {e}")
-
-
-@api_router.post("/target/predict")
-async def target_predict(payload: TargetPredictPayload):
-    if not payload.compounds:
-        return {"job_id": None, "total": 0}
-    job_id = str(uuid.uuid4())
-    total = len(payload.compounds)
-    _target_jobs[job_id] = {
-        "done": 0,
-        "total": total,
-        "status": "running",
-        "rows": None,
-        "started_at": time.time(),
-    }
-    asyncio.create_task(
-        _run_target_job(job_id, [c.dict() for c in payload.compounds])
-    )
-    return {"job_id": job_id, "total": total}
-
-
-@api_router.get("/target/status/{job_id}")
-async def target_status(job_id: str):
-    job = _target_jobs.get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    resp = {
-        "job_id": job_id,
-        "done": job.get("done", 0),
-        "total": job.get("total", 0),
-        "status": job.get("status"),
-        "error": job.get("error"),
-    }
-    if job.get("status") == "done":
-        resp["rows"] = job.get("rows", [])
-    return resp
 
 
 # ---------------------------------------------------------------------------
@@ -1301,15 +1118,19 @@ app.include_router(api_router)
 from routes import (  # noqa: E402
     disease as _disease_routes,
     docking as _docking_routes,
+    lotus as _lotus_routes,
     md as _md_routes,
     network as _network_routes,
     report as _report_routes,
+    target as _target_routes,
 )
 app.include_router(_disease_routes.build_router(db, cache_ttl_seconds=CACHE_TTL_SECONDS))
+app.include_router(_lotus_routes.build_router())
 app.include_router(_network_routes.build_router())
 app.include_router(_docking_routes.build_router())
 app.include_router(_md_routes.build_router())
 app.include_router(_report_routes.build_router())
+app.include_router(_target_routes.build_router(db, cache_ttl_seconds=CACHE_TTL_SECONDS))
 
 # ---------------------------------------------------------------------------
 # Auth router (mounted under /api/auth)

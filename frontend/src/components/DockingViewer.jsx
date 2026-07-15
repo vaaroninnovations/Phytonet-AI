@@ -182,14 +182,10 @@ function Complex3DViewer({ jobId, pairId, interactions }) {
     if (!viewerRef.current) return;
     const base = `${pairId}_3D`;
     try {
-      // 3Dmol.js exposes `getCanvas()` in v2 which returns the WebGL canvas.
-      // Fall back to querying the internal canvas if that helper is unavailable.
       const canvas =
         (viewerRef.current.getCanvas && viewerRef.current.getCanvas()) ||
         wrapRef.current?.querySelector("canvas");
       if (!canvas) throw new Error("3D canvas not available");
-      // Force a fresh render so the WebGL back-buffer contains the current frame
-      // (WebGL clears its buffer after each draw unless preserveDrawingBuffer=true).
       viewerRef.current.render();
       if (fmt === "png")       canvasToPNG(canvas, `${base}.png`);
       else if (fmt === "tiff") canvasToTIFF(canvas, `${base}.tiff`, { dpi: 300 });
@@ -197,6 +193,24 @@ function Complex3DViewer({ jobId, pairId, interactions }) {
       else                     throw new Error(`Unsupported snapshot format: ${fmt}`);
     } catch (e) {
       toast.error(`Snapshot failed: ${e.message || e}`);
+    }
+  };
+
+  /** Server-side high-DPI render (matplotlib Agg). Downloads at 600 DPI by
+   *  default — the browser canvas is capped by the GPU, this isn't. */
+  const hiResExport = async (fmt, dpi) => {
+    try {
+      const url = `${process.env.REACT_APP_BACKEND_URL}/api/docking/render/${jobId}/${pairId}?dpi=${dpi}&fmt=${fmt}&labels=${showHbondLabels}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(await res.text());
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `${pairId}_${dpi}dpi.${fmt}`;
+      document.body.appendChild(a); a.click(); a.remove();
+      toast.success(`Downloaded ${dpi} DPI ${fmt.toUpperCase()}`);
+    } catch (e) {
+      toast.error(`High-DPI render failed: ${(e.message || e).toString().slice(0, 120)}`);
     }
   };
 
@@ -238,6 +252,34 @@ function Complex3DViewer({ jobId, pairId, interactions }) {
                   className="inline-flex items-center gap-1 rounded-full border border-[#E7E7F3] bg-white px-2.5 py-1 text-[10px] font-bold text-[#0B0B18] hover:border-[#5139ED]/40">
             <Camera className="h-3 w-3" /> PDF
           </button>
+          <span className="mx-1 h-4 w-px bg-[#E7E7F3]" />
+          <select
+            data-testid={`viewer-hidpi-${pairId}`}
+            defaultValue=""
+            onChange={(e) => {
+              const v = e.target.value;
+              if (!v) return;
+              const [fmt, dpi] = v.split(":");
+              hiResExport(fmt, Number(dpi));
+              e.target.value = "";
+            }}
+            title="Server-side render at journal-grade DPI"
+            className="rounded-full border border-[#5139ED]/40 bg-white px-2 py-1 text-[10px] font-bold text-[#5139ED] focus:outline-none focus:ring-2 focus:ring-[#5139ED]/30"
+          >
+            <option value="">High-DPI ▾</option>
+            <optgroup label="PNG (raster)">
+              <option value="png:600">PNG · 600 DPI</option>
+              <option value="png:1200">PNG · 1200 DPI</option>
+            </optgroup>
+            <optgroup label="TIFF (journal)">
+              <option value="tiff:600">TIFF · 600 DPI (LZW)</option>
+              <option value="tiff:1200">TIFF · 1200 DPI (LZW)</option>
+            </optgroup>
+            <optgroup label="Vector">
+              <option value="pdf:600">PDF</option>
+              <option value="svg:600">SVG</option>
+            </optgroup>
+          </select>
         </div>
       </div>
       <div ref={wrapRef} className="relative h-[420px] w-full rounded-xl bg-white">
