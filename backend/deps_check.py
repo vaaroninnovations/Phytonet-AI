@@ -109,6 +109,45 @@ def _check_python(key: str, import_name: str, required: bool,
     return st
 
 
+def _attempt_apt_install(pkgs: list[str]) -> bool:
+    """Best-effort `apt-get install` fallback for the preview pod.
+
+    Only runs when AUTO_INSTALL_MISSING_DEPS is truthy (default "on" so the
+    preview pod self-heals after a container rebuild while /app/Dockerfile
+    hasn't been shipped to prod yet). Silent on any failure — the caller
+    still enforces the missing-dep short-circuit via /api/deps/status.
+    """
+    flag = os.environ.get("AUTO_INSTALL_MISSING_DEPS", "on").strip().lower()
+    if flag not in {"1", "on", "true", "yes"}:
+        return False
+    if not shutil.which("apt-get"):
+        return False
+    try:
+        logger.warning(
+            "[deps] Attempting apt-get install %s (self-heal — ship /app/Dockerfile "
+            "to make this permanent). Set AUTO_INSTALL_MISSING_DEPS=off to disable.",
+            " ".join(pkgs),
+        )
+        env = {**os.environ, "DEBIAN_FRONTEND": "noninteractive"}
+        subprocess.run(["apt-get", "install", "-y", "--no-install-recommends", *pkgs],
+                       check=True, timeout=240, env=env,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        logger.info("[deps] apt-get install %s → OK", " ".join(pkgs))
+        return True
+    except Exception as e:
+        logger.warning("[deps] apt-get self-heal failed: %s", e)
+        return False
+
+
+# Map dep-key → apt package name (subset that ships on Debian/Ubuntu with the
+# executables we need). Only used by the preview-pod self-heal path.
+_APT_PACKAGE_FOR_DEP = {
+    "vina":   "autodock-vina",
+    "obabel": "openbabel",
+    "gmx":    "gromacs",
+}
+
+
 def check_all() -> Dict[str, DepStatus]:
     """Run all checks. Populates DEPS_STATUS and returns it."""
     global DEPS_STATUS
@@ -122,6 +161,23 @@ def check_all() -> Dict[str, DepStatus]:
         "meeko":    _check_python("meeko",  "meeko", required=True),
         "vina_py":  _check_python("vina_py", "vina", required=False),   # optional Python bindings
     }
+
+    # Self-heal: if any *required binary* is missing, attempt to install its
+    # apt package and re-check. Keeps the preview pod usable across rebuilds
+    # while the Dockerfile is still in the deploy pipeline.
+    missing_bins = [k for k, s in DEPS_STATUS.items()
+                    if s.kind == "binary" and not s.ok and k in _APT_PACKAGE_FOR_DEP]
+    if missing_bins:
+        pkgs = [_APT_PACKAGE_FOR_DEP[k] for k in missing_bins]
+        if _attempt_apt_install(pkgs):
+            # Re-check only the previously-missing binaries
+            for k in missing_bins:
+                if k == "vina":
+                    DEPS_STATUS[k] = _check_binary("vina", "VINA_EXECUTABLE", "vina", ["--version"], required=True)
+                elif k == "obabel":
+                    DEPS_STATUS[k] = _check_binary("obabel", "OBABEL_EXECUTABLE", "obabel", ["-V"], required=True)
+                elif k == "gmx":
+                    DEPS_STATUS[k] = _check_binary("gmx", "GROMACS_EXECUTABLE", "gmx", ["--version"], required=False)
 
     for st in DEPS_STATUS.values():
         if st.ok:

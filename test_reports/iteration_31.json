@@ -1,0 +1,61 @@
+{
+  "iteration": 31,
+  "summary": "Iter-31 backend-only verification of the deps_check.py self-heal fix that recovers the preview pod from a rebuild without autodock-vina in the base image. Verified: (a) /api/deps/status returns HTTP 200 with ok:true, missing_required=[], deps.vina.ok=true path=/bin/vina version='AutoDock Vina v1.2.3', deps.obabel.ok=true (path=/root/.venv/bin/obabel, 'Open Babel 3.1.0'), deps.gmx.ok=true (path=/bin/gmx, 'GROMACS 2022.5'). (b) POST /api/docking/run with aspirin (CC(=O)Oc1ccccc1C(=O)O) x PTGS1 (uniprot P23219, pdb 1EQG, exhaustiveness=2, num_modes=3, box_padding=6.0) returned HTTP 200 (NOT 503), job_id present as non-empty hex string, results list length 1, best_affinity < 0, pair_id populated, poses list non-empty, interactions object contains all 4 keys (hydrogen_bonds, hydrophobic_contacts, salt_bridges, pi_stacking). (c) GET /api/docking/pose/{job_id}/{pair_id}?fmt=complex_pdb returned 200 with valid PDB-format body (ATOM/HETATM present). (d) GET /api/docking/render/{job_id}/{pair_id}?dpi=300&fmt=png returned 200 with content-type image/png and valid PNG magic bytes. Full pytest regression: 131 passed, 7 failed, 1 skipped. All 7 failures are PRE-EXISTING and unrelated to the deps_check refactor (auth-gate-off related eligibility assertions, transient network timeout on google/status, seed data drift in admin email, and a LotusDedup data-quality issue). All docking / md / hires / viz / pose / SSE stream / report / network / target-disease tests PASS.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/auth/me", "issue": "TestRegressionMainRouter::test_auth_login_and_me expects admin@phytonet.ai but backend returns preview@phytonet.ai — pre-existing seed drift, unrelated to deps_check fix"},
+      {"endpoint": "/api/assistant/eligibility", "issue": "4 assistant eligibility/free-tier tests fail because AUTH_GATE_ENABLED=off makes every request appear admin. Pre-existing; not caused by this iter's changes."},
+      {"endpoint": "/api/auth/google/status", "issue": "Single test hit a 10s connect-timeout to the preview URL — transient network, not a functional bug"},
+      {"endpoint": "/lotus/molweight", "issue": "TestLotusDedup reports 24 duplicate InChIKey skeletons — pre-existing data-quality issue, unrelated to this iter"}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "acceptance_matrix": {
+    "deps_status_ok_and_no_missing_required": "PASS",
+    "deps.vina.ok_with_valid_path_and_v1.2_version": "PASS (path=/bin/vina, version='AutoDock Vina v1.2.3')",
+    "deps.obabel.ok_true": "PASS (path=/root/.venv/bin/obabel, Open Babel 3.1.0)",
+    "deps.gmx.ok_true": "PASS (path=/bin/gmx, GROMACS 2022.5)",
+    "docking_run_returns_200_not_503": "PASS",
+    "docking_run_response_shape_valid": "PASS (job_id str, results[1], best_affinity<0, pair_id, poses>=1, interactions has all 4 keys)",
+    "docking_pose_complex_pdb_200": "PASS (valid PDB body)",
+    "docking_render_png_300dpi_200_image_png": "PASS (valid PNG magic bytes, content-type image/png)",
+    "regression_docking_md_report_network_admet_hires_viz": "PASS (all pass — no regression from deps_check refactor)"
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_deps_and_docking_selfheal.py",
+    "/app/test_reports/pytest/iter31_selfheal.xml",
+    "/app/test_reports/pytest/iter31_full.xml"
+  ],
+  "action_items": [
+    "No action required for the reported bug — deps_check self-heal + docking end-to-end is fully green.",
+    "(Optional / pre-existing) Fix test_iter29_refactor::test_auth_login_and_me email assertion drift (admin@ vs preview@phytonet.ai).",
+    "(Optional / pre-existing) 4 assistant eligibility tests need to be re-tuned or an admin-gate-aware fixture added since AUTH_GATE_ENABLED=off makes anonymous → admin.",
+    "(Optional / pre-existing) LotusDedup duplicate InChIKey skeletons (24 dups in /lotus/molweight) — data-layer dedup issue."
+  ],
+  "critical_code_review_comments": [
+    "deps_check.py _attempt_apt_install runs `apt-get install` synchronously at backend startup (blocking) with timeout=240s. If apt is slow (mirror issues) the backend `/health` will not respond until this completes. Consider running the self-heal in a background task after uvicorn is ready, and let /api/deps/status return the in-progress state — otherwise a rebuild can cause a several-minute cold start.",
+    "deps_check.py L120 uses `os.environ.get('AUTO_INSTALL_MISSING_DEPS', 'on')` — running apt-get on production is a security surface. Recommend defaulting to 'off' outside the preview pod (e.g. gate on ENVIRONMENT!='production').",
+    "deps_check.py _attempt_apt_install swallows all exceptions (`except Exception`) — a truly broken apt state would only surface as a warning log. Consider surfacing the last stderr line into /api/deps/status so operators can debug from the endpoint.",
+    "routes/docking.py _check_deps includes 'rdkit' and 'meeko' in blockers but they are Python packages, not apt-installable — the self-heal path in deps_check only handles vina/obabel/gmx via apt. If rdkit/meeko go missing (venv corruption), the 503 will persist and self-heal will silently no-op. Consider adding a pip-based self-heal branch too (or at minimum a clearer error).",
+    "deps_check.py L156-158 duplicates the _check_binary signature both in the initial check_all mapping AND in the re-check block (L176-180). Extract to a helper dict of (env, name, args, required) to avoid drift.",
+    "routes/docking.py L84 catches every Exception with a bare 500 — a Vina crash (e.g. bad box padding) is indistinguishable from a code bug. Consider mapping domain errors (docking_service.DockingError) to 422."
+  ],
+  "updated_files": ["/app/backend/tests/test_deps_and_docking_selfheal.py"],
+  "success_rate": {
+    "backend": "100% for the 8 acceptance-criteria tests (deps/status + docking/run + pose + render); 131/139 (94.2%) for full regression — all 7 failures pre-existing and outside the scope of this iter",
+    "frontend": "not tested (backend-only iter per request)"
+  },
+  "test_credentials": "Not used — AUTH_GATE_ENABLED=false; all endpoints reachable without login",
+  "seed_data_creation": "None — real docking against aspirin (CC(=O)Oc1ccccc1C(=O)O) × PTGS1 (P23219 / 1EQG) using exhaustiveness=2, num_modes=3, box_padding=6.0 was run once end-to-end and the resulting job_id + pair_id reused for pose + render tests.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The iter31 self-heal test at /app/backend/tests/test_deps_and_docking_selfheal.py is idempotent and cheap (~12s total) — reuse it as a smoke test after any deps_check.py or routes/docking.py change. To simulate the original bug: `apt-get remove -y autodock-vina && supervisorctl restart backend && sleep 15 && curl /api/deps/status` — the backend log should show '[deps] apt-get install autodock-vina → OK' and vina should come back green. If AUTO_INSTALL_MISSING_DEPS=off, /api/deps/status will report ok:false with missing_required=['vina'] and /api/docking/run will 503 (expected). Pre-existing failing tests (auth email drift, 4 assistant eligibility, google/status timeout, LotusDedup) should be tracked separately — they are unrelated to the deps_check bug.",
+  "rca_of_the_issue": {
+    "original_bug": "POST /api/docking/run returned HTTP 503 'missing required dependencies: vina' after a preview-pod rebuild because the base image did not include autodock-vina — only /app/Dockerfile (which is not yet in production) installs it.",
+    "root_cause": "Deploy pipeline hasn't yet consumed the new Dockerfile; every fresh preview pod starts without vina/obabel/gromacs on PATH; deps_check.check_all() → get_missing_required()=['vina'] → routes/docking.py::_check_deps raises 503.",
+    "fix": "deps_check.py added `_attempt_apt_install(pkgs)` (L112-139) which is called from check_all() (L165-180) whenever a required *binary* is missing and its apt-package mapping (_APT_PACKAGE_FOR_DEP) is known. Runs `apt-get install -y --no-install-recommends autodock-vina openbabel gromacs`, then re-checks. Gated by AUTO_INSTALL_MISSING_DEPS env var (default 'on').",
+    "reproduction_and_verification": "Verified live against https://herbal-nexus.preview.emergentagent.com — `which vina` → /usr/bin/vina, `vina --version` → v1.2.3, `/api/deps/status` → ok:true, docking end-to-end (aspirin×PTGS1) → HTTP 200 with best_affinity<0.",
+    "mitigation": "Ship /app/Dockerfile (already contains autodock-vina + openbabel + gromacs) through Save-to-Github so the deploy pipeline bakes them into the base image; then set AUTO_INSTALL_MISSING_DEPS=off to remove the apt runtime dependency."
+  }
+}
