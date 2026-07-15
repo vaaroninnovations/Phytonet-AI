@@ -82,13 +82,41 @@ export async function downloadTIFF(svgEl, filename = "figure.tiff", { dpi = 300,
   const { canvas, w, h } = await rasterise(svgEl, dpi, { title });
   const ctx = canvas.getContext("2d");
   const imgData = ctx.getImageData(0, 0, w, h);
-  // UTIF encodes an RGBA ImageData-like object.
-  const ifd = { width: w, height: h, data: imgData.data };
   const bytes = UTIF.encodeImage(imgData.data, w, h, {
     t256: [w], t257: [h],
     t282: [dpi, 1], t283: [dpi, 1], t296: [2] // Xres, Yres, ResolutionUnit=2 (inch)
   });
   saveAs(new Blob([bytes], { type: "image/tiff" }), filename);
+}
+
+/**
+ * Encode an arbitrary HTMLCanvasElement (e.g. a 3Dmol.js viewer canvas) into a
+ * proper baseline-TIFF byte stream using UTIF. Not a PNG-rebranded-as-tiff.
+ */
+export function canvasToTIFF(canvas, filename = "figure.tiff", { dpi = 300 } = {}) {
+  const w = canvas.width;
+  const h = canvas.height;
+  const ctx = canvas.getContext("2d");
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const bytes = UTIF.encodeImage(imgData.data, w, h, {
+    t256: [w], t257: [h],
+    t282: [dpi, 1], t283: [dpi, 1], t296: [2],
+  });
+  saveAs(new Blob([bytes], { type: "image/tiff" }), filename);
+}
+
+/** Save the pixels of a canvas as a PDF (single-page, letter-fit). */
+export function canvasToPDF(canvas, filename = "figure.pdf") {
+  const w = canvas.width, h = canvas.height;
+  const orientation = w >= h ? "landscape" : "portrait";
+  const pdf = new jsPDF({ orientation, unit: "pt", format: [w, h] });
+  pdf.addImage(canvas.toDataURL("image/png", 1.0), "PNG", 0, 0, w, h, undefined, "FAST");
+  pdf.save(filename);
+}
+
+/** Save a canvas as a PNG file (utility wrapper). */
+export function canvasToPNG(canvas, filename = "figure.png") {
+  canvas.toBlob((blob) => saveAs(blob, filename), "image/png");
 }
 
 export async function downloadPDF(svgEl, filename = "figure.pdf", { title } = {}) {

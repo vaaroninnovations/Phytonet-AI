@@ -37,6 +37,118 @@ export const CHART_TYPES = [
 ];
 
 /**
+ * Per-chart-type FIELD SCHEMA — declares which style options are relevant to
+ * each chart. The drawer renders only these sections when the user picks a
+ * per-chart scope, keeping the UI focused and preventing e.g. "node size"
+ * appearing when editing a bar chart.
+ *
+ * Each entry is a set of feature flags — the drawer looks these up to decide
+ * which rows/sections to render. The Global scope always shows everything.
+ */
+export const CHART_FIELD_SCHEMAS = {
+  // ── Network graphs ────────────────────────────────────────────────
+  ppi: {
+    colors: ["node", "edge", "background", "label"],
+    sizes: ["nodeSize", "edgeThickness", "labelSize", "opacity"],
+    palette: true, legend: true, grid: false,
+    border: true, font: true,
+  },
+  hub: {
+    colors: ["node", "edge", "background", "label"],
+    sizes: ["nodeSize", "edgeThickness", "labelSize", "opacity"],
+    palette: true, legend: true, grid: false,
+    border: true, font: true,
+  },
+  cpdTarget: {
+    colors: ["node", "edge", "background", "label"],
+    sizes: ["nodeSize", "edgeThickness", "labelSize", "opacity"],
+    palette: true, legend: true, grid: false,
+    border: true, font: true,
+  },
+  // ── Enrichment (bar-style) ────────────────────────────────────────
+  go: {
+    colors: ["background", "label", "grid"],
+    sizes: ["labelSize", "opacity"],
+    palette: true, legend: true, grid: true,
+    border: true, font: true,
+  },
+  kegg: {
+    colors: ["background", "label", "grid"],
+    sizes: ["labelSize", "opacity"],
+    palette: true, legend: true, grid: true,
+    border: true, font: true,
+  },
+  // ── Docking / affinity bars ───────────────────────────────────────
+  docking: {
+    colors: ["background", "label", "grid"],
+    sizes: ["labelSize", "opacity"],
+    palette: true, legend: false, grid: true,
+    border: true, font: true,
+  },
+  // ── Time-series lines (MD RMSD/RMSF) ──────────────────────────────
+  md: {
+    colors: ["background", "label", "grid"],
+    sizes: ["edgeThickness", "labelSize", "opacity"],  // edgeThickness = line width
+    palette: true, legend: true, grid: true,
+    border: true, font: true,
+  },
+  // ── Radar (ADMET) ─────────────────────────────────────────────────
+  admet: {
+    colors: ["node", "background", "label", "grid"],   // node = fill colour
+    sizes: ["labelSize", "opacity"],
+    palette: true, legend: true, grid: true,
+    border: true, font: true,
+  },
+  // ── Heatmap ───────────────────────────────────────────────────────
+  heatmap: {
+    colors: ["background", "label", "grid"],
+    sizes: ["labelSize"],
+    palette: true, legend: true, grid: false,          // gradient palette instead
+    border: true, font: true,
+  },
+  // ── Volcano / Bubble (scatter) ────────────────────────────────────
+  volcano: {
+    colors: ["node", "background", "label", "grid"],   // node = dot colour
+    sizes: ["nodeSize", "labelSize", "opacity"],
+    palette: true, legend: true, grid: true,
+    border: true, font: true,
+  },
+  bubble: {
+    colors: ["node", "background", "label", "grid"],
+    sizes: ["nodeSize", "labelSize", "opacity"],
+    palette: true, legend: true, grid: true,
+    border: true, font: true,
+  },
+  // ── Sankey (flow) ─────────────────────────────────────────────────
+  sankey: {
+    colors: ["node", "edge", "background", "label"],
+    sizes: ["edgeThickness", "labelSize", "opacity"],
+    palette: true, legend: false, grid: false,
+    border: true, font: true,
+  },
+  // ── Lollipop ──────────────────────────────────────────────────────
+  lollipop: {
+    colors: ["node", "edge", "background", "label", "grid"],
+    sizes: ["nodeSize", "edgeThickness", "labelSize", "opacity"],
+    palette: true, legend: false, grid: true,
+    border: true, font: true,
+  },
+};
+
+/** Global scope shows everything — used as the fallback when scope === 'global' */
+const GLOBAL_SCHEMA = {
+  colors: ["node", "edge", "background", "label", "grid"],
+  sizes: ["nodeSize", "edgeThickness", "labelSize", "opacity"],
+  palette: true, legend: true, grid: true, border: true, font: true,
+};
+
+/** Look up the schema for a scope (chart type key, or "global") */
+export function schemaFor(scope) {
+  if (scope === "global") return GLOBAL_SCHEMA;
+  return CHART_FIELD_SCHEMAS[scope] || GLOBAL_SCHEMA;
+}
+
+/**
  * Theme presets. Publication themes are colour-safe and journal-style.
  */
 export const THEMES = {

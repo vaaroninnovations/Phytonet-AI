@@ -16,6 +16,7 @@ import { Download, Expand, RotateCcw, Loader2, Camera, Info } from "lucide-react
 import { dockingPoseURL } from "@/lib/api";
 import {
   downloadPNG, downloadSVG, downloadTIFF, downloadPDF,
+  canvasToTIFF, canvasToPDF, canvasToPNG,
 } from "@/lib/figureExporters";
 
 const INTERACTION_STYLE = {
@@ -145,6 +146,10 @@ function Complex3DViewer({ jobId, pairId, interactions }) {
         wrapRef.current.innerHTML = "";
         viewerRef.current = $3Dmol.createViewer(wrapRef.current, {
           backgroundColor: "white",
+          // Required for `getCanvas().toDataURL()` / `getImageData()` to work —
+          // without this WebGL clears the drawing buffer after each frame.
+          preserveDrawingBuffer: true,
+          antialias: true,
         });
         viewerRef.current.addModel(pdbText, "pdb");
         applyStyle($3Dmol);
@@ -175,27 +180,21 @@ function Complex3DViewer({ jobId, pairId, interactions }) {
 
   const snapshot = async (fmt) => {
     if (!viewerRef.current) return;
+    const base = `${pairId}_3D`;
     try {
-      const dataURL = viewerRef.current.pngURI({ height: 1200, width: 1600 });
-      if (fmt === "png") {
-        const a = document.createElement("a");
-        a.href = dataURL; a.download = `${pairId}_3D.png`;
-        document.body.appendChild(a); a.click(); a.remove();
-      } else if (fmt === "tiff") {
-        // Convert PNG dataURL to TIFF via existing figureExporters helper
-        const img = await (async () => {
-          const b = await fetch(dataURL).then((r) => r.blob());
-          const bmp = await createImageBitmap(b);
-          const c = document.createElement("canvas");
-          c.width = bmp.width; c.height = bmp.height;
-          c.getContext("2d").drawImage(bmp, 0, 0);
-          return c.toDataURL("image/png");
-        })();
-        // simple PNG→TIFF via canvas dataURL swap won't produce real TIFF; use png as tiff mimetype
-        const a = document.createElement("a");
-        a.href = img.replace("image/png", "image/tiff"); a.download = `${pairId}_3D.tiff`;
-        document.body.appendChild(a); a.click(); a.remove();
-      }
+      // 3Dmol.js exposes `getCanvas()` in v2 which returns the WebGL canvas.
+      // Fall back to querying the internal canvas if that helper is unavailable.
+      const canvas =
+        (viewerRef.current.getCanvas && viewerRef.current.getCanvas()) ||
+        wrapRef.current?.querySelector("canvas");
+      if (!canvas) throw new Error("3D canvas not available");
+      // Force a fresh render so the WebGL back-buffer contains the current frame
+      // (WebGL clears its buffer after each draw unless preserveDrawingBuffer=true).
+      viewerRef.current.render();
+      if (fmt === "png")       canvasToPNG(canvas, `${base}.png`);
+      else if (fmt === "tiff") canvasToTIFF(canvas, `${base}.tiff`, { dpi: 300 });
+      else if (fmt === "pdf")  canvasToPDF(canvas, `${base}.pdf`);
+      else                     throw new Error(`Unsupported snapshot format: ${fmt}`);
     } catch (e) {
       toast.error(`Snapshot failed: ${e.message || e}`);
     }
@@ -230,6 +229,14 @@ function Complex3DViewer({ jobId, pairId, interactions }) {
           <button data-testid={`viewer-snapshot-png-${pairId}`} onClick={() => snapshot("png")} title="Snapshot PNG"
                   className="inline-flex items-center gap-1 rounded-full border border-[#E7E7F3] bg-white px-2.5 py-1 text-[10px] font-bold text-[#0B0B18] hover:border-[#5139ED]/40">
             <Camera className="h-3 w-3" /> PNG
+          </button>
+          <button data-testid={`viewer-snapshot-tiff-${pairId}`} onClick={() => snapshot("tiff")} title="Snapshot TIFF (300 DPI)"
+                  className="inline-flex items-center gap-1 rounded-full border border-[#E7E7F3] bg-white px-2.5 py-1 text-[10px] font-bold text-[#0B0B18] hover:border-[#5139ED]/40">
+            <Camera className="h-3 w-3" /> TIFF
+          </button>
+          <button data-testid={`viewer-snapshot-pdf-${pairId}`} onClick={() => snapshot("pdf")} title="Snapshot PDF"
+                  className="inline-flex items-center gap-1 rounded-full border border-[#E7E7F3] bg-white px-2.5 py-1 text-[10px] font-bold text-[#0B0B18] hover:border-[#5139ED]/40">
+            <Camera className="h-3 w-3" /> PDF
           </button>
         </div>
       </div>

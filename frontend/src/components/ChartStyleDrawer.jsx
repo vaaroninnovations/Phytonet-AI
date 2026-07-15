@@ -8,7 +8,7 @@
 // merged style that already respects both global + per-chart overrides.
 import { useMemo, useState } from "react";
 import { Palette, RotateCcw, X, Grid, Type as TypeIcon, LayoutGrid } from "lucide-react";
-import { useChartStyle, THEMES, CHART_TYPES } from "@/context/ChartStyleContext";
+import { useChartStyle, THEMES, CHART_TYPES, schemaFor } from "@/context/ChartStyleContext";
 
 export default function ChartStyleDrawer() {
   const [open, setOpen] = useState(false);
@@ -16,10 +16,16 @@ export default function ChartStyleDrawer() {
   const { style, raw, set, setForChart, resetChart, reset } = useChartStyle();
 
   const chartOverride = (raw.byChart || {})[tab] || {};
+  const schema = useMemo(() => schemaFor(tab), [tab]);
 
   // Helper to write to the correct scope (global vs. per-chart)
   const write = (patch) => tab === "global" ? set(patch) : setForChart(tab, patch);
   const val = (k) => tab === "global" ? (raw[k] ?? null) : (chartOverride[k] ?? null);
+  const has = (section, field) => {
+    if (!schema[section]) return false;
+    if (field === undefined) return true;
+    return Array.isArray(schema[section]) ? schema[section].includes(field) : Boolean(schema[section]);
+  };
 
   const chartMeta = useMemo(() =>
     CHART_TYPES.find((c) => c.key === tab), [tab]);
@@ -76,10 +82,14 @@ export default function ChartStyleDrawer() {
             </div>
 
             {chartMeta && (
-              <p className="mt-2 text-[11px] italic text-[#64748B]">
-                Overriding <span className="font-bold text-[#0B0B18]">{chartMeta.label}</span>.
-                Leave a field empty to inherit from Global.
-              </p>
+              <div className="mt-2 rounded-lg border border-[#5139ED]/20 bg-[#F5F3FE] p-2.5">
+                <p className="text-[11px] font-semibold text-[#0B0B18]">
+                  Editing <span className="font-bold text-[#5139ED]">{chartMeta.label}</span>
+                </p>
+                <p className="mt-0.5 text-[10px] text-[#64748B]">
+                  Only relevant options are shown for this chart type. Empty fields inherit from Global.
+                </p>
+              </div>
             )}
 
             {/* Theme (global only — themes are global) */}
@@ -109,46 +119,50 @@ export default function ChartStyleDrawer() {
 
             {/* Colors */}
             <Section title="Colors">
-              <ColorRow label="Node"       testid={`${tab}-color-node`}  value={val("nodeColor") || style.node}      onChange={(v) => write({ nodeColor: v })} />
-              <ColorRow label="Edge"       testid={`${tab}-color-edge`}  value={val("edgeColor") || style.edge}      onChange={(v) => write({ edgeColor: v })} />
-              <ColorRow label="Background" testid={`${tab}-color-bg`}    value={val("backgroundColor") || style.background} onChange={(v) => write({ backgroundColor: v })} />
-              <ColorRow label="Label"      testid={`${tab}-color-label`} value={val("labelColor") || style.labelColor} onChange={(v) => write({ labelColor: v })} />
-              <ColorRow label="Grid"       testid={`${tab}-color-grid`}  value={val("gridColor") || style.grid}      onChange={(v) => write({ gridColor: v })} />
+              {has("colors", "node")       && <ColorRow label="Node"       testid={`${tab}-color-node`}  value={val("nodeColor") || style.node}      onChange={(v) => write({ nodeColor: v })} />}
+              {has("colors", "edge")       && <ColorRow label="Edge"       testid={`${tab}-color-edge`}  value={val("edgeColor") || style.edge}      onChange={(v) => write({ edgeColor: v })} />}
+              {has("colors", "background") && <ColorRow label="Background" testid={`${tab}-color-bg`}    value={val("backgroundColor") || style.background} onChange={(v) => write({ backgroundColor: v })} />}
+              {has("colors", "label")      && <ColorRow label="Label"      testid={`${tab}-color-label`} value={val("labelColor") || style.labelColor} onChange={(v) => write({ labelColor: v })} />}
+              {has("colors", "grid")       && <ColorRow label="Grid"       testid={`${tab}-color-grid`}  value={val("gridColor") || style.grid}      onChange={(v) => write({ gridColor: v })} />}
             </Section>
 
             {/* Sizes */}
             <Section title="Sizes & opacity">
-              <SliderRow label="Node scale"     testid={`${tab}-size-node`}    min={0.3} max={3}   step={0.05} value={val("nodeSize") ?? style.nodeSize}         onChange={(v) => write({ nodeSize: v })} />
-              <SliderRow label="Edge thickness" testid={`${tab}-size-edge`}    min={0.3} max={6}   step={0.1}  value={val("edgeThickness") ?? style.edgeThickness} onChange={(v) => write({ edgeThickness: v })} />
-              <SliderRow label="Label size"     testid={`${tab}-size-label`}   min={8}   max={22}  step={1}    value={val("labelSize") ?? style.labelSize}       onChange={(v) => write({ labelSize: v })} />
-              <SliderRow label="Opacity"        testid={`${tab}-size-opacity`} min={0.2} max={1}   step={0.05} value={val("opacity") ?? style.opacity}           onChange={(v) => write({ opacity: v })} />
+              {has("sizes", "nodeSize")      && <SliderRow label="Node scale"     testid={`${tab}-size-node`}    min={0.3} max={3}   step={0.05} value={val("nodeSize") ?? style.nodeSize}         onChange={(v) => write({ nodeSize: v })} />}
+              {has("sizes", "edgeThickness") && <SliderRow label={tab === "md" ? "Line width" : "Edge thickness"} testid={`${tab}-size-edge`}    min={0.3} max={6}   step={0.1}  value={val("edgeThickness") ?? style.edgeThickness} onChange={(v) => write({ edgeThickness: v })} />}
+              {has("sizes", "labelSize")     && <SliderRow label="Label size"     testid={`${tab}-size-label`}   min={8}   max={22}  step={1}    value={val("labelSize") ?? style.labelSize}       onChange={(v) => write({ labelSize: v })} />}
+              {has("sizes", "opacity")       && <SliderRow label="Opacity"        testid={`${tab}-size-opacity`} min={0.2} max={1}   step={0.05} value={val("opacity") ?? style.opacity}           onChange={(v) => write({ opacity: v })} />}
             </Section>
 
             {/* Legend */}
-            <Section title="Legend" icon={<LayoutGrid className="h-3 w-3" />}>
-              <ToggleRow label="Show legend" testid={`${tab}-show-legend`} value={val("showLegend") ?? style.showLegend} onChange={(v) => write({ showLegend: v })} />
-              <div className="grid grid-cols-5 gap-2">
-                {["off","top","right","bottom","left"].map((p) => (
-                  <button key={p} data-testid={`legend-${tab}-${p}`}
-                          onClick={() => write({ legendPosition: p })}
-                          className={`rounded-lg border px-2 py-1.5 text-[11px] font-bold capitalize transition-all ${
-                            (val("legendPosition") ?? style.legendPosition) === p
-                              ? "border-[#5139ED] bg-[#F5F3FE] text-[#5139ED]"
-                              : "border-[#E7E7F3] bg-white text-[#0B0B18] hover:border-[#5139ED]/40"}`}>
-                    {p}
-                  </button>
-                ))}
-              </div>
-            </Section>
+            {has("legend") && (
+              <Section title="Legend" icon={<LayoutGrid className="h-3 w-3" />}>
+                <ToggleRow label="Show legend" testid={`${tab}-show-legend`} value={val("showLegend") ?? style.showLegend} onChange={(v) => write({ showLegend: v })} />
+                <div className="grid grid-cols-5 gap-2">
+                  {["off","top","right","bottom","left"].map((p) => (
+                    <button key={p} data-testid={`legend-${tab}-${p}`}
+                            onClick={() => write({ legendPosition: p })}
+                            className={`rounded-lg border px-2 py-1.5 text-[11px] font-bold capitalize transition-all ${
+                              (val("legendPosition") ?? style.legendPosition) === p
+                                ? "border-[#5139ED] bg-[#F5F3FE] text-[#5139ED]"
+                                : "border-[#E7E7F3] bg-white text-[#0B0B18] hover:border-[#5139ED]/40"}`}>
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              </Section>
+            )}
 
-            {/* Grid + Border + Font */}
-            <Section title="Grid & border" icon={<Grid className="h-3 w-3" />}>
-              <ToggleRow label="Show grid"   testid={`${tab}-show-grid`}   value={val("showGrid") ?? style.showGrid}   onChange={(v) => write({ showGrid: v })} />
-              <ToggleRow label="Show border" testid={`${tab}-show-border`} value={val("showBorder") ?? style.showBorder} onChange={(v) => write({ showBorder: v })} />
-              <SliderRow label="Border radius" testid={`${tab}-border-radius`} min={0} max={32} step={1} value={val("borderRadius") ?? style.borderRadius} onChange={(v) => write({ borderRadius: v })} />
-            </Section>
+            {/* Grid + Border */}
+            {(has("grid") || has("border")) && (
+              <Section title="Grid & border" icon={<Grid className="h-3 w-3" />}>
+                {has("grid")   && <ToggleRow label="Show grid"   testid={`${tab}-show-grid`}   value={val("showGrid") ?? style.showGrid}   onChange={(v) => write({ showGrid: v })} />}
+                {has("border") && <ToggleRow label="Show border" testid={`${tab}-show-border`} value={val("showBorder") ?? style.showBorder} onChange={(v) => write({ showBorder: v })} />}
+                {has("border") && <SliderRow label="Border radius" testid={`${tab}-border-radius`} min={0} max={32} step={1} value={val("borderRadius") ?? style.borderRadius} onChange={(v) => write({ borderRadius: v })} />}
+              </Section>
+            )}
 
-            {tab === "global" && (
+            {tab === "global" && has("font") && (
               <Section title="Font family" icon={<TypeIcon className="h-3 w-3" />}>
                 <div className="grid grid-cols-2 gap-2">
                   {[
@@ -177,15 +191,17 @@ export default function ChartStyleDrawer() {
             )}
 
             {/* Palette editor */}
-            <Section title="Palette">
-              <PaletteEditor
-                testidPrefix={`${tab}-palette`}
-                palette={val("paletteOverride") ?? (tab === "global" ? style.palette : ((raw.byChart?.[tab]?.palette) || style.palette))}
-                onChange={(next) => tab === "global"
-                  ? set({ paletteOverride: next })
-                  : setForChart(tab, { palette: next })}
-              />
-            </Section>
+            {has("palette") && (
+              <Section title={tab === "heatmap" ? "Colour scale" : "Palette"}>
+                <PaletteEditor
+                  testidPrefix={`${tab}-palette`}
+                  palette={val("paletteOverride") ?? (tab === "global" ? style.palette : ((raw.byChart?.[tab]?.palette) || style.palette))}
+                  onChange={(next) => tab === "global"
+                    ? set({ paletteOverride: next })
+                    : setForChart(tab, { palette: next })}
+                />
+              </Section>
+            )}
 
             {/* Preview */}
             <Section title="Live preview">
