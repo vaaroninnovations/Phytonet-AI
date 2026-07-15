@@ -137,15 +137,16 @@ async def generate_report(workflow: Dict[str, Any],
     try:
         import llm_groq
         if llm_groq.is_configured():
-            # 4000 output tokens is enough for a full IMRAD manuscript and keeps
-            # us well within the ingress timeout (~100 s). 90 s upstream timeout
-            # so we surface a clean error before Cloudflare returns 520.
+            # 4000 output tokens is enough for a full IMRAD manuscript. 45 s
+            # upstream timeout keeps us well inside the Cloudflare ingress
+            # timeout (~60 s) so we always surface a clean HTTP 500 with JSON
+            # detail instead of a Cloudflare 502/520 error page.
             md = await llm_groq.chat_completion(
                 [{"role": "system", "content": SYSTEM_PROMPT},
                  {"role": "user",   "content": prompt}],
                 temperature=0.3,
                 max_tokens=4000,
-                timeout=90.0,
+                timeout=45.0,
             )
             return {
                 "markdown": md.strip(),
@@ -173,10 +174,11 @@ async def generate_report(workflow: Dict[str, Any],
     try:
         # Emergent LLM's chat SDK doesn't expose a timeout kwarg — wrap with
         # asyncio.wait_for so a stuck upstream can't tie up the FastAPI worker
-        # long enough for Cloudflare to return a 520.
-        response = await asyncio.wait_for(chat.send_message(msg), timeout=90.0)
+        # long enough for Cloudflare to return a 5xx. 45 s keeps us inside
+        # the ingress timeout so we always return a clean HTTP 500 JSON.
+        response = await asyncio.wait_for(chat.send_message(msg), timeout=45.0)
     except asyncio.TimeoutError:
-        logger.error("Emergent LLM fallback timed out after 90 s")
+        logger.error("Emergent LLM fallback timed out after 45 s")
         return {"error": "Report generation timed out. Try shrinking the workflow inputs "
                         "or splitting the run into fewer compounds/targets.",
                 "markdown": "", "meta": {}}
