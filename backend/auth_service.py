@@ -26,6 +26,12 @@ import email_service
 
 logger = logging.getLogger(__name__)
 
+# ── Public-preview bypass ──────────────────────────────────────────────────
+# When AUTH_GATE_ENABLED is False, protected endpoints resolve a synthetic
+# admin user without requiring a valid JWT. Flip to True (or set env
+# AUTH_GATE_ENABLED=on) before production deploy to re-enable the gate.
+AUTH_GATE_ENABLED = os.environ.get("AUTH_GATE_ENABLED", "off").strip().lower() in {"1", "on", "true", "yes"}
+
 # Verification tokens expire after 24 hours (production requirement).
 VERIFICATION_TTL = timedelta(hours=24)
 APP_NAME = "PhytoNet AI"
@@ -181,6 +187,27 @@ async def _check_lockout(db, key: str):
 # ─────────────────────────── dependency: get_current_user ─────────────────
 def make_get_current_user(db):
     async def _dep(request: Request):
+        # Public-preview bypass — return a persistent synthetic admin so that
+        # protected endpoints (AI Assistant, Projects, Downloads) work without
+        # requiring a JWT. This user is created once, so per-user data (e.g.
+        # Assistant runs, saved projects) is still coherent across requests.
+        if not AUTH_GATE_ENABLED:
+            preview_email = "preview@phytonet.ai"
+            u = await db["users"].find_one({"email": preview_email})
+            if u is None:
+                await db["users"].insert_one({
+                    "email": preview_email,
+                    "password_hash": "!disabled!",
+                    "first_name": "Preview",
+                    "last_name": "User",
+                    "role": "admin",           # unlimited assistant runs while gate is off
+                    "account_type": "admin",
+                    "email_verified": True,
+                    "created_at": datetime.now(timezone.utc),
+                })
+                u = await db["users"].find_one({"email": preview_email})
+            return u
+
         token = request.cookies.get("access_token")
         if not token:
             auth = request.headers.get("Authorization", "")

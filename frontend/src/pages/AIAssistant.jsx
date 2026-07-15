@@ -5,7 +5,7 @@ import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Sparkles, Loader2, Check, X, ArrowRight, Download, Gift, AlertCircle, Play } from "lucide-react";
 import { toast } from "sonner";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth, AUTH_GATE_ENABLED } from "@/context/AuthContext";
 import {
   assistantEligibility, assistantRun, assistantStatus, assistantReportURL,
 } from "@/lib/api";
@@ -130,19 +130,19 @@ export default function AIAssistant() {
       </div>
 
       <div className="mt-6 flex flex-wrap items-center gap-3">
-        {!user ? (
+        {!user && AUTH_GATE_ENABLED ? (
           <button data-testid="assistant-signin" onClick={() => openModal("signin")}
                   className="inline-flex items-center gap-2 rounded-full bg-[#5139ED] px-6 py-3 text-[14px] font-bold text-white hover:bg-[#4127c9]">
             Sign in to run<ArrowRight className="h-4 w-4" />
           </button>
         ) : (
-          <button data-testid="assistant-start" onClick={onStart} disabled={!canStart || !eligible.eligible}
+          <button data-testid="assistant-start" onClick={onStart} disabled={!canStart || (AUTH_GATE_ENABLED && !eligible.eligible)}
                   className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#5139ED] via-[#395AED] to-[#8139ED] px-6 py-3 text-[14px] font-bold text-white shadow-[0_14px_36px_-10px_rgba(81,57,237,0.7)] transition-all hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0">
             {starting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
             {starting ? "Starting…" : "Launch AI Assistant"}
           </button>
         )}
-        {eligible && !eligible.eligible && !eligible.is_admin && (
+        {AUTH_GATE_ENABLED && eligible && !eligible.eligible && !eligible.is_admin && (
           <span className="text-[12px] text-[#6B7280]">Additional runs will be enabled via subscription plans soon.</span>
         )}
       </div>

@@ -5,6 +5,14 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import axios from "axios";
 
+// ── Public-preview bypass flag ──────────────────────────────────────────────
+// While the app is in public preview (pre-deployment), auth-gated actions
+// (downloads, AI Assistant) should just work without a sign-in wall so users
+// can evaluate the product. Flip this to `true` right before you cut a
+// production build to re-enable the paywall / login gate.
+export const AUTH_GATE_ENABLED = false;
+// ────────────────────────────────────────────────────────────────────────────
+
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 export const authApi = axios.create({ baseURL: API, withCredentials: true });
 
@@ -67,6 +75,8 @@ export function AuthProvider({ children }) {
   };
 
   const guard = useCallback((fn, opts = {}) => {
+    // Public-preview bypass: skip login modal entirely and run the action.
+    if (!AUTH_GATE_ENABLED) { fn(); return; }
     if (user) { fn(); return; }
     pendingAction.current = fn;
     setModalTab(opts.tab === "signup" ? "signup" : "signin");
