@@ -258,6 +258,8 @@ class DockResult:
     log_path: str
     job_id: str
     pair_id: str
+    # Optional post-processing metadata (populated by dock_pair after Vina completes)
+    classification: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
 
 
@@ -398,6 +400,65 @@ def _analyse_pose_interactions(pose_pdb: Path, receptor_pdb: Path) -> Dict[str, 
                                   "distance": round(d, 2),
                                   "type": "pi_stacking"})
 
+    # ── π-cation: aromatic ring centroid ↔ ligand cation (or vice versa) ─
+    pi_cations: List[Dict[str, Any]] = []
+    metal_coords: List[Dict[str, Any]] = []
+    vdw_contacts: List[Dict[str, Any]] = []
+
+    # Reuse the aromatic ring centroids we computed for π-stacking
+    if lig_arom and 'rings' in dir():
+        pass  # actual computation below
+
+    # Compute aromatic ring centroids per receptor residue (again — dedicated set for π-cation)
+    rings: Dict[str, List[Dict[str, float]]] = {}
+    for ra in rec:
+        atoms_for_res = AROMATIC_RES.get(ra["resn"])
+        if atoms_for_res and ra["atom"] in atoms_for_res:
+            k = f"{ra['chain']}:{ra['resn']}{ra['resi']}"
+            rings.setdefault(k, []).append(ra)
+    ring_centroids: Dict[str, Dict[str, float]] = {}
+    for k, atoms in rings.items():
+        if len(atoms) >= 3:
+            ring_centroids[k] = {
+                "x": sum(a["x"] for a in atoms) / len(atoms),
+                "y": sum(a["y"] for a in atoms) / len(atoms),
+                "z": sum(a["z"] for a in atoms) / len(atoms),
+            }
+    # Ligand cations ≈ N atoms (approximation for protonated amines)
+    for la in [a for a in lig if a["atom"][:1] == "N"]:
+        for k, c in ring_centroids.items():
+            d = ((la["x"] - c["x"]) ** 2 + (la["y"] - c["y"]) ** 2 + (la["z"] - c["z"]) ** 2) ** 0.5
+            if 3.4 <= d <= 6.0:
+                chain, resid = k.split(":")
+                pi_cations.append({"ligand_atom": la["atom"], "residue": resid, "chain": chain,
+                                   "distance": round(d, 2), "type": "pi_cation"})
+
+    # ── Metal coordination: divalent cation ligand atom (Zn/Mg/Fe/Ca) ↔ lig O/N
+    METAL_IONS = {"ZN", "MG", "FE", "MN", "CA", "CU", "NI"}
+    for ma in [a for a in rec if a["resn"] in METAL_IONS or a["atom"] in METAL_IONS]:
+        for la in [a for a in lig if a["atom"][:1] in ("O", "N")]:
+            d = _dist(la, ma)
+            if d <= 3.0:
+                metal_coords.append({"ligand_atom": la["atom"],
+                                     "residue": f"{ma['resn']}{ma['resi']}",
+                                     "chain": ma["chain"], "distance": round(d, 2),
+                                     "type": "metal_coordination"})
+
+    # ── Van der Waals: heavy-atom contacts 3.5..4.0 Å not already classified
+    already = {(r["residue"], r["ligand_atom"]) for r in hbonds + hydrophobic + salt_bridges}
+    for la in lig:
+        for ra in rec:
+            if ra["atom"] in {"C", "N", "O", "CA"}:
+                continue
+            d = _dist(la, ra)
+            if 3.5 <= d <= 4.0:
+                key = (f"{ra['resn']}{ra['resi']}", la["atom"])
+                if key not in already:
+                    vdw_contacts.append({"ligand_atom": la["atom"],
+                                         "residue": f"{ra['resn']}{ra['resi']}",
+                                         "chain": ra["chain"], "distance": round(d, 2),
+                                         "type": "van_der_waals"})
+
     # Deduplicate by residue (best distance)
     def _dedup(rows):
         seen: Dict[str, Dict[str, Any]] = {}
@@ -411,13 +472,61 @@ def _analyse_pose_interactions(pose_pdb: Path, receptor_pdb: Path) -> Dict[str, 
     hydrophobic  = _dedup(hydrophobic)[:15]
     salt_bridges = _dedup(salt_bridges)[:10]
     pi_stacks    = _dedup(pi_stacks)[:10]
+    pi_cations   = _dedup(pi_cations)[:10]
+    metal_coords = _dedup(metal_coords)[:10]
+    vdw_contacts = _dedup(vdw_contacts)[:20]
 
     return {
         "hydrogen_bonds": hbonds,
         "hydrophobic_contacts": hydrophobic,
         "salt_bridges": salt_bridges,
         "pi_stacking": pi_stacks,
-        "all": hbonds + hydrophobic + salt_bridges + pi_stacks,
+        "pi_cation": pi_cations,
+        "metal_coordination": metal_coords,
+        "van_der_waals": vdw_contacts,
+        "all": hbonds + hydrophobic + salt_bridges + pi_stacks + pi_cations + metal_coords + vdw_contacts,
+    }
+
+
+def classify_docking_pose(affinity_kcal: float, interactions: Dict[str, Any], mw: float = 200.0) -> Dict[str, Any]:
+    """Compute a composite docking-quality score + qualitative class.
+
+    Combines binding affinity (dominant), interaction counts, and ligand
+    efficiency (ΔG per heavy atom, approx via MW/13.5). Returns
+    ``{score, class, ligand_efficiency, n_hbonds, n_hydrophobic, n_pi, n_salt}``.
+    Class scale (published cutoffs for Vina scores):
+      Excellent  ≤ −9.0
+      Very Good  ≤ −8.0
+      Good       ≤ −7.0
+      Moderate   ≤ −6.0
+      Weak       > −6.0
+    """
+    n_hb   = len(interactions.get("hydrogen_bonds", []) or [])
+    n_hp   = len(interactions.get("hydrophobic_contacts", []) or [])
+    n_pi   = len(interactions.get("pi_stacking", []) or []) + len(interactions.get("pi_cation", []) or [])
+    n_salt = len(interactions.get("salt_bridges", []) or [])
+    heavy_atoms = max(4, int(mw / 13.5))
+    ligand_efficiency = round(affinity_kcal / heavy_atoms, 3)
+
+    # Composite score: affinity weighted 60 %, interactions 25 %, LE 15 %.
+    a = min(-affinity_kcal, 12) / 12                      # 0..1  (12 kcal/mol ⇒ 1.0)
+    inter = min((2 * n_hb + n_hp + 1.5 * n_pi + 2 * n_salt), 20) / 20
+    le    = min(-ligand_efficiency, 0.5) / 0.5
+    composite = round(100 * (0.60 * a + 0.25 * inter + 0.15 * le), 1)
+
+    if affinity_kcal <= -9.0:   klass = "Excellent"
+    elif affinity_kcal <= -8.0: klass = "Very Good"
+    elif affinity_kcal <= -7.0: klass = "Good"
+    elif affinity_kcal <= -6.0: klass = "Moderate"
+    else:                       klass = "Weak"
+
+    return {
+        "score": composite,
+        "class": klass,
+        "ligand_efficiency": ligand_efficiency,
+        "n_hbonds": n_hb, "n_hydrophobic": n_hp,
+        "n_pi": n_pi, "n_salt": n_salt,
+        "recommend_md": affinity_kcal <= -7.0 and n_hb >= 2,
     }
 
 
@@ -577,16 +686,35 @@ async def dock_pair(job_dir: Path, receptor_pdbqt: Path, receptor_pdb: Path,
         _build_complex_pdb(receptor_pdb, best_pose_pdb if best_pose_pdb.exists() else pose_pdb, complex_pdb)
     except Exception as _e:
         logger.warning(f"complex.pdb build failed for {pair_id}: {_e}")
-    # Persist interactions to disk (used by /api/docking/interactions endpoints)
+    # Persist interactions + classification to disk for the render + summary APIs
     try:
         (pair_dir / "interactions.json").write_text(json.dumps(interactions, indent=2))
         _write_interactions_csv(interactions, pair_dir / "interactions.csv")
     except Exception as _e:
         logger.warning(f"interactions export failed for {pair_id}: {_e}")
-    return DockResult(ligand["name"], ligand["smiles"], ligand["uniprot_id"], receptor_pdb.stem,
+
+    # ── Auto-classify this docking pose ───────────────────────────
+    try:
+        mw = None
+        from rdkit import Chem
+        from rdkit.Chem import Descriptors
+        m = Chem.MolFromSmiles(ligand["smiles"])
+        if m:
+            mw = Descriptors.ExactMolWt(m)
+    except Exception:
+        mw = None
+    classification = classify_docking_pose(best, interactions, mw=mw or 200.0)
+    try:
+        (pair_dir / "classification.json").write_text(json.dumps(classification, indent=2))
+    except Exception:
+        pass
+
+    result = DockResult(ligand["name"], ligand["smiles"], ligand["uniprot_id"], receptor_pdb.stem,
                       best_affinity=best, poses=poses, interactions=interactions,
                       pose_pdbqt_path=str(out_pdbqt), log_path=str(log_path),
-                      job_id=job_dir.name, pair_id=pair_id)
+                      job_id=job_dir.name, pair_id=pair_id,
+                      classification=classification)
+    return result
 
 
 async def run_docking_batch(compounds: List[Dict[str, str]],
@@ -674,8 +802,10 @@ def get_pose_content(job_id: str, pair_id: str, fmt: str = "pdbqt") -> Tuple[byt
         "best_pdbqt":       ("best_pose.pdbqt",     "chemical/x-pdbqt"),
         "best_pdb":         ("best_pose.pdb",       "chemical/x-pdb"),
         "complex_pdb":      ("complex.pdb",         "chemical/x-pdb"),
+        "ligand_pdbqt":     ("ligand.pdbqt",        "chemical/x-pdbqt"),
         "interactions_json":("interactions.json",   "application/json"),
         "interactions_csv": ("interactions.csv",    "text/csv"),
+        "classification_json": ("classification.json", "application/json"),
     }
     if fmt not in _FMT_MAP:
         raise ValueError(f"Unsupported docking pose format: {fmt!r}")

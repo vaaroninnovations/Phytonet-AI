@@ -277,32 +277,66 @@ export default function MolecularDocking() {
   };
   const [mdAffinityThreshold, setMdAffinityThreshold] = useState(-7.0);
 
-  const resultRows = (result?.results || []).map((r, i) => ({
-    id: r.pair_id + "-" + i,
-    rank: i + 1,
-    ligand: r.ligand_name,
-    smiles: r.ligand_smiles,
-    target: r.receptor_uniprot,
-    pdb: r.receptor_pdb,
-    affinity: r.best_affinity,
-    n_poses: r.poses?.length || 0,
-    hbonds: r.interactions?.hydrogen_bonds?.length || 0,
-    hydrophobic: r.interactions?.hydrophobic_contacts?.length || 0,
-    error: r.error,
-    job_id: r.job_id,
-    pair_id: r.pair_id,
-  }));
+  const resultRows = (result?.results || []).map((r, i) => {
+    const p1 = r.poses?.[0] || {};
+    const cls = r.classification || {};
+    return {
+      id: r.pair_id + "-" + i,
+      rank: i + 1,
+      ligand: r.ligand_name,
+      smiles: r.ligand_smiles,
+      target: r.receptor_uniprot,
+      pdb: r.receptor_pdb,
+      affinity: r.best_affinity,
+      rmsd_lb: p1.rmsd_lb,
+      rmsd_ub: p1.rmsd_ub,
+      n_poses: r.poses?.length || 0,
+      hbonds: r.interactions?.hydrogen_bonds?.length || 0,
+      hydrophobic: r.interactions?.hydrophobic_contacts?.length || 0,
+      pi_int: (r.interactions?.pi_stacking?.length || 0) + (r.interactions?.pi_cation?.length || 0),
+      salt: r.interactions?.salt_bridges?.length || 0,
+      quality: cls.class || (r.error ? "Failed" : "—"),
+      score: cls.score ?? null,
+      efficiency: cls.ligand_efficiency ?? null,
+      md_reco: cls.recommend_md,
+      status: r.error ? "Failed" : "Success",
+      error: r.error,
+      job_id: r.job_id,
+      pair_id: r.pair_id,
+    };
+  });
+
+  const qualityBadge = (v) => {
+    if (!v || v === "—") return <span className="text-[#94A3B8]">—</span>;
+    const map = {
+      Excellent: "bg-[#059669] text-white",
+      "Very Good": "bg-[#10B981] text-white",
+      Good: "bg-[#0EA5E9] text-white",
+      Moderate: "bg-[#F59E0B] text-white",
+      Weak: "bg-[#94A3B8] text-white",
+      Failed: "bg-[#DC2626] text-white",
+    };
+    return <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${map[v] || "bg-slate-200"}`}>{v}</span>;
+  };
 
   const cols = [
-    { key: "rank", label: "Rank" },
-    { key: "ligand", label: "Ligand", filterable: true },
+    { key: "rank", label: "#" },
+    { key: "ligand", label: "Compound", filterable: true },
     { key: "target", label: "UniProt" },
     { key: "pdb", label: "PDB", format: (v) => v ? <a href={`https://www.rcsb.org/structure/${v}`} target="_blank" rel="noreferrer" className="text-[#5139ED] underline decoration-dotted">{v}</a> : "—" },
     { key: "affinity", label: "Affinity (kcal/mol)", format: (v) => (v ?? 0).toFixed(2) },
+    { key: "efficiency", label: "LE", format: (v) => v == null ? "—" : v.toFixed(3) },
+    { key: "rmsd_lb", label: "RMSD lb", format: (v) => v == null ? "—" : v.toFixed(2) },
+    { key: "rmsd_ub", label: "RMSD ub", format: (v) => v == null ? "—" : v.toFixed(2) },
     { key: "n_poses", label: "Poses" },
     { key: "hbonds", label: "H-bonds" },
-    { key: "hydrophobic", label: "Hydrophobic" },
-    { key: "error", label: "Notes", format: (v) => v ? <span className="text-red-500 text-[10px]">{v.slice(0, 60)}</span> : "" },
+    { key: "hydrophobic", label: "Hydrophob." },
+    { key: "pi_int", label: "π-int" },
+    { key: "salt", label: "Salt br." },
+    { key: "score", label: "Score", format: (v) => v == null ? "—" : v.toFixed(1) },
+    { key: "quality", label: "Quality", format: qualityBadge, filterable: true },
+    { key: "md_reco", label: "MD?", format: (v) => v ? "✓" : "" },
+    { key: "status", label: "Status", format: (v) => v === "Failed" ? <span className="text-red-500 text-[10px]">Failed</span> : <span className="text-[#059669] text-[10px]">OK</span> },
     { key: "download", label: "Pose", sortable: false, format: (_, r) => r.pair_id && !r.error ? (
         <div className="flex gap-1">
           <a data-testid={`dock-dl-pdbqt-${r.pair_id}`} href={dockingPoseURL(r.job_id, r.pair_id, "pdbqt")}

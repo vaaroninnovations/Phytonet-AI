@@ -12,6 +12,7 @@ from pydantic import BaseModel
 import deps_check
 import docking_service
 import docking_render
+import llm_groq
 
 
 class DockCompound(BaseModel):
@@ -163,5 +164,68 @@ def build_router() -> APIRouter:
             raise HTTPException(status_code=500, detail=f"Render failed: {e}")
         return Response(content=content, media_type=mime,
                         headers={"Content-Disposition": f"attachment; filename={pair_id}_hires.{fmt}"})
+
+    @router.get("/docking/interpret/{job_id}/{pair_id}")
+    async def docking_interpret(job_id: str, pair_id: str):
+        """AI-generated scientific interpretation of a docking pose.
+        Reads the on-disk interactions.json + classification.json for the pair
+        and asks Groq to synthesise a short, structured report covering
+        biological significance, key binding residues, mechanism-of-action
+        hypothesis, and MD recommendation.
+        """
+        import json as _json
+        import re as _re
+        from docking_service import DOCK_ROOT
+        safe_job = _re.sub(r"[^A-Za-z0-9_.-]", "", job_id)
+        safe_pair = _re.sub(r"[^A-Za-z0-9_.-]", "", pair_id)
+        pair_dir = DOCK_ROOT / safe_job / safe_pair
+        if not pair_dir.exists():
+            raise HTTPException(status_code=404, detail=f"Pair {pair_id} not found")
+        try:
+            interactions = _json.loads((pair_dir / "interactions.json").read_text())
+        except Exception:
+            interactions = {}
+        try:
+            classification = _json.loads((pair_dir / "classification.json").read_text())
+        except Exception:
+            classification = {}
+        # Compact summary of top interacting residues to keep the prompt small
+        hb_residues = [r.get("residue") for r in (interactions.get("hydrogen_bonds") or [])[:6]]
+        hp_residues = [r.get("residue") for r in (interactions.get("hydrophobic_contacts") or [])[:6]]
+        pi_residues = ([r.get("residue") for r in (interactions.get("pi_stacking") or [])]
+                        + [r.get("residue") for r in (interactions.get("pi_cation") or [])])[:4]
+        prompt = (
+            f"You are a computational medicinal-chemistry expert. Provide a concise scientific "
+            f"interpretation (~180 words) of this AutoDock Vina docking result. "
+            f"Ligand-target pair: {pair_id}. "
+            f"Binding affinity: {classification.get('ligand_efficiency', '?')} kcal/mol/HA "
+            f"(class: {classification.get('class', '?')}, composite score: {classification.get('score','?')}). "
+            f"Key H-bond residues: {', '.join(hb_residues) or 'none detected'}. "
+            f"Key hydrophobic residues: {', '.join(hp_residues) or 'none'}. "
+            f"π-interactions residues: {', '.join(pi_residues) or 'none'}. "
+            f"Interaction counts — H-bonds: {classification.get('n_hbonds',0)}, "
+            f"hydrophobic: {classification.get('n_hydrophobic',0)}, "
+            f"π: {classification.get('n_pi',0)}, salt bridges: {classification.get('n_salt',0)}. "
+            f"Structure your response with four short sections: "
+            f"**Biological significance**, **Key binding residues**, **Proposed mechanism**, "
+            f"**MD recommendation**. Use Markdown."
+        )
+        try:
+            text = await llm_groq.chat_completion(
+                [{"role": "user", "content": prompt}], max_tokens=600,
+            )
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"LLM interpretation failed: {e}")
+        return {
+            "pair_id": pair_id, "job_id": job_id,
+            "interpretation": text,
+            "classification": classification,
+            "counts": {
+                "hbonds": classification.get("n_hbonds", 0),
+                "hydrophobic": classification.get("n_hydrophobic", 0),
+                "pi": classification.get("n_pi", 0),
+                "salt_bridges": classification.get("n_salt", 0),
+            },
+        }
 
     return router

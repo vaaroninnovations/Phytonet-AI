@@ -56,6 +56,7 @@ export default function DockingViewer({ jobId, pairId, ligandName, receptor, bes
       {expanded && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <CustomizeFigureButton chartType="docking" testid={`customize-figure-docking-${pairId}`} />
+          <InterpretButton jobId={jobId} pairId={pairId} />
         </div>
       )}
 
@@ -424,6 +425,54 @@ function InteractionsTable({ interactions, pairId }) {
         </table>
       </div>
     </div>
+  );
+}
+
+/* ── AI Interpretation button + panel ───────────────────────────────── */
+function InterpretButton({ jobId, pairId }) {
+  const [loading, setLoading] = useState(false);
+  const [text, setText] = useState(null);
+  const [meta, setMeta] = useState(null);
+  const [open, setOpen] = useState(false);
+  const run = async () => {
+    if (text) { setOpen(true); return; }
+    setLoading(true);
+    try {
+      const r = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/docking/interpret/${jobId}/${pairId}`);
+      if (!r.ok) throw new Error((await r.json()).detail || `HTTP ${r.status}`);
+      const j = await r.json();
+      setText(j.interpretation);
+      setMeta(j.classification);
+      setOpen(true);
+    } catch (e) {
+      toast.error(`AI interpretation failed: ${(e.message || e).toString().slice(0, 120)}`);
+    } finally { setLoading(false); }
+  };
+  return (
+    <>
+      <button data-testid={`ai-interpret-${pairId}`} onClick={run} disabled={loading}
+              className="inline-flex items-center gap-1.5 rounded-full border border-[#5139ED]/30 bg-[#5139ED] px-3 py-1.5 text-[11px] font-bold text-white shadow-sm hover:bg-[#4127c9] disabled:opacity-60">
+        {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Info className="h-3.5 w-3.5" />}
+        {loading ? "Analysing…" : (text ? "AI Interpretation ▸" : "AI Interpretation")}
+      </button>
+      {open && text && (
+        <div className="mt-3 w-full rounded-2xl border border-[#5139ED]/25 bg-gradient-to-br from-[#F5F3FE] to-white p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="font-heading text-[10px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">
+              AI-generated interpretation · Groq
+            </p>
+            {meta && (
+              <span className="rounded-full bg-[#5139ED] px-2 py-0.5 text-[10px] font-bold text-white">
+                {meta.class} · score {meta.score} · LE {meta.ligand_efficiency}
+              </span>
+            )}
+          </div>
+          <div className="prose prose-sm max-w-none text-[12px] leading-relaxed text-[#0B0B18] whitespace-pre-wrap">
+            {text}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

@@ -1,0 +1,56 @@
+{
+  "iteration": 32,
+  "summary": "Iter-32 backend-only verification of the new molecular-docking module (Discovery-Studio-Visualizer parity): (a) extended interaction detection (7 types now: hydrogen_bonds, hydrophobic_contacts, salt_bridges, pi_stacking, pi_cation, metal_coordination, van_der_waals + all flat list); (b) composite classification object attached to every DockResult with keys {score, class, ligand_efficiency, n_hbonds, n_hydrophobic, n_pi, n_salt, recommend_md}; (c) new GET /api/docking/interpret/{job_id}/{pair_id} AI endpoint (Groq-powered markdown report with 4 bold sections); (d) 2 new download formats — ligand_pdbqt & classification_json. All 9 acceptance assertions PASS. Full docking regression suite (test_docking_viz + test_docking_pose + test_docking_md + test_docking_hires) — 9/9 pass with no regressions from the new classification field or extended interactions.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/docking/interpret/{job_id}/{pair_id}", "issue": "Not idempotent — every call re-invokes Groq (no caching). For a paper-grade UX consider persisting the generated interpretation.md next to interactions.json / classification.json so repeat views are instant and Groq quota is preserved. Low priority."},
+      {"endpoint": "/api/docking/interpret/{job_id}/{pair_id}", "issue": "The prompt embeds ligand_efficiency as 'kcal/mol/HA' but calls it 'Binding affinity' in the same line — Groq is likely to pass the label through verbatim. Minor scientific-wording nit; consider labelling the number 'ligand efficiency' explicitly."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "acceptance_matrix": {
+    "1_classification_object_present_with_all_keys": "PASS",
+    "2_classification.class_in_enum_never_null": "PASS (observed: 'Moderate' for aspirin×PTGS1 as predicted)",
+    "3_interactions_has_7_keys_plus_all": "PASS (hydrogen_bonds, hydrophobic_contacts, salt_bridges, pi_stacking, pi_cation, metal_coordination, van_der_waals, all — for aspirin×PTGS1: ~9 hb, ~13 hp, 0 salt/pi/metal as expected for uncharged small aromatic)",
+    "4_interpret_endpoint_returns_markdown_gte_100_chars_with_bold_headers": "PASS",
+    "5_interpret_404_on_nonexistent_job_pair": "PASS",
+    "6_pose_download_ligand_pdbqt_200_chemical_x_pdbqt": "PASS",
+    "7_pose_download_classification_json_200_application_json": "PASS",
+    "8a_deps_status_ok_true": "PASS",
+    "8b_existing_7_formats_still_200": "PASS (pdbqt/pdb/best_pdbqt/best_pdb/complex_pdb/interactions_json/interactions_csv all green)",
+    "8c_render_300dpi_png_still_works": "PASS (valid PNG magic bytes, image/png MIME)",
+    "9_existing_pytest_suite_no_regressions": "PASS (test_docking_viz + _pose + _md + _hires — 9/9 green)"
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter32_docking_ai.py",
+    "/app/test_reports/pytest/iter32_docking_ai.xml",
+    "/app/test_reports/pytest/iter32_docking_regression.xml"
+  ],
+  "action_items": [
+    "No blocking action items — all 9 review-request assertions pass and no regressions detected.",
+    "(Optional / nice-to-have) Cache the Groq interpretation on disk (interpretation.md) so repeat GETs don't burn Groq quota.",
+    "(Optional / cosmetic) In routes/docking.py::docking_interpret the prompt calls ligand_efficiency 'Binding affinity' — reword to 'Ligand efficiency (ΔG per heavy atom)' for scientific accuracy."
+  ],
+  "critical_code_review_comments": [
+    "docking_service.py L408-411 has dead code: `if lig_arom and 'rings' in dir(): pass  # actual computation below` — the `dir()` check is a no-op inside a function scope and the block does nothing. Safe to remove.",
+    "docking_service.py L413 shadows the outer `rings` variable declared earlier at L383 for π-stacking — the recomputed `rings` at L413 is functionally identical but is now used for both π-stacking (indirectly) and π-cation. Extract a single ring-centroid helper to avoid the double-loop over receptor atoms (perf: 2× O(n_rec) walks currently).",
+    "docking_service.py L358 lig_neg picks 'any O' as anion — for aspirin this is a false positive since the acetyl ester O is not charged at physiological pH. This is documented in the code as 'loose' but produces occasional false salt-bridge hits with charged Lys/Arg. Acceptable heuristic but should be documented in the AI interpretation prompt.",
+    "docking_service.py L437 METAL_IONS = {'ZN','MG','FE','MN','CA','CU','NI'} — 'CA' collides with the CA (α-carbon) atom name at L326 hydrophobic set. The check at L438 (`ra['resn'] in METAL_IONS or ra['atom'] in METAL_IONS`) will therefore misclassify every backbone α-carbon as a calcium ion when the residue name is anything containing 'CA' — but the follow-up filter `la['atom'][:1] in ('O','N')` and ≤3.0 Å distance make the false-positive rate low in practice. Recommend renaming to CA2 (calcium) or using the PDB element column instead of atom-name matching.",
+    "routes/docking.py L184-191 silently swallows JSON-decode errors and passes empty dicts to Groq. If interactions.json is malformed the user gets a generic-sounding AI report instead of a clear error. Consider raising 500 with 'artifact corrupted' when the pair_dir exists but the JSON files are missing/broken.",
+    "routes/docking.py L213-218 wraps every Groq call in a bare `except Exception` → 502. This masks distinct failure modes (auth failure, quota, timeout, network) — consider surfacing the httpx.HTTPStatusError.response.status_code in the detail for easier ops debugging.",
+    "docking_service.py DockResult now has an Optional `classification` field but the streaming endpoint at routes/docking.py L88-123 also serialises results — verified via `asdict(p)` in run_docking_batch so classification is included, no fix needed.",
+    "docking_service.py file is now 815 lines — approaching the 700-line refactor threshold from code-review guidelines. Consider splitting interaction detection (L286-488) + classification (L491-530) into a separate docking_analysis.py module."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter32_docking_ai.py"],
+  "success_rate": {
+    "backend": "100% — 15/15 iter32 acceptance tests pass, 9/9 regression tests pass (test_docking_viz + test_docking_pose + test_docking_md + test_docking_hires all green)",
+    "frontend": "not tested (backend-only iter per request)"
+  },
+  "test_credentials": "Not used — AUTH_GATE_ENABLED=false and no login required for docking endpoints.",
+  "seed_data_creation": "Docking run: aspirin (CC(=O)Oc1ccccc1C(=O)O) × PTGS1 (uniprot P23219, PDB 1EQG) with exhaustiveness=2, num_modes=3, box_padding=6.0. Job artifacts persist under /tmp/phytonet_docking/{job_id}/ and are reused across all sub-tests via module-scope pytest fixture.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The iter32 test file /app/backend/tests/test_iter32_docking_ai.py is idempotent (~45 s total, single Vina run reused across 15 assertions via module fixture). Use it as a smoke test for any change to docking_service.py::_analyse_pose_interactions, classify_docking_pose, get_pose_content._FMT_MAP, or routes/docking.py::docking_interpret. The Groq interpret endpoint may 502 if quota is exhausted — the test correctly skips (not fails) in that scenario. Observed interpretation length was ~1000+ chars with proper markdown headers. The classification for aspirin×PTGS1 landed as 'Moderate' (score ~35, LE ~-0.4, MD recommend: false — because Vina affinity ~-6.4 kcal/mol is above -7.0 threshold). All previously-flagged failures in iter31 (auth email drift, 4 assistant eligibility tests, google/status timeout, LotusDedup) remain outside iter32 scope and were not re-tested.",
+  "rca_of_the_issue": "Not applicable — this is a feature-addition iteration, not a bug fix. All new functionality (classification, 7-type interactions, AI interpret, 2 new download formats) verified working end-to-end."
+}
