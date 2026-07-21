@@ -67,15 +67,17 @@ export const CHART_FIELD_SCHEMAS = {
     border: true, font: true,
   },
   // ── Enrichment (bar-style) ────────────────────────────────────────
+  // Per-bar colours come from the palette editor. `nodeSize` scales dot
+  // radius in KEGG dot plot (no effect on GO bar rendering).
   go: {
     colors: ["background", "label", "grid"],
-    sizes: ["labelSize", "opacity"],
+    sizes: ["nodeSize", "labelSize", "opacity"],
     palette: true, legend: true, grid: true,
     border: true, font: true,
   },
   kegg: {
     colors: ["background", "label", "grid"],
-    sizes: ["labelSize", "opacity"],
+    sizes: ["nodeSize", "labelSize", "opacity"],
     palette: true, legend: true, grid: true,
     border: true, font: true,
   },

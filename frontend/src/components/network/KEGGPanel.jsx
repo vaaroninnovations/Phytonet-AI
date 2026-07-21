@@ -10,6 +10,7 @@ import { TableToolbar } from "@/components/network/TableToolbar";
 import { FigureToolbar } from "@/components/network/FigureToolbar";
 import { CyToolbar } from "@/components/network/CyToolbar";
 import { DataTable } from "@/components/network/DataTable";
+import { useAppliedStyle } from "@/context/ChartStyleContext";
 import { benjaminiHochberg, bonferroni, CORRECTION_METHODS } from "@/lib/enrichmentUtils";
 
 const VIZ_OPTIONS = [
@@ -360,6 +361,7 @@ function LollipopChart({ svgRef, rows }) {
 }
 
 function SankeyChart({ svgRef, rows }) {
+  const s = useAppliedStyle("sankey");
   const w = 900, pad = 16, geneW = 12, pathW = 12;
   const geneCounts = new Map();
   for (const r of rows) for (const g of r.overlap_genes || []) geneCounts.set(g, (geneCounts.get(g) || 0) + 1);
@@ -370,57 +372,64 @@ function SankeyChart({ svgRef, rows }) {
   if (filteredRows.length === 0 || genes.length === 0) return <div className="rounded-2xl border border-[#F1F1FA] bg-[#FAFAFF] p-6 text-center text-xs text-[#64748B]">Not enough overlap data.</div>;
   const geneY = (i) => pad + ((h - 2*pad) / Math.max(1, genes.length)) * (i + 0.5);
   const pathY = (i) => pad + ((h - 2*pad) / Math.max(1, filteredRows.length)) * (i + 0.5);
-  const palette = ["#5139ED","#8139ED","#395AED","#ED39A6","#39C1ED","#F5B301","#10B981","#EF4444"];
+  const palette = s.palette;
+  const linkW = 1.6 * s.edgeThickness;
   return (
-    <svg ref={svgRef} viewBox={`0 0 ${w} ${h}`} width="100%" height={h}>
-      <rect x="0" y="0" width={w} height={h} fill="#FFFFFF" />
-      {genes.map((g,i) => <g key={g}><rect x={140} y={geneY(i)-6} width={geneW} height={12} rx={2} fill="#5139ED" /><text x={135} y={geneY(i)+3} fontSize="10" fill="#0B0B18" textAnchor="end">{g}</text></g>)}
-      {filteredRows.map((r,i) => { const c = palette[i%palette.length]; const label = r.term.length>34 ? r.term.slice(0,32)+"…" : r.term; return <g key={r.term}><rect x={w-140-pathW} y={pathY(i)-6} width={pathW} height={12} rx={2} fill={c} /><text x={w-140+6} y={pathY(i)+3} fontSize="10" fill="#0B0B18">{label}</text></g>; })}
-      {filteredRows.map((r, pi) => { const color = palette[pi%palette.length]; return (r.overlap_genes || []).map((g) => { const gi = genes.indexOf(g); if (gi < 0) return null; const x1 = 140+geneW; const y1 = geneY(gi); const x2 = w-140-pathW; const y2 = pathY(pi); const cx = x1+(x2-x1)*0.5; const d = `M ${x1} ${y1} C ${cx} ${y1}, ${cx} ${y2}, ${x2} ${y2}`; return <path key={`${g}-${r.term}`} d={d} stroke={color} strokeWidth="1.6" strokeOpacity="0.35" fill="none" />; }); })}
+    <svg ref={svgRef} viewBox={`0 0 ${w} ${h}`} width="100%" height={h}
+         style={{ fontFamily: s.fontFamily, borderRadius: s.borderRadius, border: s.showBorder ? `1px solid ${s.borderColor}` : "none", opacity: s.opacity }}>
+      <rect x="0" y="0" width={w} height={h} fill={s.background} />
+      {genes.map((g,i) => <g key={g}><rect x={140} y={geneY(i)-6} width={geneW} height={12} rx={2} fill={s.node} /><text x={135} y={geneY(i)+3} fontSize={Math.max(9, s.labelSize - 2)} fill={s.labelColor} fontFamily={s.fontFamily} textAnchor="end">{g}</text></g>)}
+      {filteredRows.map((r,i) => { const c = palette[i%palette.length]; const label = r.term.length>34 ? r.term.slice(0,32)+"…" : r.term; return <g key={r.term}><rect x={w-140-pathW} y={pathY(i)-6} width={pathW} height={12} rx={2} fill={c} /><text x={w-140+6} y={pathY(i)+3} fontSize={Math.max(9, s.labelSize - 2)} fill={s.labelColor} fontFamily={s.fontFamily}>{label}</text></g>; })}
+      {filteredRows.map((r, pi) => { const color = palette[pi%palette.length]; return (r.overlap_genes || []).map((g) => { const gi = genes.indexOf(g); if (gi < 0) return null; const x1 = 140+geneW; const y1 = geneY(gi); const x2 = w-140-pathW; const y2 = pathY(pi); const cx = x1+(x2-x1)*0.5; const d = `M ${x1} ${y1} C ${cx} ${y1}, ${cx} ${y2}, ${x2} ${y2}`; return <path key={`${g}-${r.term}`} d={d} stroke={color} strokeWidth={linkW} strokeOpacity="0.35" fill="none" />; }); })}
     </svg>
   );
 }
 
 function ChordChart({ svgRef, rows }) {
+  const s = useAppliedStyle("kegg");
   const w = 780, h = 480, cx = w/2, cy = h/2 + 20, rIn = 150, rOut = 180;
-  const genes = useMemo(() => { const s = new Set(); for (const t of rows) for (const g of t.overlap_genes || []) s.add(g); return [...s]; }, [rows]);
+  const genes = useMemo(() => { const set = new Set(); for (const t of rows) for (const g of t.overlap_genes || []) set.add(g); return [...set]; }, [rows]);
   if (rows.length === 0 || genes.length === 0) return <div className="rounded-2xl border border-[#F1F1FA] bg-[#FAFAFF] p-6 text-center text-xs text-[#64748B]">Not enough overlap data.</div>;
   const total = rows.length + genes.length;
   const angleFor = (i) => (Math.PI*2*i)/total - Math.PI/2;
   const geneAngles = {}; genes.forEach((g,i) => geneAngles[g] = angleFor(rows.length + i));
   const point = (r,a) => [cx+r*Math.cos(a), cy+r*Math.sin(a)];
-  const palette = ["#5139ED","#8139ED","#395AED","#ED39A6","#39C1ED","#F5B301","#10B981","#EF4444","#0EA5E9","#7C3AED"];
+  const palette = s.palette;
   return (
-    <svg ref={svgRef} viewBox={`0 0 ${w} ${h}`} width="100%" height={h}>
-      <rect x="0" y="0" width={w} height={h} fill="#FFFFFF" />
-      {rows.map((t,i) => { const a = angleFor(i); const [x1,y1]=point(rIn,a); const [x2,y2]=point(rOut,a); const [lx,ly]=point(rOut+10,a); const c = palette[i%palette.length]; const label = t.term.length>22 ? t.term.slice(0,20)+"…" : t.term; const anchor = Math.cos(a)>0?"start":"end"; return <g key={t.term}><line x1={x1} y1={y1} x2={x2} y2={y2} stroke={c} strokeWidth="4" strokeLinecap="round" /><text x={lx} y={ly} fontSize="10" fill={c} fontWeight="700" textAnchor={anchor}>{label}</text></g>; })}
-      {genes.map((g,i) => { const a = geneAngles[g]; const [x1,y1]=point(rIn,a); const [x2,y2]=point(rOut,a); const [lx,ly]=point(rOut+10,a); const anchor = Math.cos(a)>0?"start":"end"; return <g key={g}><line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#64748B" strokeWidth="3" strokeLinecap="round" /><text x={lx} y={ly+3} fontSize="9" fill="#0B0B18" textAnchor={anchor}>{g}</text></g>; })}
-      {rows.map((t,i) => { const c = palette[i%palette.length]; const [tx,ty]=point(rIn, angleFor(i)); return (t.overlap_genes||[]).map((g) => { if (geneAngles[g]==null) return null; const [gx,gy]=point(rIn, geneAngles[g]); return <path key={`${t.term}-${g}`} d={`M ${tx} ${ty} Q ${cx} ${cy} ${gx} ${gy}`} stroke={c} strokeWidth="0.9" strokeOpacity="0.5" fill="none" />; }); })}
+    <svg ref={svgRef} viewBox={`0 0 ${w} ${h}`} width="100%" height={h}
+         style={{ fontFamily: s.fontFamily, borderRadius: s.borderRadius, border: s.showBorder ? `1px solid ${s.borderColor}` : "none", opacity: s.opacity }}>
+      <rect x="0" y="0" width={w} height={h} fill={s.background} />
+      {rows.map((t,i) => { const a = angleFor(i); const [x1,y1]=point(rIn,a); const [x2,y2]=point(rOut,a); const [lx,ly]=point(rOut+10,a); const c = palette[i%palette.length]; const label = t.term.length>22 ? t.term.slice(0,20)+"…" : t.term; const anchor = Math.cos(a)>0?"start":"end"; return <g key={t.term}><line x1={x1} y1={y1} x2={x2} y2={y2} stroke={c} strokeWidth={4 * s.edgeThickness} strokeLinecap="round" /><text x={lx} y={ly} fontSize={s.labelSize} fill={c} fontWeight="700" fontFamily={s.fontFamily} textAnchor={anchor}>{label}</text></g>; })}
+      {genes.map((g,i) => { const a = geneAngles[g]; const [x1,y1]=point(rIn,a); const [x2,y2]=point(rOut,a); const [lx,ly]=point(rOut+10,a); const anchor = Math.cos(a)>0?"start":"end"; return <g key={g}><line x1={x1} y1={y1} x2={x2} y2={y2} stroke={s.edge} strokeWidth={3 * s.edgeThickness} strokeLinecap="round" /><text x={lx} y={ly+3} fontSize={Math.max(9, s.labelSize - 3)} fill={s.labelColor} fontFamily={s.fontFamily} textAnchor={anchor}>{g}</text></g>; })}
+      {rows.map((t,i) => { const c = palette[i%palette.length]; const [tx,ty]=point(rIn, angleFor(i)); return (t.overlap_genes||[]).map((g) => { if (geneAngles[g]==null) return null; const [gx,gy]=point(rIn, geneAngles[g]); return <path key={`${t.term}-${g}`} d={`M ${tx} ${ty} Q ${cx} ${cy} ${gx} ${gy}`} stroke={c} strokeWidth={0.9 * s.edgeThickness} strokeOpacity="0.5" fill="none" />; }); })}
     </svg>
   );
 }
 
 function HeatmapChart({ svgRef, rows }) {
-  const genes = useMemo(() => { const s = new Set(); for (const r of rows) for (const g of r.overlap_genes || []) s.add(g); return [...s].sort(); }, [rows]);
+  const s = useAppliedStyle("heatmap");
+  const genes = useMemo(() => { const set = new Set(); for (const r of rows) for (const g of r.overlap_genes || []) set.add(g); return [...set].sort(); }, [rows]);
   if (rows.length === 0 || genes.length === 0) return <div className="rounded-2xl border border-[#F1F1FA] bg-[#FAFAFF] p-6 text-center text-xs text-[#64748B]">Not enough overlap data.</div>;
   const cellW = Math.max(18, Math.min(28, Math.floor(700 / genes.length)));
   const cellH = 22;
   const labelW = 300;
   const w = labelW + cellW * genes.length + 40;
   const h = 40 + cellH * rows.length + 80;
-  const palette = ["#F1F5F9", "#CFD9F7", "#8A97ED", "#5139ED"];
+  // Heatmap uses the palette as a gradient scale (low → high).
+  const palette = s.palette.length >= 4 ? s.palette.slice(0, 4) : ["#F1F5F9", "#CFD9F7", "#8A97ED", s.palette[0] || "#5139ED"];
   const scale = (v) => v ? palette[Math.min(3, Math.max(1, Math.floor(v * 4)))] : palette[0];
   return (
-    <svg ref={svgRef} viewBox={`0 0 ${w} ${h}`} width="100%" height={h}>
-      <rect x="0" y="0" width={w} height={h} fill="#FFFFFF" />
+    <svg ref={svgRef} viewBox={`0 0 ${w} ${h}`} width="100%" height={h}
+         style={{ fontFamily: s.fontFamily, borderRadius: s.borderRadius, border: s.showBorder ? `1px solid ${s.borderColor}` : "none", opacity: s.opacity }}>
+      <rect x="0" y="0" width={w} height={h} fill={s.background} />
       {genes.map((g,gi) => (
-        <text key={g} x={labelW + gi*cellW + cellW/2} y={30} fontSize="9" fill="#0B0B18" textAnchor="middle" transform={`rotate(-45, ${labelW + gi*cellW + cellW/2}, 30)`}>{g}</text>
+        <text key={g} x={labelW + gi*cellW + cellW/2} y={30} fontSize={Math.max(9, s.labelSize - 3)} fill={s.labelColor} fontFamily={s.fontFamily} textAnchor="middle" transform={`rotate(-45, ${labelW + gi*cellW + cellW/2}, 30)`}>{g}</text>
       ))}
       {rows.map((r,ri) => {
         const y = 40 + ri*cellH;
         const label = r.term.length > 40 ? r.term.slice(0,38)+"…" : r.term;
         return <g key={r.term}>
-          <text x={labelW-8} y={y+cellH/2+3} fontSize="10" fill="#0B0B18" textAnchor="end">{label}</text>
+          <text x={labelW-8} y={y+cellH/2+3} fontSize={s.labelSize} fill={s.labelColor} fontFamily={s.fontFamily} textAnchor="end">{label}</text>
           {genes.map((g,gi) => {
             const present = (r.overlap_genes || []).includes(g);
             return <rect key={g} x={labelW + gi*cellW} y={y} width={cellW-1} height={cellH-1} fill={scale(present ? 1 : 0)} />;

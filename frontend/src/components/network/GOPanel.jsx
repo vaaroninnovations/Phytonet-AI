@@ -7,6 +7,7 @@ import "@/lib/cytoscapeSetup";
 import { goEnrich } from "@/lib/api";
 import { HelpTip } from "@/components/network/HelpTip";
 import { TableToolbar } from "@/components/network/TableToolbar";
+import { useAppliedStyle } from "@/context/ChartStyleContext";
 import { FigureToolbar } from "@/components/network/FigureToolbar";
 import { CyToolbar } from "@/components/network/CyToolbar";
 import { DataTable } from "@/components/network/DataTable";
@@ -336,13 +337,18 @@ const colourFor = (v, vmax) => {
 };
 
 function BarChart({ svgRef, rows, colorBy }) {
+  const s = useAppliedStyle("go");
   const w = 780, rowH = 26, h = Math.max(160, rows.length * rowH + 60);
   const labelW = 300;
   const maxV = Math.max(1, ...rows.map((r) => getMetric(r, colorBy)));
   const barMax = w - labelW - 60;
   return (
-    <svg ref={svgRef} viewBox={`0 0 ${w} ${h}`} width="100%" height={h} className="mt-1">
-      <rect x="0" y="0" width={w} height={h} fill="#FFFFFF" />
+    <svg ref={svgRef} viewBox={`0 0 ${w} ${h}`} width="100%" height={h} className="mt-1"
+         style={{ fontFamily: s.fontFamily, borderRadius: s.borderRadius, border: s.showBorder ? `1px solid ${s.borderColor}` : "none", opacity: s.opacity }}>
+      <rect x="0" y="0" width={w} height={h} fill={s.background} />
+      {s.showGrid && [0.25, 0.5, 0.75, 1].map((f) => (
+        <line key={`g-${f}`} x1={labelW + f * barMax} x2={labelW + f * barMax} y1={20} y2={h - 40} stroke={s.grid} strokeWidth="0.5" />
+      ))}
       {rows.map((t, i) => {
         const y = 30 + i * rowH;
         const v = getMetric(t, colorBy);
@@ -350,80 +356,85 @@ function BarChart({ svgRef, rows, colorBy }) {
         const label = t.name.length > 40 ? t.name.slice(0, 38) + "…" : t.name;
         return (
           <g key={t.native}>
-            <text x={labelW - 8} y={y + rowH / 2 + 3} textAnchor="end" fontSize="11" fill="#0B0B18">{label}</text>
-            <rect x={labelW} y={y + 4} width={bw} height={rowH - 8} rx={3} fill={colourFor(v, maxV)} fillOpacity="0.85" />
-            <text x={labelW + bw + 6} y={y + rowH / 2 + 3} fontSize="10" fill="#64748B">{v.toFixed(2)}</text>
+            <text x={labelW - 8} y={y + rowH / 2 + 3} textAnchor="end" fontSize={s.labelSize} fill={s.labelColor} fontFamily={s.fontFamily}>{label}</text>
+            <rect x={labelW} y={y + 4} width={bw} height={rowH - 8} rx={3} fill={s.palette[i % s.palette.length]} fillOpacity="0.85" />
+            <text x={labelW + bw + 6} y={y + rowH / 2 + 3} fontSize={Math.max(9, s.labelSize - 2)} fill={s.labelColor} opacity="0.7" fontFamily={s.fontFamily}>{v.toFixed(2)}</text>
           </g>
         );
       })}
-      <text x={labelW + barMax / 2} y={h - 12} textAnchor="middle" fontSize="11" fill="#64748B">{colorBy === "p_value" ? "−log10(P)" : colorBy}</text>
+      <text x={labelW + barMax / 2} y={h - 12} textAnchor="middle" fontSize={Math.max(10, s.labelSize - 1)} fill={s.labelColor} opacity="0.7" fontFamily={s.fontFamily}>{colorBy === "p_value" ? "−log10(P)" : colorBy}</text>
     </svg>
   );
 }
 
 function BubbleChart({ svgRef, rows, colorBy, sizeBy }) {
+  const s = useAppliedStyle("go");
   const w = 780, rowH = 32, h = Math.max(180, rows.length * rowH + 60);
   const labelW = 300, plotL = labelW + 20, plotW = w - plotL - 60;
   const maxV = Math.max(1, ...rows.map((r) => getMetric(r, colorBy)));
   const maxS = Math.max(1, ...rows.map((r) => r[sizeBy] ?? 0));
   return (
-    <svg ref={svgRef} viewBox={`0 0 ${w} ${h}`} width="100%" height={h} className="mt-1">
-      <rect x="0" y="0" width={w} height={h} fill="#FFFFFF" />
-      {[0.25, 0.5, 0.75, 1].map((f, i) => (
-        <line key={i} x1={plotL + f * plotW} x2={plotL + f * plotW} y1={20} y2={h - 40} stroke="#F1F1FA" />
+    <svg ref={svgRef} viewBox={`0 0 ${w} ${h}`} width="100%" height={h} className="mt-1"
+         style={{ fontFamily: s.fontFamily, borderRadius: s.borderRadius, border: s.showBorder ? `1px solid ${s.borderColor}` : "none", opacity: s.opacity }}>
+      <rect x="0" y="0" width={w} height={h} fill={s.background} />
+      {s.showGrid && [0.25, 0.5, 0.75, 1].map((f, i) => (
+        <line key={i} x1={plotL + f * plotW} x2={plotL + f * plotW} y1={20} y2={h - 40} stroke={s.grid} strokeWidth="0.5" />
       ))}
       {rows.map((t, i) => {
         const y = 30 + i * rowH;
         const v = getMetric(t, colorBy);
         const x = plotL + (v / maxV) * plotW;
-        const s = 4 + ((t[sizeBy] || 0) / maxS) * 18;
+        const rad = (4 + ((t[sizeBy] || 0) / maxS) * 18) * s.nodeSize;
         const label = t.name.length > 40 ? t.name.slice(0, 38) + "…" : t.name;
-        const c = colourFor(v, maxV);
+        const c = s.palette[i % s.palette.length];
         return (
           <g key={t.native}>
-            <text x={labelW - 8} y={y + 4} textAnchor="end" fontSize="11" fill="#0B0B18">{label}</text>
-            <circle cx={x} cy={y} r={s} fill={c} fillOpacity="0.6" stroke={c} strokeWidth="1.5" />
-            <text x={x + s + 4} y={y + 3} fontSize="9" fill="#64748B">{t[sizeBy]?.toFixed?.(2) ?? t[sizeBy]}</text>
+            <text x={labelW - 8} y={y + 4} textAnchor="end" fontSize={s.labelSize} fill={s.labelColor} fontFamily={s.fontFamily}>{label}</text>
+            <circle cx={x} cy={y} r={rad} fill={c} fillOpacity="0.6" stroke={c} strokeWidth="1.5" />
+            <text x={x + rad + 4} y={y + 3} fontSize={Math.max(9, s.labelSize - 3)} fill={s.labelColor} opacity="0.7" fontFamily={s.fontFamily}>{t[sizeBy]?.toFixed?.(2) ?? t[sizeBy]}</text>
           </g>
         );
       })}
-      <text x={plotL + plotW / 2} y={h - 12} textAnchor="middle" fontSize="11" fill="#64748B">{colorBy} · size ∝ {sizeBy}</text>
+      <text x={plotL + plotW / 2} y={h - 12} textAnchor="middle" fontSize={Math.max(10, s.labelSize - 1)} fill={s.labelColor} opacity="0.7" fontFamily={s.fontFamily}>{colorBy} · size ∝ {sizeBy}</text>
     </svg>
   );
 }
 
 function DotChart({ svgRef, rows, colorBy, sizeBy }) {
+  const s = useAppliedStyle("go");
   const w = 780, rowH = 26, h = Math.max(160, rows.length * rowH + 60);
   const labelW = 300, plotL = labelW + 20, plotW = w - plotL - 60;
   const maxV = Math.max(1, ...rows.map((r) => getMetric(r, colorBy)));
   const maxS = Math.max(1, ...rows.map((r) => r[sizeBy] ?? 0));
   return (
-    <svg ref={svgRef} viewBox={`0 0 ${w} ${h}`} width="100%" height={h} className="mt-1">
-      <rect x="0" y="0" width={w} height={h} fill="#FFFFFF" />
+    <svg ref={svgRef} viewBox={`0 0 ${w} ${h}`} width="100%" height={h} className="mt-1"
+         style={{ fontFamily: s.fontFamily, borderRadius: s.borderRadius, border: s.showBorder ? `1px solid ${s.borderColor}` : "none", opacity: s.opacity }}>
+      <rect x="0" y="0" width={w} height={h} fill={s.background} />
       {rows.map((t, i) => {
         const y = 30 + i * rowH;
         const v = getMetric(t, colorBy);
         const x = plotL + (v / maxV) * plotW;
-        const s = 3 + ((t[sizeBy] || 0) / maxS) * 10;
+        const rad = (3 + ((t[sizeBy] || 0) / maxS) * 10) * s.nodeSize;
         const label = t.name.length > 40 ? t.name.slice(0, 38) + "…" : t.name;
         return (
           <g key={t.native}>
-            <text x={labelW - 8} y={y + 4} textAnchor="end" fontSize="11" fill="#0B0B18">{label}</text>
-            <circle cx={x} cy={y} r={s} fill={colourFor(v, maxV)} />
+            <text x={labelW - 8} y={y + 4} textAnchor="end" fontSize={s.labelSize} fill={s.labelColor} fontFamily={s.fontFamily}>{label}</text>
+            <circle cx={x} cy={y} r={rad} fill={s.palette[i % s.palette.length]} />
           </g>
         );
       })}
-      <text x={plotL + plotW / 2} y={h - 12} textAnchor="middle" fontSize="11" fill="#64748B">{colorBy} · size ∝ {sizeBy}</text>
+      <text x={plotL + plotW / 2} y={h - 12} textAnchor="middle" fontSize={Math.max(10, s.labelSize - 1)} fill={s.labelColor} opacity="0.7" fontFamily={s.fontFamily}>{colorBy} · size ∝ {sizeBy}</text>
     </svg>
   );
 }
 
 function ChordChart({ svgRef, rows, circular }) {
+  const s = useAppliedStyle("go");
   const w = 780, h = 480;
   const cx = w / 2, cy = h / 2 + 20;
   const rIn = 150, rOut = 180;
   const genes = useMemo(() => {
-    const s = new Set(); for (const t of rows) for (const g of t.overlap_genes || []) s.add(g); return [...s];
+    const set = new Set(); for (const t of rows) for (const g of t.overlap_genes || []) set.add(g); return [...set];
   }, [rows]);
   if (rows.length === 0 || genes.length === 0) {
     return <div className="rounded-2xl border border-[#F1F1FA] bg-[#FAFAFF] p-6 text-center text-xs text-[#64748B]">Not enough overlap data.</div>;
@@ -432,20 +443,22 @@ function ChordChart({ svgRef, rows, circular }) {
   const angleFor = (i) => (Math.PI * 2 * i) / total - Math.PI / 2;
   const geneAngles = {}; genes.forEach((g, i) => (geneAngles[g] = angleFor(rows.length + i)));
   const point = (r, a) => [cx + r * Math.cos(a), cy + r * Math.sin(a)];
-  const palette = ["#5139ED","#8139ED","#395AED","#ED39A6","#39C1ED","#F5B301","#10B981","#EF4444","#0EA5E9","#7C3AED"];
+  const palette = s.palette;
+  const strokeW = 4 * s.edgeThickness;
   return (
-    <svg ref={svgRef} viewBox={`0 0 ${w} ${h}`} width="100%" height={h} className="mt-1">
-      <rect x="0" y="0" width={w} height={h} fill="#FFFFFF" />
+    <svg ref={svgRef} viewBox={`0 0 ${w} ${h}`} width="100%" height={h} className="mt-1"
+         style={{ fontFamily: s.fontFamily, borderRadius: s.borderRadius, border: s.showBorder ? `1px solid ${s.borderColor}` : "none", opacity: s.opacity }}>
+      <rect x="0" y="0" width={w} height={h} fill={s.background} />
       {rows.map((t, i) => {
         const a = angleFor(i); const [x1,y1]=point(rIn,a); const [x2,y2]=point(rOut,a); const [lx,ly]=point(rOut+10,a);
         const c = palette[i % palette.length]; const label = t.name.length > 22 ? t.name.slice(0,20)+"…" : t.name;
         const anchor = Math.cos(a) > 0 ? "start" : "end";
-        return <g key={t.native}><line x1={x1} y1={y1} x2={x2} y2={y2} stroke={c} strokeWidth="4" strokeLinecap="round" /><text x={lx} y={ly} fontSize="10" fill={c} fontWeight="700" textAnchor={anchor}>{label}</text></g>;
+        return <g key={t.native}><line x1={x1} y1={y1} x2={x2} y2={y2} stroke={c} strokeWidth={strokeW} strokeLinecap="round" /><text x={lx} y={ly} fontSize={s.labelSize} fill={c} fontWeight="700" fontFamily={s.fontFamily} textAnchor={anchor}>{label}</text></g>;
       })}
       {genes.map((g,i) => {
         const a = geneAngles[g]; const [x1,y1]=point(rIn,a); const [x2,y2]=point(rOut,a); const [lx,ly]=point(rOut+10,a);
         const anchor = Math.cos(a) > 0 ? "start" : "end";
-        return <g key={g}><line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#64748B" strokeWidth="3" strokeLinecap="round" /><text x={lx} y={ly+3} fontSize="9" fill="#0B0B18" textAnchor={anchor}>{g}</text></g>;
+        return <g key={g}><line x1={x1} y1={y1} x2={x2} y2={y2} stroke={s.edge} strokeWidth={strokeW * 0.75} strokeLinecap="round" /><text x={lx} y={ly+3} fontSize={Math.max(9, s.labelSize - 3)} fill={s.labelColor} fontFamily={s.fontFamily} textAnchor={anchor}>{g}</text></g>;
       })}
       {rows.map((t, i) => {
         const c = palette[i % palette.length]; const [tx,ty]=point(rIn, angleFor(i));
@@ -453,7 +466,7 @@ function ChordChart({ svgRef, rows, circular }) {
           if (geneAngles[g] == null) return null;
           const [gx,gy]=point(rIn, geneAngles[g]);
           const d = circular ? `M ${tx} ${ty} A ${rIn} ${rIn} 0 0 1 ${gx} ${gy}` : `M ${tx} ${ty} Q ${cx} ${cy} ${gx} ${gy}`;
-          return <path key={`${t.native}-${g}`} d={d} stroke={c} strokeWidth="0.9" strokeOpacity="0.5" fill="none" />;
+          return <path key={`${t.native}-${g}`} d={d} stroke={c} strokeWidth={0.9 * s.edgeThickness} strokeOpacity="0.5" fill="none" />;
         });
       })}
     </svg>
