@@ -10,7 +10,7 @@ import axios from "axios";
 // (downloads, AI Assistant) should just work without a sign-in wall so users
 // can evaluate the product. Flip this to `true` right before you cut a
 // production build to re-enable the paywall / login gate.
-export const AUTH_GATE_ENABLED = false;
+export const AUTH_GATE_ENABLED = true;
 // ────────────────────────────────────────────────────────────────────────────
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
