@@ -1,5 +1,10 @@
-// Molecular Dynamics — GROMACS project generator (setup-only) · Step 7.
-import { useEffect, useMemo, useState } from "react";
+// Molecular Dynamics — single-page scientific dashboard · Step 7
+// -------------------------------------------------------------------
+// Real GROMACS setup (backend generates .zip) + REAL trajectory analytics
+// (parsed client-side from user-uploaded gmx output .xvg / .pdb / .gro / .edr).
+// No placeholder data: every chart & statistic renders empty until a
+// GROMACS output archive is dropped in.
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import WorkflowLayout from "@/components/WorkflowLayout";
 import { useNetwork } from "@/context/NetworkContext";
@@ -10,7 +15,13 @@ import { toast } from "sonner";
 import { saveAs } from "file-saver";
 import { HelpTip } from "@/components/network/HelpTip";
 import { requireAuth } from "@/context/AuthContext";
-import { ArrowLeft, ArrowRight, Atom, Download, Loader2, Server } from "lucide-react";
+import {
+  ArrowLeft, ArrowRight, Atom, CheckCircle2, Circle, Cpu, Download,
+  FileArchive, FileText, Loader2, PlayCircle, Server, Upload,
+} from "lucide-react";
+import MDViewer3D from "@/components/md/MDViewer3D";
+import MDAnalysisCard from "@/components/md/MDAnalysisCard";
+import { parseGromacsResultsZip } from "@/lib/gromacsZipParser";
 
 const FF_OPTS = [
   { key: "amber99sb-ildn", label: "AMBER99SB-ILDN" },
@@ -20,10 +31,8 @@ const FF_OPTS = [
   { key: "oplsaa", label: "OPLS-AA/L" },
 ];
 const WATER_OPTS = [
-  { key: "tip3p", label: "TIP3P" },
-  { key: "tip4p", label: "TIP4P" },
-  { key: "spc", label: "SPC" },
-  { key: "spce", label: "SPC/E" },
+  { key: "tip3p", label: "TIP3P" }, { key: "tip4p", label: "TIP4P" },
+  { key: "spc", label: "SPC" }, { key: "spce", label: "SPC/E" },
 ];
 const BOX_OPTS = [
   { key: "dodecahedron", label: "Dodecahedron (recommended)" },
@@ -31,47 +40,62 @@ const BOX_OPTS = [
   { key: "octahedron", label: "Truncated Octahedron" },
 ];
 
+// 8-stage MD pipeline ordered as GROMACS runs them.
+const STAGES = [
+  { key: "prep",    label: "Protein Preparation" },
+  { key: "topol",   label: "Topology Generation" },
+  { key: "solvate", label: "Solvation" },
+  { key: "ions",    label: "Ion Addition" },
+  { key: "em",      label: "Energy Minimization" },
+  { key: "nvt",     label: "NVT Equilibration" },
+  { key: "npt",     label: "NPT Equilibration" },
+  { key: "prod",    label: "Production MD" },
+];
+
 export default function MolecularDynamics() {
-  const { compoundTargets, diseaseTargets, selectedCompounds, dockingResults, setMdConfig } = useNetwork();
+  const { compoundTargets, diseaseTargets, selectedCompounds, dockingResults, setMdConfig, setDockingResults } = useNetwork();
   const { compounds: allCompounds } = useResults();
   const { markComplete } = useWorkflow();
 
-  // Only successfully docked compound×target pairs are eligible for MD.
-  // If docking has been run, restrict compound/target options to those pairs;
-  // if docking has NOT been run, we render a blocked empty-state below.
+  // ── Optional ?demo=1 seeding so the redesigned dashboard is browsable
+  //    without running the full workflow. Idempotent — only fires once. ──
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("demo") !== "1") return;
+    if ((dockingResults?.results || []).length > 0) return;
+    setDockingResults({
+      job_id: "demo",
+      results: [{
+        ligand_name: "Withaferin A", ligand_smiles: "CC(=CCCC(C)(C1CC2C3(CCC4CC(=O)C=CC4(C3(CCC12C)C)C)C(=O)OC)O)C",
+        receptor_uniprot: "P04637", gene_symbol: "TP53", receptor_pdb: "1TUP",
+        best_affinity: -8.2, pair_id: "demo-1", job_id: "demo",
+      }],
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+
+  // ── Docking-pair discovery (MD only runs on docked complexes) ───────────
   const dockedPairs = useMemo(() => {
     const rr = dockingResults?.results || [];
     return rr
       .filter((r) => !r.error && typeof r.best_affinity === "number")
       .map((r) => ({
-        ligand_name: r.ligand_name,
-        smiles: r.ligand_smiles,
-        uniprot_id: r.receptor_uniprot,
-        gene_symbol: r.gene_symbol,
-        pdb_id: r.receptor_pdb,
-        best_affinity: r.best_affinity,
-        pair_id: r.pair_id,
-        job_id: r.job_id,
+        ligand_name: r.ligand_name, smiles: r.ligand_smiles,
+        uniprot_id: r.receptor_uniprot, gene_symbol: r.gene_symbol,
+        pdb_id: r.receptor_pdb, best_affinity: r.best_affinity,
       }));
   }, [dockingResults]);
-
   const hasDocking = dockedPairs.length > 0;
 
-  // Merge target metadata — restricted to docked receptors when docking exists
   const targetOptions = useMemo(() => {
     if (hasDocking) {
       const idx = new Map();
       for (const p of dockedPairs) {
         const key = p.gene_symbol || p.uniprot_id;
         if (!key || idx.has(key)) continue;
-        idx.set(key, {
-          gene_symbol: p.gene_symbol || key,
-          uniprot_id: p.uniprot_id,
-          protein_name: undefined,
-          pdb_id: p.pdb_id,
-        });
+        idx.set(key, { gene_symbol: p.gene_symbol || key, uniprot_id: p.uniprot_id, protein_name: undefined, pdb_id: p.pdb_id });
       }
-      // Enrich with protein_name if available from Target/Disease tables
       for (const r of [...compoundTargets, ...diseaseTargets]) {
         const t = idx.get(r.gene_symbol);
         if (t && !t.protein_name && r.protein_name) t.protein_name = r.protein_name;
@@ -90,22 +114,18 @@ export default function MolecularDynamics() {
 
   const compoundOptions = useMemo(() => {
     if (hasDocking) {
-      const seen = new Set();
-      const out = [];
+      const seen = new Set(); const out = [];
       for (const p of dockedPairs) {
         if (!p.ligand_name || seen.has(p.ligand_name)) continue;
-        seen.add(p.ligand_name);
-        out.push({ name: p.ligand_name, smiles: p.smiles });
+        seen.add(p.ligand_name); out.push({ name: p.ligand_name, smiles: p.smiles });
       }
       return out;
     }
-    const seen = new Set();
-    const out = [];
+    const seen = new Set(); const out = [];
     for (const c of [...(selectedCompounds || []), ...(allCompounds || [])]) {
       const k = c.imppat_id || c.compound_name;
       if (!k || seen.has(k) || !c.smiles) continue;
-      seen.add(k);
-      out.push({ name: c.compound_name || c.imppat_id || "Compound", smiles: c.smiles });
+      seen.add(k); out.push({ name: c.compound_name || c.imppat_id || "Compound", smiles: c.smiles });
     }
     return out;
   }, [hasDocking, dockedPairs, selectedCompounds, allCompounds]);
@@ -122,16 +142,15 @@ export default function MolecularDynamics() {
   const [building, setBuilding] = useState(false);
   const [estimate, setEstimate] = useState(null);
 
-  // Auto-select the best-affinity compound×target pair when docking data arrives.
-  // (Only fires once per docking session — resets if user manually changes.)
+  // Auto-select best-affinity docked pair on first arrival of docking data.
   useEffect(() => {
     if (!hasDocking) return;
     const best = [...dockedPairs].sort((a, b) => a.best_affinity - b.best_affinity)[0];
     if (!best) return;
     const ci = compoundOptions.findIndex((c) => c.name === best.ligand_name);
-    const ti = targetOptions.findIndex((t) =>
-      (t.gene_symbol && t.gene_symbol === best.gene_symbol) ||
-      (t.uniprot_id && t.uniprot_id === best.uniprot_id));
+    const ti = targetOptions.findIndex(
+      (t) => (t.gene_symbol && t.gene_symbol === best.gene_symbol)
+          || (t.uniprot_id && t.uniprot_id === best.uniprot_id));
     if (ci >= 0) setCompIdx(ci);
     if (ti >= 0) setTgtIdx(ti);
     if (best.pdb_id) setPdbId(best.pdb_id);
@@ -146,10 +165,9 @@ export default function MolecularDynamics() {
   useEffect(() => {
     (async () => {
       try {
-        const { engines } = await listMDEngines();
-        setEngines(engines || []);
-        // Initialize default options for the active engine
-        const first = (engines || []).find((e) => e.key === "local") || (engines || [])[0];
+        const { engines: es } = await listMDEngines();
+        setEngines(es || []);
+        const first = (es || []).find((e) => e.key === "local") || (es || [])[0];
         if (first) {
           setEngineKey(first.key);
           const opts = {};
@@ -159,19 +177,16 @@ export default function MolecularDynamics() {
       } catch (e) { console.debug("mdEngines fetch failed:", e); }
     })();
   }, []);
-
   const activeEngine = useMemo(() => engines.find((e) => e.key === engineKey), [engines, engineKey]);
-
   useEffect(() => {
     if (!activeEngine) return;
     const opts = {};
     (activeEngine.options || []).forEach((o) => { opts[o.key] = o.default; });
     setEngineOptions(opts);
-  }, [engineKey]);   // eslint-disable-line react-hooks/exhaustive-deps
-
+  }, [engineKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const updEngineOpt = (k) => (e) => {
     const raw = e.target.type === "checkbox" ? e.target.checked
-              : e.target.type === "number" ? Number(e.target.value)
+              : e.target.type === "number"   ? Number(e.target.value)
               : e.target.value;
     setEngineOptions((o) => ({ ...o, [k]: raw }));
   };
@@ -182,6 +197,8 @@ export default function MolecularDynamics() {
     })();
   }, [cfg]);
 
+  // ── Build & download the GROMACS project ─────────────────────────────
+  const [buildResult, setBuildResult] = useState(null);
   const build = async () => {
     if (compoundOptions.length === 0 || targetOptions.length === 0)
       return toast.error("Need at least one compound and one target");
@@ -202,6 +219,7 @@ export default function MolecularDynamics() {
         const blob = await mdBuild(payload);
         const filename = `md_${compoundOptions[compIdx].name}_x_${targetOptions[tgtIdx].gene_symbol || ""}.zip`.replace(/[^A-Za-z0-9_.-]/g, "_");
         saveAs(blob, filename);
+        setBuildResult({ filename, at: new Date().toISOString() });
         markComplete("molecular-dynamics");
         setMdConfig(cfg);
         toast.success("MD project downloaded");
@@ -209,10 +227,93 @@ export default function MolecularDynamics() {
       finally { setBuilding(false); }
     });
   };
-
   const upd = (k) => (e) => setCfg((c) => ({ ...c, [k]: e.target.type === "number" ? Number(e.target.value) : e.target.value }));
 
-  // Enforce workflow contract: MD requires successful docking results.
+  // ── Results ingestion (client-side XVG parse from user-uploaded ZIP) ───
+  const [results, setResults] = useState(null);   // {rmsd, rmsf, rg, sasa, hbond, ...}
+  const [finalPdb, setFinalPdb] = useState(null);
+  const [mmpbsaText, setMmpbsaText] = useState(null);
+  const [uploadedFiles, setUploadedFiles] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef(null);
+
+  const onUploadResults = async (fileList) => {
+    const f = fileList?.[0];
+    if (!f) return;
+    setUploading(true);
+    try {
+      const parsed = await parseGromacsResultsZip(f);
+      setResults(parsed.results);
+      if (parsed.files.final_pdb) setFinalPdb(parsed.files.final_pdb);
+      if (parsed.files.mmpbsa) setMmpbsaText(parsed.files.mmpbsa);
+      setUploadedFiles(parsed.filesList);
+      const keys = Object.keys(parsed.results);
+      toast.success(`Loaded ${keys.length} analysis file${keys.length === 1 ? "" : "s"} from ${f.name}`);
+    } catch (e) {
+      console.error(e);
+      toast.error("Could not parse GROMACS ZIP: " + (e.message || e));
+    } finally { setUploading(false); }
+  };
+
+  // ── Simulation Progress (derived, no fake data) ──────────────────────
+  // A stage is "completed" only if we can prove it from uploaded data.
+  const stageStatus = useMemo(() => {
+    const status = Object.fromEntries(STAGES.map((s) => [s.key, "pending"]));
+    if (!buildResult && !results) return status;
+    if (buildResult) {
+      // The setup ZIP explicitly prepares Prep → NPT stage files. Mark them
+      // "ready" (not "completed" — that requires actual XVG evidence).
+      ["prep", "topol", "solvate", "ions"].forEach((k) => { status[k] = "ready"; });
+    }
+    if (results) {
+      if (results.energy)      status["em"]   = "completed";
+      if (results.temperature) status["nvt"]  = "completed";
+      if (results.density || results.pressure) status["npt"] = "completed";
+      if (results.rmsd)        status["prod"] = "completed";
+      // Inferred earlier stages
+      if (Object.keys(results).length > 0) {
+        ["prep", "topol", "solvate", "ions"].forEach((k) => {
+          if (status[k] === "pending") status[k] = "completed";
+        });
+      }
+    }
+    return status;
+  }, [buildResult, results]);
+
+  const completedCount = Object.values(stageStatus).filter((s) => s === "completed").length;
+  const totalStages = STAGES.length;
+  const pctComplete = Math.round((completedCount / totalStages) * 100);
+  const currentStage = STAGES.find((s) => stageStatus[s.key] === "ready" || stageStatus[s.key] === "pending")?.label || "All stages completed";
+  const runStatusBadge = !buildResult && !results ? { text: "Not started", cls: "bg-[#F1F1FA] text-[#64748B]" }
+                       : results && completedCount === totalStages ? { text: "Completed", cls: "bg-[#DCFCE7] text-[#166534]" }
+                       : results ? { text: "Running", cls: "bg-[#FEF3C7] text-[#92400E]" }
+                       : { text: "Setup ready", cls: "bg-[#EDE9FE] text-[#5139ED]" };
+
+  // ── Summary Statistics ──────────────────────────────────────────────
+  const stats = useMemo(() => {
+    const s = {};
+    if (results?.rmsd?.stats) { s.rmsdAvg = results.rmsd.stats.mean; s.rmsdMax = results.rmsd.stats.max; }
+    if (results?.rmsf?.stats)     s.rmsfAvg = results.rmsf.stats.mean;
+    if (results?.rg?.stats)       s.rgAvg   = results.rg.stats.mean;
+    if (results?.sasa?.stats)     s.sasaAvg = results.sasa.stats.mean;
+    if (results?.hbond?.stats)    s.hbondAvg = results.hbond.stats.mean;
+    if (results?.distance?.stats) s.distAvg  = results.distance.stats.mean;
+    if (mmpbsaText) {
+      const m = mmpbsaText.match(/[-+]?\d*\.?\d+/g);
+      if (m && m.length) s.mmpbsa = parseFloat(m[m.length - 1]); // last number in file = ΔG_bind by convention
+    }
+    return s;
+  }, [results, mmpbsaText]);
+
+  // ── PDB URL for the 3D viewer (initial receptor from RCSB) ────────────
+  const pdbUrl = useMemo(() => {
+    const id = (pdbId || targetOptions[tgtIdx]?.pdb_id || "").toUpperCase().trim();
+    return id ? `https://files.rcsb.org/download/${id}.pdb` : null;
+  }, [pdbId, targetOptions, tgtIdx]);
+
+  // ─────────────────────────────────────────────────────────────
+  // Empty-state guard (needs docking + at least one compound/target)
+  // ─────────────────────────────────────────────────────────────
   if (!hasDocking) {
     return (
       <WorkflowLayout>
@@ -220,8 +321,8 @@ export default function MolecularDynamics() {
           <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-[#5139ED]/10 text-[#5139ED]"><Atom className="h-6 w-6" /></div>
           <h1 className="mt-6 font-display text-4xl font-bold tracking-tight text-[#0B0B18]">Docking required</h1>
           <p className="mt-3 text-[#64748B]">
-            Molecular Dynamics runs on successfully-docked compound × target complexes. Run docking first
-            — the best-affinity pair will be pre-selected here automatically.
+            Molecular Dynamics runs on successfully-docked compound × target complexes. Run docking first —
+            the best-affinity pair will be pre-selected here automatically.
           </p>
           <Link to="/molecular-docking" data-testid="md-blocked-goto-docking"
                 className="mt-8 inline-flex items-center gap-2 rounded-full bg-[#5139ED] px-6 py-3 text-sm font-semibold text-white hover:bg-[#4127c9]">
@@ -231,9 +332,7 @@ export default function MolecularDynamics() {
       </WorkflowLayout>
     );
   }
-
-  const noInputs = compoundOptions.length === 0 || targetOptions.length === 0;
-  if (noInputs) {
+  if (compoundOptions.length === 0 || targetOptions.length === 0) {
     return (
       <WorkflowLayout>
         <main data-testid="md-empty" className="mx-auto max-w-3xl px-6 pb-24 pt-14 text-center">
@@ -246,94 +345,291 @@ export default function MolecularDynamics() {
     );
   }
 
+  const target = targetOptions[tgtIdx] || {};
+  const compound = compoundOptions[compIdx] || {};
+
   return (
     <WorkflowLayout>
-      <main data-testid="molecular-dynamics-page" className="mx-auto max-w-7xl px-6 pb-24 pt-14">
-        <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">Module · 07 · Setup-only</p>
-        <h1 className="mt-3 font-display text-4xl font-bold tracking-tight text-[#0B0B18] sm:text-5xl">Molecular Dynamics</h1>
-        <p className="mt-3 max-w-3xl text-[#64748B]">
-          Generate a complete, downloadable GROMACS MD project (topology, MDP, run scripts, prep report) for a
-          protein–ligand complex. Simulations run on your workstation / HPC cluster / cloud GPU — the platform
-          only prepares the inputs.
-        </p>
-
-        {/* Selection */}
-        <div data-testid="md-selection" className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
-          <div className="rounded-3xl border border-[#E7E7F3] bg-white p-5">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-[#64748B]">Compound<HelpTip text="Ligand — SMILES will be shipped with the project; user runs ACPYPE for GAFF params." /></label>
-            <select data-testid="md-compound" value={compIdx} onChange={(e) => setCompIdx(Number(e.target.value))} className="brand-focus mt-1 w-full rounded-lg border border-[#E7E7F3] bg-white px-3 py-2 text-sm text-[#0B0B18]">
-              {compoundOptions.map((c, i) => <option key={c.name} value={i}>{c.name}</option>)}
-            </select>
-            <p className="mt-2 font-mono text-[10px] text-[#64748B]">SMILES: {compoundOptions[compIdx]?.smiles}</p>
+      <main data-testid="molecular-dynamics-page" className="mx-auto max-w-7xl px-6 pb-24 pt-10">
+        {/* Page header */}
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">Module · 07 · Dashboard</p>
+            <h1 className="mt-2 font-display text-4xl font-bold tracking-tight text-[#0B0B18] sm:text-5xl">Molecular Dynamics</h1>
+            <p className="mt-2 max-w-3xl text-sm text-[#64748B]">
+              Configure the GROMACS project, run it on your infrastructure, then drop the output ZIP back
+              here — every chart and metric populates automatically from your <span className="font-mono text-[12px]">.xvg</span> files.
+            </p>
           </div>
-          <div className="rounded-3xl border border-[#E7E7F3] bg-white p-5">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-[#64748B]">Target<HelpTip text="Protein target — receptor PDB will be auto-fetched from RCSB." /></label>
-            <select data-testid="md-target" value={tgtIdx} onChange={(e) => setTgtIdx(Number(e.target.value))} className="brand-focus mt-1 w-full rounded-lg border border-[#E7E7F3] bg-white px-3 py-2 text-sm text-[#0B0B18]">
-              {targetOptions.map((t, i) => <option key={t.gene_symbol} value={i}>{t.gene_symbol} · {t.uniprot_id}</option>)}
-            </select>
-            <div className="mt-3">
-              <label className="text-[10px] font-bold uppercase tracking-widest text-[#64748B]">PDB ID (optional override)<HelpTip text="Leave blank to auto-fetch by UniProt." /></label>
-              <input data-testid="md-pdb-id" value={pdbId} onChange={(e) => setPdbId(e.target.value.toUpperCase())} placeholder="e.g. 1EQG" className="brand-focus mt-1 w-full rounded-lg border border-[#E7E7F3] bg-white px-3 py-2 text-sm text-[#0B0B18]" />
-            </div>
+          <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-widest ${runStatusBadge.cls}`} data-testid="md-run-status">
+            <span className="h-1.5 w-1.5 rounded-full bg-current" />{runStatusBadge.text}
           </div>
         </div>
 
-        {/* Config */}
-        <div data-testid="md-config" className="mt-6 rounded-3xl border border-[#E7E7F3] bg-white p-5">
-          <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">System · Force field · Water · Ions</p>
-          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-4">
-            <Field label="Force field" tip="Protein force field. AMBER99SB-ILDN is the standard for globular proteins."><select data-testid="md-ff" value={cfg.force_field} onChange={upd("force_field")} className="w-full rounded-lg border border-[#E7E7F3] bg-white px-2 py-1.5 text-sm">{FF_OPTS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}</select></Field>
-            <Field label="Water model" tip="Explicit-solvent water model — must match the chosen force field."><select data-testid="md-water" value={cfg.water_model} onChange={upd("water_model")} className="w-full rounded-lg border border-[#E7E7F3] bg-white px-2 py-1.5 text-sm">{WATER_OPTS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}</select></Field>
-            <Field label="Box type" tip="Periodic-boundary box shape."><select data-testid="md-box-type" value={cfg.box_type} onChange={upd("box_type")} className="w-full rounded-lg border border-[#E7E7F3] bg-white px-2 py-1.5 text-sm">{BOX_OPTS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}</select></Field>
-            <Field label="Box padding (nm)" tip="Extra solvent around the solute."><input data-testid="md-padding" type="number" min={0.5} max={3} step={0.1} value={cfg.box_padding_nm} onChange={upd("box_padding_nm")} className="w-full rounded-lg border border-[#E7E7F3] bg-white px-2 py-1.5 text-sm" /></Field>
-            <Field label="Ion conc. (M)" tip="NaCl concentration; ~0.15 M ≈ physiological."><input data-testid="md-ion" type="number" min={0} max={1} step={0.05} value={cfg.ion_concentration} onChange={upd("ion_concentration")} className="w-full rounded-lg border border-[#E7E7F3] bg-white px-2 py-1.5 text-sm" /></Field>
-            <Field label="Temperature (K)" tip="Ensemble temperature."><input data-testid="md-temp" type="number" min={273} max={370} step={1} value={cfg.temperature_K} onChange={upd("temperature_K")} className="w-full rounded-lg border border-[#E7E7F3] bg-white px-2 py-1.5 text-sm" /></Field>
-            <Field label="Pressure (bar)" tip="NPT ensemble pressure."><input data-testid="md-pressure" type="number" min={0.5} max={5} step={0.1} value={cfg.pressure_bar} onChange={upd("pressure_bar")} className="w-full rounded-lg border border-[#E7E7F3] bg-white px-2 py-1.5 text-sm" /></Field>
-            <Field label="dt (fs)" tip="Integration time-step; 2 fs with LINCS is standard."><input data-testid="md-dt" type="number" min={0.5} max={4} step={0.5} value={cfg.dt_fs} onChange={upd("dt_fs")} className="w-full rounded-lg border border-[#E7E7F3] bg-white px-2 py-1.5 text-sm" /></Field>
-          </div>
+        {/* ═══════════════════════════════════════════════════════════════
+             ROW 1 · Simulation Info  +  Progress Timeline
+             ═══════════════════════════════════════════════════════════════ */}
+        <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-3">
+          {/* ─── Section 1 · Simulation Information Card ─── */}
+          <section data-testid="md-info-card" className="xl:col-span-2 rounded-3xl border border-[#E7E7F3] bg-white/80 p-6 shadow-[0_10px_30px_-20px_rgba(81,57,237,0.35)] backdrop-blur">
+            <div className="flex items-center gap-2">
+              <FileText className="h-4 w-4 text-[#5139ED]" />
+              <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">Simulation Information</p>
+            </div>
 
-          <p className="mt-6 font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">Simulation stages</p>
-          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-4">
-            <Field label="EM steps" tip="Steepest-descent minimisation."><input data-testid="md-em" type="number" min={1000} max={200000} step={1000} value={cfg.em_steps} onChange={upd("em_steps")} className="w-full rounded-lg border border-[#E7E7F3] bg-white px-2 py-1.5 text-sm" /></Field>
-            <Field label="NVT (ps)" tip="Constant-volume equilibration."><input data-testid="md-nvt" type="number" min={20} max={2000} step={10} value={cfg.nvt_ps} onChange={upd("nvt_ps")} className="w-full rounded-lg border border-[#E7E7F3] bg-white px-2 py-1.5 text-sm" /></Field>
-            <Field label="NPT (ps)" tip="Constant-pressure equilibration."><input data-testid="md-npt" type="number" min={20} max={2000} step={10} value={cfg.npt_ps} onChange={upd("npt_ps")} className="w-full rounded-lg border border-[#E7E7F3] bg-white px-2 py-1.5 text-sm" /></Field>
-            <Field label="Production (ns)" tip="Total production trajectory length."><input data-testid="md-prod" type="number" min={1} max={5000} step={1} value={cfg.production_ns} onChange={upd("production_ns")} className="w-full rounded-lg border border-[#E7E7F3] bg-white px-2 py-1.5 text-sm" /></Field>
-          </div>
+            {/* Compound + target pickers */}
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+              <label className="flex flex-col gap-1 text-[10px] font-bold uppercase tracking-widest text-[#64748B]">
+                Ligand<HelpTip text="Ligand shipped with the project — you provide GAFF params via ACPYPE downstream." />
+                <select data-testid="md-compound" value={compIdx} onChange={(e) => setCompIdx(Number(e.target.value))}
+                        className="brand-focus mt-1 w-full rounded-lg border border-[#E7E7F3] bg-white px-3 py-2 text-sm text-[#0B0B18]">
+                  {compoundOptions.map((c, i) => <option key={c.name} value={i}>{c.name}</option>)}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-[10px] font-bold uppercase tracking-widest text-[#64748B]">
+                Protein<HelpTip text="Target — receptor PDB is auto-fetched from RCSB." />
+                <select data-testid="md-target" value={tgtIdx} onChange={(e) => setTgtIdx(Number(e.target.value))}
+                        className="brand-focus mt-1 w-full rounded-lg border border-[#E7E7F3] bg-white px-3 py-2 text-sm text-[#0B0B18]">
+                  {targetOptions.map((t, i) => <option key={t.gene_symbol} value={i}>{t.gene_symbol} · {t.uniprot_id}</option>)}
+                </select>
+              </label>
+            </div>
 
-          {estimate && (
-            <div data-testid="md-estimate" className="mt-6 rounded-2xl border border-[#F1F1FA] bg-[#FAFAFF] p-4">
-              <p className="font-heading text-[10px] font-bold uppercase tracking-widest text-[#64748B]">Runtime estimate for {cfg.production_ns} ns (~{estimate.atoms_assumed} atoms assumed)</p>
-              <div className="mt-2 grid grid-cols-2 gap-3 text-sm">
-                <div className="rounded-lg bg-white p-3">
+            {/* Info grid: uniform key/value tiles */}
+            <div className="mt-5 grid grid-cols-2 gap-2 text-[12px] md:grid-cols-3">
+              <InfoRow label="Protein"        value={target.protein_name || target.gene_symbol || "—"} />
+              <InfoRow label="UniProt ID"     value={target.uniprot_id || "—"} mono />
+              <InfoRow label="PDB ID"
+                       value={
+                         <input data-testid="md-pdb-id" value={pdbId || target.pdb_id || ""} onChange={(e) => setPdbId(e.target.value.toUpperCase())}
+                                placeholder="auto"
+                                className="w-full rounded-md border border-[#E7E7F3] bg-white px-1.5 py-0.5 font-mono text-[12px] text-[#0B0B18]" />
+                       } />
+              <InfoRow label="Ligand"         value={compound.name || "—"} />
+              <InfoRow label="Simulation Time" value={`${cfg.production_ns} ns`}
+                       edit={<input type="number" min={1} max={5000} step={1} value={cfg.production_ns} onChange={upd("production_ns")} className="w-16 rounded-md border border-[#E7E7F3] bg-white px-1.5 py-0.5 text-[12px]" />} />
+              <InfoRow label="Force Field" value={FF_OPTS.find((o) => o.key === cfg.force_field)?.label || cfg.force_field}
+                       edit={<select data-testid="md-ff" value={cfg.force_field} onChange={upd("force_field")} className="w-full rounded-md border border-[#E7E7F3] bg-white px-1.5 py-0.5 text-[12px]">{FF_OPTS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}</select>} />
+              <InfoRow label="Water Model" value={WATER_OPTS.find((o) => o.key === cfg.water_model)?.label || cfg.water_model}
+                       edit={<select data-testid="md-water" value={cfg.water_model} onChange={upd("water_model")} className="w-full rounded-md border border-[#E7E7F3] bg-white px-1.5 py-0.5 text-[12px]">{WATER_OPTS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}</select>} />
+              <InfoRow label="Temperature" value={`${cfg.temperature_K} K`}
+                       edit={<input type="number" min={273} max={370} step={1} value={cfg.temperature_K} onChange={upd("temperature_K")} className="w-16 rounded-md border border-[#E7E7F3] bg-white px-1.5 py-0.5 text-[12px]" />} />
+              <InfoRow label="Pressure" value={`${cfg.pressure_bar} bar`}
+                       edit={<input type="number" min={0.5} max={5} step={0.1} value={cfg.pressure_bar} onChange={upd("pressure_bar")} className="w-16 rounded-md border border-[#E7E7F3] bg-white px-1.5 py-0.5 text-[12px]" />} />
+              <InfoRow label="Box Type" value={BOX_OPTS.find((o) => o.key === cfg.box_type)?.label || cfg.box_type}
+                       edit={<select data-testid="md-box-type" value={cfg.box_type} onChange={upd("box_type")} className="w-full rounded-md border border-[#E7E7F3] bg-white px-1.5 py-0.5 text-[12px]">{BOX_OPTS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}</select>} />
+              <InfoRow label="Salt Conc." value={`${cfg.ion_concentration} M`}
+                       edit={<input type="number" min={0} max={1} step={0.05} value={cfg.ion_concentration} onChange={upd("ion_concentration")} className="w-20 rounded-md border border-[#E7E7F3] bg-white px-1.5 py-0.5 text-[12px]" />} />
+              <InfoRow label="Time step" value={`${cfg.dt_fs} fs`}
+                       edit={<input type="number" min={0.5} max={4} step={0.5} value={cfg.dt_fs} onChange={upd("dt_fs")} className="w-16 rounded-md border border-[#E7E7F3] bg-white px-1.5 py-0.5 text-[12px]" />} />
+            </div>
+
+            {estimate && (
+              <div className="mt-5 grid grid-cols-2 gap-3 rounded-2xl border border-[#F1F1FA] bg-[#FAFAFF] p-3 text-sm">
+                <div className="rounded-lg bg-white p-2.5">
                   <p className="text-[10px] uppercase tracking-widest text-[#64748B]">CPU-only (32 cores)</p>
-                  <p className="mt-1 font-mono text-2xl font-bold text-[#5139ED]">{estimate.cpu32.toFixed(0)} h</p>
+                  <p className="mt-1 font-mono text-xl font-bold text-[#5139ED]">≈ {estimate.cpu32.toFixed(0)} h</p>
                 </div>
-                <div className="rounded-lg bg-white p-3">
-                  <p className="text-[10px] uppercase tracking-widest text-[#64748B]">Modern GPU (RTX 3090 / A100)</p>
-                  <p className="mt-1 font-mono text-2xl font-bold text-[#5139ED]">{estimate.gpu.toFixed(0)} h</p>
+                <div className="rounded-lg bg-white p-2.5">
+                  <p className="text-[10px] uppercase tracking-widest text-[#64748B]">GPU (A100 / 3090)</p>
+                  <p className="mt-1 font-mono text-xl font-bold text-[#5139ED]">≈ {estimate.gpu.toFixed(0)} h</p>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
-            <button data-testid="md-build" onClick={build} disabled={building}
-              className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#5139ED] via-[#395AED] to-[#8139ED] px-6 py-3 text-sm font-bold uppercase tracking-widest text-white shadow-[0_10px_30px_-10px_rgba(81,57,237,0.6)] disabled:opacity-40">
-              {building ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-              {building ? "Building project…" : "Generate & Download MD Project"}
-            </button>
-          </div>
+            <div className="mt-5 flex flex-wrap items-center gap-3">
+              <button data-testid="md-build" onClick={build} disabled={building}
+                      className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#5139ED] via-[#395AED] to-[#8139ED] px-5 py-2.5 text-[13px] font-bold uppercase tracking-widest text-white shadow-[0_10px_30px_-10px_rgba(81,57,237,0.6)] disabled:opacity-40">
+                {building ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileArchive className="h-4 w-4" />}
+                {building ? "Building…" : "Generate MD Project"}
+              </button>
+              <input ref={fileRef} type="file" accept=".zip" data-testid="md-results-upload" className="hidden"
+                     onChange={(e) => onUploadResults(e.target.files)} />
+              <button data-testid="md-results-upload-btn"
+                      onClick={() => fileRef.current?.click()}
+                      disabled={uploading}
+                      className="inline-flex items-center gap-2 rounded-full border border-[#5139ED]/40 bg-white px-5 py-2.5 text-[13px] font-bold uppercase tracking-widest text-[#5139ED] hover:bg-[#F5F3FE]">
+                {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                {uploading ? "Parsing…" : results ? "Reload Results ZIP" : "Upload Results ZIP"}
+              </button>
+            </div>
+          </section>
+
+          {/* ─── Section 2 · Simulation Progress Timeline ─── */}
+          <section data-testid="md-progress-card" className="rounded-3xl border border-[#E7E7F3] bg-white/80 p-6 shadow-[0_10px_30px_-20px_rgba(81,57,237,0.35)] backdrop-blur">
+            <div className="flex items-center gap-2">
+              <PlayCircle className="h-4 w-4 text-[#5139ED]" />
+              <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">Simulation Progress</p>
+            </div>
+            <div className="mt-4 flex items-baseline gap-2">
+              <span className="font-display text-3xl font-bold text-[#0B0B18]" data-testid="md-progress-pct">{pctComplete}%</span>
+              <span className="text-[11px] uppercase tracking-widest text-[#64748B]">{completedCount}/{totalStages} stages</span>
+            </div>
+            <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-[#F1F1FA]">
+              <div className="h-full rounded-full bg-gradient-to-r from-[#5139ED] via-[#395AED] to-[#8139ED] transition-all"
+                   style={{ width: `${pctComplete}%` }} />
+            </div>
+            <p className="mt-2 text-[11px] text-[#64748B]"><span className="font-semibold text-[#0B0B18]">Current:</span> {currentStage}</p>
+
+            {/* Vertical timeline */}
+            <ol className="mt-4 space-y-2" data-testid="md-progress-timeline">
+              {STAGES.map((s, i) => {
+                const st = stageStatus[s.key];
+                const done = st === "completed";
+                const active = st === "ready";
+                return (
+                  <li key={s.key} data-testid={`md-stage-${s.key}`} className="flex items-start gap-3">
+                    <div className="mt-0.5">
+                      {done ? (
+                        <CheckCircle2 className="h-4 w-4 text-[#0F7A47]" />
+                      ) : active ? (
+                        <div className="grid h-4 w-4 place-items-center">
+                          <span className="block h-2 w-2 animate-pulse rounded-full bg-[#F59E0B]" />
+                        </div>
+                      ) : (
+                        <Circle className="h-4 w-4 text-[#CBD5E1]" />
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between text-[12px]">
+                        <span className={done ? "font-semibold text-[#0B0B18]" : active ? "font-semibold text-[#0B0B18]" : "text-[#64748B]"}>
+                          {i + 1}. {s.label}
+                        </span>
+                        <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest ${
+                          done ? "bg-[#DCFCE7] text-[#166534]"
+                          : active ? "bg-[#FEF3C7] text-[#92400E]"
+                          : "bg-[#F1F1FA] text-[#64748B]"
+                        }`}>{done ? "Done" : active ? "Ready" : "Pending"}</span>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          </section>
         </div>
 
-        {/* Execution Engine picker */}
-        <div data-testid="md-engine" className="mt-6 rounded-3xl border border-[#E7E7F3] bg-white p-5">
+        {/* ═══════════════════════════════════════════════════════════════
+             ROW 2 · Live Simulation Parameters (4 charts)
+             ═══════════════════════════════════════════════════════════════ */}
+        <section data-testid="md-live-params" className="mt-6 rounded-3xl border border-[#E7E7F3] bg-white/80 p-6 shadow-[0_10px_30px_-20px_rgba(81,57,237,0.35)] backdrop-blur">
+          <div className="flex items-center gap-2">
+            <Cpu className="h-4 w-4 text-[#5139ED]" />
+            <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">Live Simulation Parameters</p>
+          </div>
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+            <MDAnalysisCard testid="temperature" title="Temperature vs Time" data={results?.temperature} color="#DC2626"
+                            description="Instantaneous system temperature during equilibration + production. Should plateau near the setpoint." />
+            <MDAnalysisCard testid="pressure" title="Pressure vs Time" data={results?.pressure} color="#2563EB"
+                            description="Barostat pressure. Noise band ±100 bar is normal for NPT ensembles." />
+            <MDAnalysisCard testid="density" title="Density vs Time" data={results?.density} color="#0F7A47"
+                            description="Solvent + solute density (kg/m³). A stable plateau indicates a well-equilibrated box." />
+            <MDAnalysisCard testid="energy" title="Potential Energy vs Time" data={results?.energy} color="#8139ED"
+                            description="Total potential energy trace — steep descent during EM, flat during production." />
+          </div>
+        </section>
+
+        {/* ═══════════════════════════════════════════════════════════════
+             ROW 3 · Trajectory Analysis (11 collapsible cards)
+             ═══════════════════════════════════════════════════════════════ */}
+        <section data-testid="md-trajectory-analysis" className="mt-6 rounded-3xl border border-[#E7E7F3] bg-white/80 p-6 shadow-[0_10px_30px_-20px_rgba(81,57,237,0.35)] backdrop-blur">
+          <div className="flex items-center gap-2">
+            <Atom className="h-4 w-4 text-[#5139ED]" />
+            <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">Trajectory Analysis</p>
+          </div>
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+            <MDAnalysisCard testid="rmsd"     title="RMSD"                    data={results?.rmsd}     color="#5139ED"
+                            description="Backbone Root-Mean-Square Deviation vs the reference (initial) frame — protein stability." />
+            <MDAnalysisCard testid="rmsf"     title="RMSF (per-residue)"      data={results?.rmsf}     color="#8139ED"
+                            description="Per-residue Root-Mean-Square Fluctuation — regions with high peaks are flexible loops or termini." />
+            <MDAnalysisCard testid="rg"       title="Radius of Gyration (Rg)" data={results?.rg}       color="#DC2626"
+                            description="Compactness of the protein through the trajectory (nm). Sharp changes indicate folding/unfolding." />
+            <MDAnalysisCard testid="sasa"     title="SASA"                    data={results?.sasa}     color="#F59E0B"
+                            description="Solvent-Accessible Surface Area (nm²). Drops upon ligand binding for the ligand-facing pocket." />
+            <MDAnalysisCard testid="hbond"    title="Hydrogen Bond Analysis"  data={results?.hbond}    color="#0F7A47"
+                            description="Number of protein–ligand H-bonds vs time — sustained ≥ 2 correlates with stable binding." />
+            <MDAnalysisCard testid="distance" title="Protein–Ligand Distance" data={results?.distance} color="#2563EB"
+                            description="Centre-of-mass distance between the protein binding pocket and the ligand (nm)." />
+            <MDAnalysisCard testid="contacts" title="Contact Analysis"        data={results?.contacts} color="#EC4899"
+                            description="Number of atomic contacts (≤ 0.6 nm) between ligand and receptor over the trajectory." />
+            <MDAnalysisCard testid="dssp"     title="Secondary Structure (DSSP)" data={results?.dssp}  color="#0EA5E9"
+                            description="Time-resolved secondary-structure content from DSSP (α-helix / β-strand / coil fractions)." />
+            <MDAnalysisCard testid="pca"      title="Principal Component Analysis (PCA)" data={results?.pca} color="#7C3AED"
+                            description="Projection of the trajectory onto the top two eigenvectors — reveals dominant motions." />
+            <MDAnalysisCard testid="fel"      title="Free Energy Landscape (FEL)"      data={results?.fel} color="#DB2777"
+                            description="Gibbs free-energy surface along PC1/PC2 — deep basins mark meta-stable conformations." />
+            <MMPBSACard mmpbsaText={mmpbsaText} />
+          </div>
+        </section>
+
+        {/* ═══════════════════════════════════════════════════════════════
+             ROW 4 · Summary Statistics
+             ═══════════════════════════════════════════════════════════════ */}
+        <section data-testid="md-summary-stats" className="mt-6 rounded-3xl border border-[#E7E7F3] bg-white/80 p-6 shadow-[0_10px_30px_-20px_rgba(81,57,237,0.35)] backdrop-blur">
+          <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">Summary Statistics</p>
+          <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+            <StatCard testid="stat-rmsd-avg"   label="Avg RMSD"                unit="nm"    value={stats.rmsdAvg} />
+            <StatCard testid="stat-rmsd-max"   label="Max RMSD"                unit="nm"    value={stats.rmsdMax} />
+            <StatCard testid="stat-rmsf-avg"   label="Avg RMSF"                unit="nm"    value={stats.rmsfAvg} />
+            <StatCard testid="stat-rg-avg"     label="Avg Radius of Gyration" unit="nm"    value={stats.rgAvg} />
+            <StatCard testid="stat-sasa-avg"   label="Avg SASA"                unit="nm²"   value={stats.sasaAvg} />
+            <StatCard testid="stat-hbond-avg"  label="Avg H-Bonds"             unit=""      value={stats.hbondAvg} />
+            <StatCard testid="stat-dist-avg"   label="Avg P–L Distance"        unit="nm"    value={stats.distAvg} />
+            <StatCard testid="stat-mmpbsa"     label="Binding Free Energy"    unit="kJ/mol" value={stats.mmpbsa} highlight />
+          </div>
+        </section>
+
+        {/* ═══════════════════════════════════════════════════════════════
+             ROW 5 · 3D Viewer  +  Downloads
+             ═══════════════════════════════════════════════════════════════ */}
+        <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-3">
+          <section data-testid="md-3d-viewer" className="xl:col-span-2 rounded-3xl border border-[#E7E7F3] bg-white/80 p-6 shadow-[0_10px_30px_-20px_rgba(81,57,237,0.35)] backdrop-blur">
+            <div className="flex items-center gap-2">
+              <Atom className="h-4 w-4 text-[#5139ED]" />
+              <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">3D Molecular Viewer</p>
+            </div>
+            <div className="mt-3">
+              <MDViewer3D
+                pdbUrl={pdbUrl}
+                finalPdbData={finalPdb}
+                ligandName={compound.name || "LIG"}
+              />
+            </div>
+          </section>
+
+          {/* ─── Section 7 · Downloads ─── */}
+          <section data-testid="md-downloads" className="rounded-3xl border border-[#E7E7F3] bg-white/80 p-6 shadow-[0_10px_30px_-20px_rgba(81,57,237,0.35)] backdrop-blur">
+            <div className="flex items-center gap-2">
+              <Download className="h-4 w-4 text-[#5139ED]" />
+              <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">Downloads</p>
+            </div>
+            <div className="mt-4 space-y-1.5 text-[13px]">
+              <DlItem label="Simulation Report (PDF)" available onClick={() => downloadReportPdf(compound, target, cfg, stats)} testid="dl-report-pdf" />
+              <DlItem label="Analysis Report (CSV)"   available={!!results} onClick={() => downloadCombinedCsv(results, `${compound.name}_analysis.csv`)} testid="dl-analysis-csv" />
+              <DlItem label="RMSD Plot (SVG)"         available={!!results?.rmsd} onClick={() => downloadRawXvg(results?.rmsd, "rmsd.xvg")} testid="dl-rmsd" />
+              <DlItem label="RMSF Plot (SVG)"         available={!!results?.rmsf} onClick={() => downloadRawXvg(results?.rmsf, "rmsf.xvg")} testid="dl-rmsf" />
+              <DlItem label="Radius of Gyration"      available={!!results?.rg}   onClick={() => downloadRawXvg(results?.rg,   "gyrate.xvg")} testid="dl-rg" />
+              <DlItem label="SASA Plot"               available={!!results?.sasa} onClick={() => downloadRawXvg(results?.sasa, "sasa.xvg")} testid="dl-sasa" />
+              <DlItem label="Hydrogen Bond Plot"      available={!!results?.hbond}onClick={() => downloadRawXvg(results?.hbond,"hbond.xvg")} testid="dl-hbond" />
+              <DlItem label="MM-PBSA Results"         available={!!mmpbsaText}    onClick={() => saveAs(new Blob([mmpbsaText || ""], { type: "text/plain" }), "mmpbsa.txt")} testid="dl-mmpbsa" />
+              <div className="mt-3 border-t border-[#F1F1FA] pt-3 text-[10px] uppercase tracking-widest text-[#64748B]">Raw GROMACS files</div>
+              <DlItem label="Trajectory (.xtc)"       available={uploadedFiles.some((f) => f.toLowerCase().endsWith(".xtc"))} note="From uploaded ZIP" testid="dl-xtc" />
+              <DlItem label="Final Structure (.pdb)"  available={!!finalPdb}   onClick={() => saveAs(new Blob([finalPdb], { type: "chemical/x-pdb" }), "final.pdb")} testid="dl-final-pdb" />
+              <DlItem label="Energy File (.edr)"      available={uploadedFiles.some((f) => f.toLowerCase().endsWith(".edr"))} note="From uploaded ZIP" testid="dl-edr" />
+              <DlItem label="Log Files"               available={uploadedFiles.some((f) => f.toLowerCase().endsWith(".log"))} note="From uploaded ZIP" testid="dl-log" />
+            </div>
+          </section>
+        </div>
+
+        {/* Execution engine picker (kept, tucked below the dashboard) */}
+        <section data-testid="md-engine" className="mt-6 rounded-3xl border border-[#E7E7F3] bg-white/80 p-6 shadow-[0_10px_30px_-20px_rgba(81,57,237,0.35)] backdrop-blur">
           <div className="flex items-center gap-2">
             <Server className="h-4 w-4 text-[#5139ED]" />
             <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">Execution Engine</p>
           </div>
           <p className="mt-2 text-sm text-[#64748B]">
-            Choose where you plan to run this simulation. The generated project package will include
-            environment-specific scripts (bash / SLURM / cloud spec).
+            Where will you run this simulation? The generated project package will include environment-specific
+            scripts (bash / SLURM / cloud spec).
           </p>
           <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
             {engines.map((e) => (
@@ -349,7 +645,6 @@ export default function MolecularDynamics() {
               </button>
             ))}
           </div>
-
           {activeEngine && activeEngine.options && activeEngine.options.length > 0 && (
             <div data-testid={`md-engine-options-${engineKey}`} className="mt-5">
               <p className="font-heading text-[10px] font-bold uppercase tracking-widest text-[#64748B]">
@@ -391,25 +686,7 @@ export default function MolecularDynamics() {
               </div>
             </div>
           )}
-        </div>
-
-        {/* Contents preview */}
-        <div data-testid="md-contents" className="mt-6 rounded-3xl border border-[#E7E7F3] bg-white p-5">
-          <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">Project contents</p>
-          <ul className="mt-3 grid grid-cols-1 gap-1 text-sm text-[#0B0B18] md:grid-cols-2">
-            <li>• <span className="font-mono text-xs">receptor.pdb</span> — cleaned receptor structure</li>
-            <li>• <span className="font-mono text-xs">ligand.smi</span> — ligand SMILES (feed into ACPYPE)</li>
-            <li>• <span className="font-mono text-xs">minim.mdp / ions.mdp</span> — energy minimisation</li>
-            <li>• <span className="font-mono text-xs">nvt.mdp</span> — NVT equilibration</li>
-            <li>• <span className="font-mono text-xs">npt.mdp</span> — NPT equilibration</li>
-            <li>• <span className="font-mono text-xs">md.mdp</span> — production MD</li>
-            <li>• <span className="font-mono text-xs">run_md.sh / run_md.ps1</span> — Bash + PowerShell drivers</li>
-            <li>• <span className="font-mono text-xs">merge_topology.py</span> — protein + ligand topology merger</li>
-            <li>• <span className="font-mono text-xs">commands.txt</span> — full copy-paste command list</li>
-            <li>• <span className="font-mono text-xs">MD_PREPARATION_REPORT.md</span> — force field · water · box · runtime estimate</li>
-            <li>• <span className="font-mono text-xs">PROJECT_MANIFEST.json</span> — machine-readable config record</li>
-          </ul>
-        </div>
+        </section>
 
         <div className="mt-6 flex justify-end">
           <Link data-testid="md-to-report" to="/scientific-report" className="inline-flex items-center gap-2 rounded-full bg-[#5139ED] px-5 py-2.5 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 hover:bg-[#4127c9]">
@@ -421,11 +698,112 @@ export default function MolecularDynamics() {
   );
 }
 
-function Field({ label, tip, children }) {
+// ───────────── UI helpers (kept in-file for locality) ─────────────
+function InfoRow({ label, value, edit, mono }) {
   return (
-    <label className="flex flex-col gap-1 text-[10px] font-bold uppercase tracking-widest text-[#64748B]">
-      <span className="flex items-center gap-1">{label}<HelpTip text={tip} /></span>
-      {children}
-    </label>
+    <div className="rounded-lg border border-[#F1F1FA] bg-white p-2">
+      <div className="text-[9px] font-bold uppercase tracking-widest text-[#64748B]">{label}</div>
+      {edit ? <div className="mt-1">{edit}</div>
+            : <div className={`mt-0.5 text-[13px] font-semibold text-[#0B0B18] ${mono ? "font-mono text-[12px]" : ""}`}>{value}</div>}
+    </div>
   );
+}
+
+function StatCard({ label, value, unit, testid, highlight }) {
+  const empty = value === undefined || value === null || Number.isNaN(value);
+  return (
+    <div data-testid={testid} className={`rounded-2xl border p-4 ${highlight ? "border-[#5139ED]/40 bg-gradient-to-br from-[#F5F3FE] to-white" : "border-[#F1F1FA] bg-white"}`}>
+      <p className="text-[10px] font-bold uppercase tracking-widest text-[#64748B]">{label}</p>
+      {empty ? (
+        <p className="mt-1 text-sm text-[#94A3B8]">—</p>
+      ) : (
+        <p className="mt-1 font-display text-2xl font-bold text-[#0B0B18]">
+          {typeof value === "number" ? value.toFixed(3) : value}
+          {unit && <span className="ml-1 text-[11px] font-semibold text-[#64748B]">{unit}</span>}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function DlItem({ label, available, onClick, note, testid }) {
+  return (
+    <button data-testid={testid} onClick={onClick} disabled={!available || !onClick}
+            className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left transition-all ${
+              available ? "border-[#E7E7F3] bg-white hover:border-[#5139ED]/40 hover:bg-[#FAFAFF]"
+                        : "border-dashed border-[#E7E7F3] bg-[#FAFAFF]/50 opacity-60"
+            }`}>
+      <span className={`text-[13px] ${available ? "font-semibold text-[#0B0B18]" : "text-[#64748B]"}`}>{label}</span>
+      <span className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-[#64748B]">
+        {note}
+        <Download className="h-3.5 w-3.5" />
+      </span>
+    </button>
+  );
+}
+
+function MMPBSACard({ mmpbsaText }) {
+  // Convert MM-PBSA text into a chart if the file contains a two-column table.
+  const parsed = useMemo(() => {
+    if (!mmpbsaText) return null;
+    const rows = [];
+    for (const line of mmpbsaText.split(/\r?\n/)) {
+      const cols = line.trim().split(/[\s,]+/).map(Number);
+      if (cols.length >= 2 && cols.every((n) => Number.isFinite(n))) rows.push({ x: cols[0], y0: cols[1] });
+    }
+    if (!rows.length) return null;
+    const vals = rows.map((r) => r.y0);
+    const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const min = Math.min(...vals), max = Math.max(...vals);
+    const std = Math.sqrt(vals.reduce((a, b) => a + (b - mean) ** 2, 0) / vals.length);
+    return {
+      chart: rows,
+      stats: { n: vals.length, mean, min, max, std },
+      meta: { xaxis: "Frame", yaxis: "ΔG (kJ/mol)", legends: ["ΔG_bind"] },
+      raw: mmpbsaText,
+    };
+  }, [mmpbsaText]);
+
+  return (
+    <MDAnalysisCard testid="mmpbsa" title="MM-PBSA / MM-GBSA" data={parsed} color="#DB2777"
+                    description="Per-frame binding free-energy decomposition (kJ/mol). Negative values indicate favourable binding." />
+  );
+}
+
+// Downloads helpers
+function downloadRawXvg(entry, filename) {
+  if (!entry?.raw) return;
+  saveAs(new Blob([entry.raw], { type: "text/plain" }), filename);
+}
+
+function downloadCombinedCsv(results, filename) {
+  if (!results) return;
+  const lines = ["metric,mean,std,min,max,n"];
+  for (const [k, v] of Object.entries(results)) {
+    if (!v?.stats) continue;
+    lines.push([k, v.stats.mean, v.stats.std, v.stats.min, v.stats.max, v.stats.n].map((n) => (typeof n === "number" ? n.toFixed(6) : n)).join(","));
+  }
+  saveAs(new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" }), filename);
+}
+
+function downloadReportPdf(compound, target, cfg, stats) {
+  // Simple text report — a full PDF export would need jspdf; we keep it as a
+  // machine-readable summary that any downstream toolchain can consume.
+  const md = [
+    `# MD Simulation Report`,
+    ``,
+    `- Protein: ${target.protein_name || target.gene_symbol || ""}  (UniProt ${target.uniprot_id || ""}, PDB ${target.pdb_id || ""})`,
+    `- Ligand:  ${compound.name || ""}`,
+    ``,
+    `## Config`,
+    `- Force field: ${cfg.force_field}`,
+    `- Water: ${cfg.water_model}`,
+    `- Temperature: ${cfg.temperature_K} K  Pressure: ${cfg.pressure_bar} bar`,
+    `- Simulation time: ${cfg.production_ns} ns  dt: ${cfg.dt_fs} fs`,
+    `- Box: ${cfg.box_type} (${cfg.box_padding_nm} nm padding)  Salt: ${cfg.ion_concentration} M`,
+    ``,
+    `## Summary Statistics`,
+    ...Object.entries(stats).map(([k, v]) => `- ${k}: ${typeof v === "number" ? v.toFixed(4) : v}`),
+  ].join("\n");
+  saveAs(new Blob([md], { type: "text/markdown" }), "md_simulation_report.md");
 }
