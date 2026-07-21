@@ -22,6 +22,7 @@ import {
 import MDViewer3D from "@/components/md/MDViewer3D";
 import MDAnalysisCard from "@/components/md/MDAnalysisCard";
 import { parseGromacsResultsZip } from "@/lib/gromacsZipParser";
+import { buildMDReportPdf } from "@/lib/mdReportPdf";
 
 const FF_OPTS = [
   { key: "amber99sb-ildn", label: "AMBER99SB-ILDN" },
@@ -604,7 +605,7 @@ export default function MolecularDynamics() {
               <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">Downloads</p>
             </div>
             <div className="mt-4 space-y-1.5 text-[13px]">
-              <DlItem label="Simulation Report (PDF)" available onClick={() => downloadReportPdf(compound, target, cfg, stats)} testid="dl-report-pdf" />
+              <DlItem label="Simulation Report (PDF)" available onClick={() => buildMDReportPdf({ compound, target, cfg, stats, results, mmpbsaText, stageStatus, pctComplete })} testid="dl-report-pdf" />
               <DlItem label="Analysis Report (CSV)"   available={!!results} onClick={() => downloadCombinedCsv(results, `${compound.name}_analysis.csv`)} testid="dl-analysis-csv" />
               <DlItem label="RMSD Plot (SVG)"         available={!!results?.rmsd} onClick={() => downloadRawXvg(results?.rmsd, "rmsd.xvg")} testid="dl-rmsd" />
               <DlItem label="RMSF Plot (SVG)"         available={!!results?.rmsf} onClick={() => downloadRawXvg(results?.rmsf, "rmsf.xvg")} testid="dl-rmsf" />
@@ -784,26 +785,4 @@ function downloadCombinedCsv(results, filename) {
     lines.push([k, v.stats.mean, v.stats.std, v.stats.min, v.stats.max, v.stats.n].map((n) => (typeof n === "number" ? n.toFixed(6) : n)).join(","));
   }
   saveAs(new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" }), filename);
-}
-
-function downloadReportPdf(compound, target, cfg, stats) {
-  // Simple text report — a full PDF export would need jspdf; we keep it as a
-  // machine-readable summary that any downstream toolchain can consume.
-  const md = [
-    `# MD Simulation Report`,
-    ``,
-    `- Protein: ${target.protein_name || target.gene_symbol || ""}  (UniProt ${target.uniprot_id || ""}, PDB ${target.pdb_id || ""})`,
-    `- Ligand:  ${compound.name || ""}`,
-    ``,
-    `## Config`,
-    `- Force field: ${cfg.force_field}`,
-    `- Water: ${cfg.water_model}`,
-    `- Temperature: ${cfg.temperature_K} K  Pressure: ${cfg.pressure_bar} bar`,
-    `- Simulation time: ${cfg.production_ns} ns  dt: ${cfg.dt_fs} fs`,
-    `- Box: ${cfg.box_type} (${cfg.box_padding_nm} nm padding)  Salt: ${cfg.ion_concentration} M`,
-    ``,
-    `## Summary Statistics`,
-    ...Object.entries(stats).map(([k, v]) => `- ${k}: ${typeof v === "number" ? v.toFixed(4) : v}`),
-  ].join("\n");
-  saveAs(new Blob([md], { type: "text/markdown" }), "md_simulation_report.md");
 }
