@@ -10,7 +10,16 @@ import { TableToolbar } from "@/components/network/TableToolbar";
 import { FigureToolbar } from "@/components/network/FigureToolbar";
 import { CyToolbar } from "@/components/network/CyToolbar";
 import { DataTable } from "@/components/network/DataTable";
-import { useAppliedStyle } from "@/context/ChartStyleContext";
+import { useAppliedStyle, useElementColor } from "@/context/ChartStyleContext";
+import ColorPopover from "@/components/ColorPopover";
+
+// Fired by chart elements on right-click; wired at the panel level so the popover
+// lives above all SVGs regardless of overflow / clip constraints.
+const openColorMenu = (setPopover) => (id, currentColor, label) => (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  setPopover({ x: e.clientX, y: e.clientY, id, color: currentColor, label });
+};
 import { benjaminiHochberg, bonferroni, CORRECTION_METHODS } from "@/lib/enrichmentUtils";
 
 const VIZ_OPTIONS = [
@@ -274,87 +283,156 @@ const colourFor = (v, vmax) => { const t = vmax > 0 ? v / vmax : 0; return `hsl(
 
 function KEGGChartCard({ testid, title, basename, rows, kind, colorBy = "adj_p_value", sizeBy = "gene_count" }) {
   const containerRef = useRef(null); const svgRef = useRef(null);
+  const [popover, setPopover] = useState(null);
+  const el = useElementColor("kegg");
+  const handleMenu = openColorMenu(setPopover);
   return (
     <div ref={containerRef} data-testid={testid} className="rounded-3xl border border-[#E7E7F3] bg-white p-5 md:p-6">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">{title}</p>
         <FigureToolbar getSvg={() => svgRef.current} containerRef={containerRef} basename={basename} title={title} testidPrefix={testid} />
       </div>
-      {kind === "bar" && <BarChart svgRef={svgRef} rows={rows} colorBy={colorBy} />}
-      {kind === "bubble" && <BubbleChart svgRef={svgRef} rows={rows} colorBy={colorBy} sizeBy={sizeBy} />}
-      {kind === "dot" && <DotChart svgRef={svgRef} rows={rows} colorBy={colorBy} sizeBy={sizeBy} />}
-      {kind === "lollipop" && <LollipopChart svgRef={svgRef} rows={rows} />}
-      {kind === "sankey" && <SankeyChart svgRef={svgRef} rows={rows} />}
-      {kind === "chord" && <ChordChart svgRef={svgRef} rows={rows} />}
-      {kind === "heatmap" && <HeatmapChart svgRef={svgRef} rows={rows} />}
+      {kind === "bar"      && <BarChart      svgRef={svgRef} rows={rows} colorBy={colorBy} onElementMenu={handleMenu} />}
+      {kind === "bubble"   && <BubbleChart   svgRef={svgRef} rows={rows} colorBy={colorBy} sizeBy={sizeBy} onElementMenu={handleMenu} />}
+      {kind === "dot"      && <DotChart      svgRef={svgRef} rows={rows} colorBy={colorBy} sizeBy={sizeBy} onElementMenu={handleMenu} />}
+      {kind === "lollipop" && <LollipopChart svgRef={svgRef} rows={rows} onElementMenu={handleMenu} />}
+      {kind === "sankey"   && <SankeyChart   svgRef={svgRef} rows={rows} />}
+      {kind === "chord"    && <ChordChart    svgRef={svgRef} rows={rows} />}
+      {kind === "heatmap"  && <HeatmapChart  svgRef={svgRef} rows={rows} />}
+      {popover && (
+        <ColorPopover
+          x={popover.x} y={popover.y}
+          color={popover.color}
+          elementLabel={popover.label}
+          onChange={(c) => el.set(popover.id, c)}
+          onReset={() => { el.clear(popover.id); setPopover(null); }}
+          onClose={() => setPopover(null)}
+        />
+      )}
     </div>
   );
 }
 
-function BarChart({ svgRef, rows, colorBy }) {
+function BarChart({ svgRef, rows, colorBy, onElementMenu }) {
+  const s = useAppliedStyle("kegg");
+  const el = useElementColor("kegg");
   const w = 780, rowH = 26, h = Math.max(160, rows.length * rowH + 60);
   const labelW = 320, barMax = w - labelW - 60;
   const maxV = Math.max(1, ...rows.map((r) => getMetric(r, colorBy)));
   return (
-    <svg ref={svgRef} viewBox={`0 0 ${w} ${h}`} width="100%" height={h}>
-      <rect x="0" y="0" width={w} height={h} fill="#FFFFFF" />
+    <svg ref={svgRef} viewBox={`0 0 ${w} ${h}`} width="100%" height={h}
+         style={{ fontFamily: s.fontFamily, borderRadius: s.borderRadius, border: s.showBorder ? `1px solid ${s.borderColor}` : "none", opacity: s.opacity }}>
+      <rect x="0" y="0" width={w} height={h} fill={s.background} />
+      {s.showGrid && [0.25, 0.5, 0.75, 1].map((f) => (
+        <line key={`g-${f}`} x1={labelW + f * barMax} x2={labelW + f * barMax} y1={20} y2={h - 40} stroke={s.grid} strokeWidth="0.5" />
+      ))}
       {rows.map((r, i) => {
         const y = 30 + i * rowH; const v = getMetric(r, colorBy); const bw = (v / maxV) * barMax;
         const label = r.term.length > 42 ? r.term.slice(0, 40) + "…" : r.term;
-        return (<g key={r.term}><text x={labelW-8} y={y+rowH/2+3} textAnchor="end" fontSize="11" fill="#0B0B18">{label}</text><rect x={labelW} y={y+4} width={bw} height={rowH-8} rx={3} fill={colourFor(v, maxV)} fillOpacity="0.85" /><text x={labelW+bw+6} y={y+rowH/2+3} fontSize="10" fill="#64748B">{v.toFixed(2)}</text></g>);
+        const c = el.get(r.term) || s.palette[i % s.palette.length];
+        return (
+          <g key={r.term}>
+            <text x={labelW-8} y={y+rowH/2+3} textAnchor="end" fontSize={s.labelSize} fill={s.labelColor} fontFamily={s.fontFamily}>{label}</text>
+            <rect data-testid={`kegg-bar-${r.term}`} x={labelW} y={y+4} width={bw} height={rowH-8} rx={3} fill={c} fillOpacity="0.85"
+                  style={{ cursor: "context-menu" }} onContextMenu={onElementMenu?.(r.term, c, r.term)}>
+              <title>{`${r.term} — right-click to recolour`}</title>
+            </rect>
+            <text x={labelW+bw+6} y={y+rowH/2+3} fontSize={Math.max(9, s.labelSize - 2)} fill={s.labelColor} opacity="0.7" fontFamily={s.fontFamily}>{v.toFixed(2)}</text>
+          </g>
+        );
       })}
-      <text x={labelW + barMax/2} y={h-12} textAnchor="middle" fontSize="11" fill="#64748B">{colorBy === "adj_p_value" || colorBy === "p_value" ? "−log10(P)" : colorBy}</text>
+      <text x={labelW + barMax/2} y={h-12} textAnchor="middle" fontSize={Math.max(10, s.labelSize - 1)} fill={s.labelColor} opacity="0.7" fontFamily={s.fontFamily}>{colorBy === "adj_p_value" || colorBy === "p_value" ? "−log10(P)" : colorBy}</text>
     </svg>
   );
 }
 
-function BubbleChart({ svgRef, rows, colorBy, sizeBy }) {
+function BubbleChart({ svgRef, rows, colorBy, sizeBy, onElementMenu }) {
+  const s = useAppliedStyle("kegg");
+  const el = useElementColor("kegg");
   const w = 780, rowH = 34, h = Math.max(200, rows.length * rowH + 60);
   const labelW = 320, plotL = labelW + 20, plotW = w - plotL - 60;
   const maxV = Math.max(1, ...rows.map((r) => getMetric(r, colorBy)));
   const maxS = Math.max(1, ...rows.map((r) => r[sizeBy] ?? 0));
   return (
-    <svg ref={svgRef} viewBox={`0 0 ${w} ${h}`} width="100%" height={h}>
-      <rect x="0" y="0" width={w} height={h} fill="#FFFFFF" />
+    <svg ref={svgRef} viewBox={`0 0 ${w} ${h}`} width="100%" height={h}
+         style={{ fontFamily: s.fontFamily, borderRadius: s.borderRadius, border: s.showBorder ? `1px solid ${s.borderColor}` : "none", opacity: s.opacity }}>
+      <rect x="0" y="0" width={w} height={h} fill={s.background} />
       {rows.map((r, i) => {
         const y = 30 + i * rowH; const v = getMetric(r, colorBy); const x = plotL + (v/maxV)*plotW;
-        const s = 6 + ((r[sizeBy] || 0) / maxS) * 20; const c = colourFor(v, maxV);
+        const rad = (6 + ((r[sizeBy] || 0) / maxS) * 20) * s.nodeSize;
+        const c = el.get(r.term) || s.palette[i % s.palette.length];
         const label = r.term.length > 42 ? r.term.slice(0, 40) + "…" : r.term;
-        return (<g key={r.term}><text x={labelW-8} y={y+4} textAnchor="end" fontSize="11" fill="#0B0B18">{label}</text><circle cx={x} cy={y} r={s} fill={c} fillOpacity="0.6" stroke={c} strokeWidth="1.5" /><text x={x+s+4} y={y+3} fontSize="9" fill="#64748B">{r[sizeBy]?.toFixed?.(2) ?? r[sizeBy]}</text></g>);
+        return (
+          <g key={r.term}>
+            <text x={labelW-8} y={y+4} textAnchor="end" fontSize={s.labelSize} fill={s.labelColor} fontFamily={s.fontFamily}>{label}</text>
+            <circle data-testid={`kegg-bubble-${r.term}`} cx={x} cy={y} r={rad} fill={c} fillOpacity="0.6" stroke={c} strokeWidth="1.5"
+                    style={{ cursor: "context-menu" }} onContextMenu={onElementMenu?.(r.term, c, r.term)}>
+              <title>{`${r.term} — right-click to recolour`}</title>
+            </circle>
+            <text x={x+rad+4} y={y+3} fontSize={Math.max(9, s.labelSize - 3)} fill={s.labelColor} opacity="0.7" fontFamily={s.fontFamily}>{r[sizeBy]?.toFixed?.(2) ?? r[sizeBy]}</text>
+          </g>
+        );
       })}
     </svg>
   );
 }
 
-function DotChart({ svgRef, rows, colorBy, sizeBy }) {
+function DotChart({ svgRef, rows, colorBy, sizeBy, onElementMenu }) {
+  const s = useAppliedStyle("kegg");
+  const el = useElementColor("kegg");
   const w = 780, rowH = 26, h = Math.max(160, rows.length * rowH + 60);
   const labelW = 320, plotL = labelW + 20, plotW = w - plotL - 60;
   const maxV = Math.max(1, ...rows.map((r) => getMetric(r, colorBy)));
   const maxS = Math.max(1, ...rows.map((r) => r[sizeBy] ?? 0));
   return (
-    <svg ref={svgRef} viewBox={`0 0 ${w} ${h}`} width="100%" height={h}>
-      <rect x="0" y="0" width={w} height={h} fill="#FFFFFF" />
+    <svg ref={svgRef} viewBox={`0 0 ${w} ${h}`} width="100%" height={h}
+         style={{ fontFamily: s.fontFamily, borderRadius: s.borderRadius, border: s.showBorder ? `1px solid ${s.borderColor}` : "none", opacity: s.opacity }}>
+      <rect x="0" y="0" width={w} height={h} fill={s.background} />
       {rows.map((r, i) => {
         const y = 30 + i * rowH; const v = getMetric(r, colorBy); const x = plotL + (v/maxV)*plotW;
-        const s = 3 + ((r[sizeBy] || 0) / maxS) * 12;
+        const rad = (3 + ((r[sizeBy] || 0) / maxS) * 12) * s.nodeSize;
         const label = r.term.length > 42 ? r.term.slice(0, 40) + "…" : r.term;
-        return (<g key={r.term}><text x={labelW-8} y={y+4} textAnchor="end" fontSize="11" fill="#0B0B18">{label}</text><circle cx={x} cy={y} r={s} fill={colourFor(v, maxV)} /></g>);
+        const c = el.get(r.term) || s.palette[i % s.palette.length];
+        return (
+          <g key={r.term}>
+            <text x={labelW-8} y={y+4} textAnchor="end" fontSize={s.labelSize} fill={s.labelColor} fontFamily={s.fontFamily}>{label}</text>
+            <circle data-testid={`kegg-dot-${r.term}`} cx={x} cy={y} r={rad} fill={c}
+                    style={{ cursor: "context-menu" }} onContextMenu={onElementMenu?.(r.term, c, r.term)}>
+              <title>{`${r.term} — right-click to recolour`}</title>
+            </circle>
+          </g>
+        );
       })}
     </svg>
   );
 }
 
-function LollipopChart({ svgRef, rows }) {
+function LollipopChart({ svgRef, rows, onElementMenu }) {
+  const s = useAppliedStyle("lollipop");
+  const el = useElementColor("kegg");
   const w = 780, rowH = 28, h = Math.max(160, rows.length * rowH + 60);
   const labelW = 320, plotL = labelW + 20, plotW = w - plotL - 60;
   const max = Math.max(1, ...rows.map((r) => r.combined_score || 0));
   return (
-    <svg ref={svgRef} viewBox={`0 0 ${w} ${h}`} width="100%" height={h}>
-      <rect x="0" y="0" width={w} height={h} fill="#FFFFFF" />
+    <svg ref={svgRef} viewBox={`0 0 ${w} ${h}`} width="100%" height={h}
+         style={{ fontFamily: s.fontFamily, borderRadius: s.borderRadius, border: s.showBorder ? `1px solid ${s.borderColor}` : "none", opacity: s.opacity }}>
+      <rect x="0" y="0" width={w} height={h} fill={s.background} />
       {rows.map((r, i) => {
         const y = 30 + i * rowH; const bw = ((r.combined_score || 0) / max) * plotW;
         const label = r.term.length > 42 ? r.term.slice(0, 40) + "…" : r.term;
-        return (<g key={r.term}><text x={labelW-8} y={y+4} textAnchor="end" fontSize="11" fill="#0B0B18">{label}</text><line x1={plotL} y1={y} x2={plotL+bw} y2={y} stroke="#8139ED" strokeWidth="2" strokeOpacity="0.65" /><circle cx={plotL+bw} cy={y} r={5} fill="#5139ED" stroke="#fff" strokeWidth="1.5" /><text x={plotL+bw+10} y={y+3} fontSize="10" fill="#64748B">{(r.combined_score || 0).toFixed(1)}</text></g>);
+        const paletteColor = s.palette[i % s.palette.length];
+        const dotColor = el.get(r.term) || paletteColor;
+        return (
+          <g key={r.term}>
+            <text x={labelW-8} y={y+4} textAnchor="end" fontSize={s.labelSize} fill={s.labelColor} fontFamily={s.fontFamily}>{label}</text>
+            <line x1={plotL} y1={y} x2={plotL+bw} y2={y} stroke={dotColor} strokeWidth={2 * s.edgeThickness} strokeOpacity="0.65" />
+            <circle data-testid={`kegg-lollipop-${r.term}`} cx={plotL+bw} cy={y} r={5 * s.nodeSize} fill={dotColor} stroke="#fff" strokeWidth="1.5"
+                    style={{ cursor: "context-menu" }} onContextMenu={onElementMenu?.(r.term, dotColor, r.term)}>
+              <title>{`${r.term} — right-click to recolour`}</title>
+            </circle>
+            <text x={plotL+bw+10} y={y+3} fontSize={Math.max(9, s.labelSize - 2)} fill={s.labelColor} opacity="0.7" fontFamily={s.fontFamily}>{(r.combined_score || 0).toFixed(1)}</text>
+          </g>
+        );
       })}
     </svg>
   );

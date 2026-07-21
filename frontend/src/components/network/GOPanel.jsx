@@ -7,7 +7,16 @@ import "@/lib/cytoscapeSetup";
 import { goEnrich } from "@/lib/api";
 import { HelpTip } from "@/components/network/HelpTip";
 import { TableToolbar } from "@/components/network/TableToolbar";
-import { useAppliedStyle } from "@/context/ChartStyleContext";
+import { useAppliedStyle, useElementColor } from "@/context/ChartStyleContext";
+import ColorPopover from "@/components/ColorPopover";
+
+// Fired by chart elements on right-click; wired at the panel level so the popover
+// lives above all SVGs regardless of overflow / clip constraints.
+const openColorMenu = (setPopover) => (id, currentColor, label) => (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  setPopover({ x: e.clientX, y: e.clientY, id, color: currentColor, label });
+};
 import { FigureToolbar } from "@/components/network/FigureToolbar";
 import { CyToolbar } from "@/components/network/CyToolbar";
 import { DataTable } from "@/components/network/DataTable";
@@ -310,6 +319,9 @@ function FilterPanel({
 function GOChartCard({ testid, title, basename, rows, kind, colorBy, sizeBy }) {
   const containerRef = useRef(null);
   const svgRef = useRef(null);
+  const [popover, setPopover] = useState(null);   // {x,y,id,color,label}
+  const el = useElementColor("go");
+  const handleMenu = openColorMenu(setPopover);
   const getSvg = () => svgRef.current;
   return (
     <div ref={containerRef} data-testid={testid} className="rounded-3xl border border-[#E7E7F3] bg-white p-5 md:p-6">
@@ -317,11 +329,21 @@ function GOChartCard({ testid, title, basename, rows, kind, colorBy, sizeBy }) {
         <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">{title}</p>
         <FigureToolbar getSvg={getSvg} containerRef={containerRef} basename={basename} title={title} testidPrefix={testid} />
       </div>
-      {kind === "bar" && <BarChart svgRef={svgRef} rows={rows} colorBy={colorBy} title={title} />}
-      {kind === "bubble" && <BubbleChart svgRef={svgRef} rows={rows} colorBy={colorBy} sizeBy={sizeBy} title={title} />}
-      {kind === "dot" && <DotChart svgRef={svgRef} rows={rows} colorBy={colorBy} sizeBy={sizeBy} title={title} />}
-      {kind === "chord" && <ChordChart svgRef={svgRef} rows={rows} title={title} circular={false} />}
-      {kind === "circular" && <ChordChart svgRef={svgRef} rows={rows} title={title} circular={true} />}
+      {kind === "bar"      && <BarChart    svgRef={svgRef} rows={rows} colorBy={colorBy} title={title} onElementMenu={handleMenu} />}
+      {kind === "bubble"   && <BubbleChart svgRef={svgRef} rows={rows} colorBy={colorBy} sizeBy={sizeBy} title={title} onElementMenu={handleMenu} />}
+      {kind === "dot"      && <DotChart    svgRef={svgRef} rows={rows} colorBy={colorBy} sizeBy={sizeBy} title={title} onElementMenu={handleMenu} />}
+      {kind === "chord"    && <ChordChart  svgRef={svgRef} rows={rows} title={title} circular={false} />}
+      {kind === "circular" && <ChordChart  svgRef={svgRef} rows={rows} title={title} circular={true} />}
+      {popover && (
+        <ColorPopover
+          x={popover.x} y={popover.y}
+          color={popover.color}
+          elementLabel={popover.label}
+          onChange={(c) => el.set(popover.id, c)}
+          onReset={() => { el.clear(popover.id); setPopover(null); }}
+          onClose={() => setPopover(null)}
+        />
+      )}
     </div>
   );
 }
@@ -336,8 +358,9 @@ const colourFor = (v, vmax) => {
   return `hsl(${260 - t * 40}, 70%, ${55 - t * 20}%)`;
 };
 
-function BarChart({ svgRef, rows, colorBy }) {
+function BarChart({ svgRef, rows, colorBy, onElementMenu }) {
   const s = useAppliedStyle("go");
+  const el = useElementColor("go");
   const w = 780, rowH = 26, h = Math.max(160, rows.length * rowH + 60);
   const labelW = 300;
   const maxV = Math.max(1, ...rows.map((r) => getMetric(r, colorBy)));
@@ -354,10 +377,20 @@ function BarChart({ svgRef, rows, colorBy }) {
         const v = getMetric(t, colorBy);
         const bw = (v / maxV) * barMax;
         const label = t.name.length > 40 ? t.name.slice(0, 38) + "…" : t.name;
+        const paletteColor = s.palette[i % s.palette.length];
+        const barColor = el.get(t.native) || paletteColor;
         return (
           <g key={t.native}>
             <text x={labelW - 8} y={y + rowH / 2 + 3} textAnchor="end" fontSize={s.labelSize} fill={s.labelColor} fontFamily={s.fontFamily}>{label}</text>
-            <rect x={labelW} y={y + 4} width={bw} height={rowH - 8} rx={3} fill={s.palette[i % s.palette.length]} fillOpacity="0.85" />
+            <rect
+              data-testid={`go-bar-${t.native}`}
+              x={labelW} y={y + 4} width={bw} height={rowH - 8} rx={3}
+              fill={barColor} fillOpacity="0.85"
+              style={{ cursor: "context-menu" }}
+              onContextMenu={onElementMenu?.(t.native, barColor, t.name)}
+            >
+              <title>{`${t.name} — right-click to recolour`}</title>
+            </rect>
             <text x={labelW + bw + 6} y={y + rowH / 2 + 3} fontSize={Math.max(9, s.labelSize - 2)} fill={s.labelColor} opacity="0.7" fontFamily={s.fontFamily}>{v.toFixed(2)}</text>
           </g>
         );
@@ -367,8 +400,9 @@ function BarChart({ svgRef, rows, colorBy }) {
   );
 }
 
-function BubbleChart({ svgRef, rows, colorBy, sizeBy }) {
+function BubbleChart({ svgRef, rows, colorBy, sizeBy, onElementMenu }) {
   const s = useAppliedStyle("go");
+  const el = useElementColor("go");
   const w = 780, rowH = 32, h = Math.max(180, rows.length * rowH + 60);
   const labelW = 300, plotL = labelW + 20, plotW = w - plotL - 60;
   const maxV = Math.max(1, ...rows.map((r) => getMetric(r, colorBy)));
@@ -386,11 +420,19 @@ function BubbleChart({ svgRef, rows, colorBy, sizeBy }) {
         const x = plotL + (v / maxV) * plotW;
         const rad = (4 + ((t[sizeBy] || 0) / maxS) * 18) * s.nodeSize;
         const label = t.name.length > 40 ? t.name.slice(0, 38) + "…" : t.name;
-        const c = s.palette[i % s.palette.length];
+        const c = el.get(t.native) || s.palette[i % s.palette.length];
         return (
           <g key={t.native}>
             <text x={labelW - 8} y={y + 4} textAnchor="end" fontSize={s.labelSize} fill={s.labelColor} fontFamily={s.fontFamily}>{label}</text>
-            <circle cx={x} cy={y} r={rad} fill={c} fillOpacity="0.6" stroke={c} strokeWidth="1.5" />
+            <circle
+              data-testid={`go-bubble-${t.native}`}
+              cx={x} cy={y} r={rad}
+              fill={c} fillOpacity="0.6" stroke={c} strokeWidth="1.5"
+              style={{ cursor: "context-menu" }}
+              onContextMenu={onElementMenu?.(t.native, c, t.name)}
+            >
+              <title>{`${t.name} — right-click to recolour`}</title>
+            </circle>
             <text x={x + rad + 4} y={y + 3} fontSize={Math.max(9, s.labelSize - 3)} fill={s.labelColor} opacity="0.7" fontFamily={s.fontFamily}>{t[sizeBy]?.toFixed?.(2) ?? t[sizeBy]}</text>
           </g>
         );
@@ -400,8 +442,9 @@ function BubbleChart({ svgRef, rows, colorBy, sizeBy }) {
   );
 }
 
-function DotChart({ svgRef, rows, colorBy, sizeBy }) {
+function DotChart({ svgRef, rows, colorBy, sizeBy, onElementMenu }) {
   const s = useAppliedStyle("go");
+  const el = useElementColor("go");
   const w = 780, rowH = 26, h = Math.max(160, rows.length * rowH + 60);
   const labelW = 300, plotL = labelW + 20, plotW = w - plotL - 60;
   const maxV = Math.max(1, ...rows.map((r) => getMetric(r, colorBy)));
@@ -416,10 +459,19 @@ function DotChart({ svgRef, rows, colorBy, sizeBy }) {
         const x = plotL + (v / maxV) * plotW;
         const rad = (3 + ((t[sizeBy] || 0) / maxS) * 10) * s.nodeSize;
         const label = t.name.length > 40 ? t.name.slice(0, 38) + "…" : t.name;
+        const c = el.get(t.native) || s.palette[i % s.palette.length];
         return (
           <g key={t.native}>
             <text x={labelW - 8} y={y + 4} textAnchor="end" fontSize={s.labelSize} fill={s.labelColor} fontFamily={s.fontFamily}>{label}</text>
-            <circle cx={x} cy={y} r={rad} fill={s.palette[i % s.palette.length]} />
+            <circle
+              data-testid={`go-dot-${t.native}`}
+              cx={x} cy={y} r={rad}
+              fill={c}
+              style={{ cursor: "context-menu" }}
+              onContextMenu={onElementMenu?.(t.native, c, t.name)}
+            >
+              <title>{`${t.name} — right-click to recolour`}</title>
+            </circle>
           </g>
         );
       })}

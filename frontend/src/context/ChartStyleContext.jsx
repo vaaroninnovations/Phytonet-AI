@@ -250,6 +250,38 @@ export function ChartStyleProvider({ children }) {
   // Consumers read via `useAppliedStyle` which layers preview on top of applied.
   const [preview, setPreview] = useState({});   // { [chartType]: {patch}, __global?: {patch} }
 
+  // Persisted per-element color overrides: elementColors[chartType][id] = "#RRGGBB".
+  // Set via right-click on a bar / dot / node; read by useElementColor().
+  const [elementColors, setElementColors] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(KEY + ".el") || "{}"); }
+    catch { return {}; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(KEY + ".el", JSON.stringify(elementColors)); }
+    catch { /* ignore */ }
+  }, [elementColors]);
+
+  const setElementColor = useCallback((chartType, id, color) => {
+    setElementColors((prev) => ({
+      ...prev,
+      [chartType]: { ...(prev[chartType] || {}), [id]: color },
+    }));
+  }, []);
+  const clearElementColor = useCallback((chartType, id) => {
+    setElementColors((prev) => {
+      const forChart = { ...(prev[chartType] || {}) };
+      delete forChart[id];
+      return { ...prev, [chartType]: forChart };
+    });
+  }, []);
+  const clearAllElementColors = useCallback((chartType) => {
+    setElementColors((prev) => {
+      const n = { ...prev };
+      if (chartType) delete n[chartType]; else return {};
+      return n;
+    });
+  }, []);
+
   useEffect(() => {
     try { localStorage.setItem(KEY, JSON.stringify(style)); } catch { /* ignore */ }
   }, [style]);
@@ -314,10 +346,14 @@ export function ChartStyleProvider({ children }) {
     style: resolveBase,
     raw: style,
     preview,
+    elementColors,
+    setElementColor, clearElementColor, clearAllElementColors,
     set, setForChart, resetChart, reset,
     previewPatch, discardPreview, commitPreview,
     THEMES, CHART_TYPES,
-  }), [resolveBase, style, preview, set, setForChart, resetChart, reset,
+  }), [resolveBase, style, preview, elementColors,
+      setElementColor, clearElementColor, clearAllElementColors,
+      set, setForChart, resetChart, reset,
       previewPatch, discardPreview, commitPreview]);
 
   return <ChartStyleContext.Provider value={value}>{children}</ChartStyleContext.Provider>;
@@ -399,3 +435,21 @@ export function useAppliedStyle(chartType) {
     return merged;
   }, [style, raw, preview, chartType]);
 }
+
+/**
+ * useElementColor(chartType) → { get(id), set(id, color), clear(id) }
+ * Convenience wrapper for per-element color overrides. Charts should render
+ * each bar / node with `elementColorFor(chartType, id) || palette[i]`.
+ */
+export function useElementColor(chartType) {
+  const { elementColors, setElementColor, clearElementColor, clearAllElementColors } = useChartStyle();
+  const map = elementColors?.[chartType] || {};
+  return useMemo(() => ({
+    get: (id) => map[id] || null,
+    set: (id, color) => setElementColor(chartType, id, color),
+    clear: (id) => clearElementColor(chartType, id),
+    clearAll: () => clearAllElementColors(chartType),
+    all: map,
+  }), [map, chartType, setElementColor, clearElementColor, clearAllElementColors]);
+}
+
