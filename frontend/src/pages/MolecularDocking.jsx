@@ -271,13 +271,14 @@ export default function MolecularDocking() {
     finally { setRunning(false); setProgressPair(null); }
   };
 
-  const autoSelectForMD = () => {
-    if (!result?.results) return [];
-    return result.results.filter((r) => !r.error && r.best_affinity <= mdAffinityThreshold).slice(0, 8);
-  };
   const [mdAffinityThreshold, setMdAffinityThreshold] = useState(-7.0);
 
-  const resultRows = (result?.results || []).map((r, i) => {
+  const autoSelectedForMD = useMemo(() => {
+    if (!result?.results) return [];
+    return result.results.filter((r) => !r.error && r.best_affinity <= mdAffinityThreshold).slice(0, 8);
+  }, [result, mdAffinityThreshold]);
+
+  const resultRows = useMemo(() => (result?.results || []).map((r, i) => {
     const p1 = r.poses?.[0] || {};
     const cls = r.classification || {};
     return {
@@ -304,7 +305,13 @@ export default function MolecularDocking() {
       job_id: r.job_id,
       pair_id: r.pair_id,
     };
-  });
+  }), [result]);
+
+  // Successful pairs to display in complex viewer (capped for perf).
+  const viewerRows = useMemo(
+    () => (result?.results || []).filter((r) => !r.error && r.pair_id).slice(0, 10),
+    [result]
+  );
 
   const qualityBadge = (v) => {
     if (!v || v === "—") return <span className="text-[#94A3B8]">—</span>;
@@ -559,20 +566,17 @@ export default function MolecularDocking() {
 
             {/* Complex viewers per successful pair */}
             <div data-testid="dock-viewers" className="space-y-4">
-              {result.results
-                .filter((r) => !r.error && r.pair_id)
-                .slice(0, 10)                                       // safety cap
-                .map((r) => (
-                  <DockingViewer
-                    key={r.pair_id}
-                    jobId={r.job_id}
-                    pairId={r.pair_id}
-                    ligandName={r.ligand_name}
-                    receptor={r.receptor_pdb}
-                    bestAffinity={r.best_affinity}
-                    interactions={r.interactions}
-                  />
-                ))}
+              {viewerRows.map((r) => (
+                <DockingViewer
+                  key={r.pair_id}
+                  jobId={r.job_id}
+                  pairId={r.pair_id}
+                  ligandName={r.ligand_name}
+                  receptor={r.receptor_pdb}
+                  bestAffinity={r.best_affinity}
+                  interactions={r.interactions}
+                />
+              ))}
             </div>
 
             {/* Auto-select for MD */}
@@ -583,11 +587,11 @@ export default function MolecularDocking() {
                   <p className="mt-1 text-xs text-[#64748B]">
                     Complexes with affinity ≤
                     <input data-testid="dock-md-threshold" type="number" step={0.1} value={mdAffinityThreshold} onChange={(e) => setMdAffinityThreshold(Number(e.target.value))} className="mx-1 w-16 rounded-lg border border-[#E7E7F3] bg-white px-2 py-0.5 text-xs text-[#0B0B18]" />
-                    kcal/mol ({autoSelectForMD().length} complexes)
+                    kcal/mol ({autoSelectedForMD.length} complexes)
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {autoSelectForMD().map((r) => (
+                  {autoSelectedForMD.map((r) => (
                     <span key={r.pair_id} data-testid={`dock-auto-${r.pair_id}`} className="inline-flex items-center gap-1 rounded-full bg-[#5139ED]/10 px-3 py-1 text-[11px] font-semibold text-[#5139ED]">
                       {r.ligand_name} × {r.receptor_pdb} · {r.best_affinity.toFixed(2)}
                     </span>

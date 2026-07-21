@@ -170,8 +170,8 @@ export default function AIAssistant() {
           </div>
 
           <ol className="mt-5 space-y-2 text-[13px]">
-            {(run.stages || []).map((s, i) => (
-              <li key={i} data-testid={`assistant-stage-${s.key}`} className="flex items-center gap-2">
+            {(run.stages || []).map((s) => (
+              <li key={s.key} data-testid={`assistant-stage-${s.key}`} className="flex items-center gap-2">
                 <StageIcon status={s.status} />
                 <span className={s.status === "failed" ? "text-red-600" : "text-[#0B0B18]"}>{s.label}</span>
                 {s.extra && <span className="text-[11px] text-[#6B7280]">
