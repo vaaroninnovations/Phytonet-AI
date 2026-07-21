@@ -34,6 +34,7 @@ export const CHART_TYPES = [
   { key: "bubble",    label: "Bubble Plot",        category: "Charts" },
   { key: "sankey",    label: "Sankey Flow",        category: "Charts" },
   { key: "lollipop",  label: "Lollipop",           category: "Charts" },
+  { key: "venn",      label: "Venn Diagram",       category: "Charts" },
 ];
 
 /**
@@ -131,6 +132,15 @@ export const CHART_FIELD_SCHEMAS = {
     colors: ["node", "edge", "background", "label", "grid"],
     sizes: ["nodeSize", "edgeThickness", "labelSize", "opacity"],
     palette: true, legend: false, grid: true,
+    border: true, font: true,
+  },
+  // ── Venn (2-set) ──────────────────────────────────────────────────
+  // palette[0] = Set A fill/stroke, palette[1] = Set B fill/stroke
+  // edgeThickness controls circle stroke width. opacity controls fill alpha.
+  venn: {
+    colors: ["background", "label"],
+    sizes: ["edgeThickness", "labelSize", "opacity"],
+    palette: true, legend: false, grid: false,
     border: true, font: true,
   },
 };

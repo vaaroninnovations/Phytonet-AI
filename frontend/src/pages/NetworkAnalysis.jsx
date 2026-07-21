@@ -544,6 +544,7 @@ function IntersectionPanel({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <CustomizeFigureButton chartType="venn" testid="customize-figure-venn" />
             <DlBtn onClick={downloadSvg} testid="download-svg" label="SVG" />
             <DlBtn onClick={() => downloadPng(300)} testid="download-png-300" label="PNG 300 dpi" />
             <DlBtn onClick={() => downloadPng(600)} testid="download-png-600" label="PNG 600 dpi" />
@@ -2358,6 +2359,19 @@ const VennSVG = React.forwardRef(function VennSVG(
   { n1, n2, nCommon, label1, label2 },
   ref
 ) {
+  const s = useAppliedStyle("venn");
+  const setAColor = (s.palette && s.palette[0]) || "#5139ED";
+  const setBColor = (s.palette && s.palette[1]) || "#8139ED";
+  const bg = s.background || "#FFFFFF";
+  const labelClr = s.labelColor || "#0B0B18";
+  const ff = s.fontFamily || "Inter, sans-serif";
+  const fillAlpha = Math.max(0, Math.min(1, (s.opacity ?? 1) * 0.35));
+  const strokeW = Math.max(0.5, (s.edgeThickness ?? 1) * 2);
+  const countFS = Math.round((s.labelSize ?? 12) * 2.15);   // ≈26 default
+  const midFS   = Math.round((s.labelSize ?? 12) * 2.30);   // ≈28 default
+  const setFS   = Math.round((s.labelSize ?? 12) * 1.15);   // ≈14 default
+  const capFS   = Math.round((s.labelSize ?? 12) * 0.92);   // ≈11 default
+
   // Two overlapping circles, sized to visually communicate cardinality.
   const w = 600, h = 400;
   const cx1 = 220, cx2 = 380, cy = 200;
@@ -2373,35 +2387,35 @@ const VennSVG = React.forwardRef(function VennSVG(
       aria-label={`Venn diagram: ${label1} vs ${label2}`}
       style={{ maxWidth: "100%", height: "auto" }}
     >
-      <rect x="0" y="0" width={w} height={h} fill="#FFFFFF" />
+      <rect x="0" y="0" width={w} height={h} fill={bg} />
       <title>{`Venn ${label1} vs ${label2}`}</title>
       <circle
         cx={cx1}
         cy={cy}
         r={r}
-        fill="#5139ED"
-        fillOpacity="0.35"
-        stroke="#5139ED"
-        strokeWidth="2"
+        fill={setAColor}
+        fillOpacity={fillAlpha}
+        stroke={setAColor}
+        strokeWidth={strokeW}
       />
       <circle
         cx={cx2}
         cy={cy}
         r={r}
-        fill="#8139ED"
-        fillOpacity="0.35"
-        stroke="#8139ED"
-        strokeWidth="2"
+        fill={setBColor}
+        fillOpacity={fillAlpha}
+        stroke={setBColor}
+        strokeWidth={strokeW}
       />
       {/* Left-only */}
       <text
         x={cx1 - 60}
         y={cy}
-        fontFamily="Inter, sans-serif"
-        fontSize="26"
+        fontFamily={ff}
+        fontSize={countFS}
         fontWeight="700"
         textAnchor="middle"
-        fill="#0B0B18"
+        fill={labelClr}
       >
         {n1 - nCommon}
       </text>
@@ -2409,11 +2423,11 @@ const VennSVG = React.forwardRef(function VennSVG(
       <text
         x={(cx1 + cx2) / 2}
         y={cy}
-        fontFamily="Inter, sans-serif"
-        fontSize="28"
+        fontFamily={ff}
+        fontSize={midFS}
         fontWeight="800"
         textAnchor="middle"
-        fill="#0B0B18"
+        fill={labelClr}
       >
         {nCommon}
       </text>
@@ -2421,11 +2435,11 @@ const VennSVG = React.forwardRef(function VennSVG(
       <text
         x={cx2 + 60}
         y={cy}
-        fontFamily="Inter, sans-serif"
-        fontSize="26"
+        fontFamily={ff}
+        fontSize={countFS}
         fontWeight="700"
         textAnchor="middle"
-        fill="#0B0B18"
+        fill={labelClr}
       >
         {n2 - nCommon}
       </text>
@@ -2433,30 +2447,30 @@ const VennSVG = React.forwardRef(function VennSVG(
       <text
         x={cx1 - 20}
         y={cy - r - 12}
-        fontFamily="Inter, sans-serif"
-        fontSize="14"
+        fontFamily={ff}
+        fontSize={setFS}
         fontWeight="700"
         textAnchor="middle"
-        fill="#5139ED"
+        fill={setAColor}
       >
         {label1}
       </text>
       <text
         x={cx2 + 20}
         y={cy - r - 12}
-        fontFamily="Inter, sans-serif"
-        fontSize="14"
+        fontFamily={ff}
+        fontSize={setFS}
         fontWeight="700"
         textAnchor="middle"
-        fill="#8139ED"
+        fill={setBColor}
       >
         {label2}
       </text>
       <text
         x={(cx1 + cx2) / 2}
         y={h - 20}
-        fontFamily="Inter, sans-serif"
-        fontSize="11"
+        fontFamily={ff}
+        fontSize={capFS}
         textAnchor="middle"
         fill="#64748B"
       >

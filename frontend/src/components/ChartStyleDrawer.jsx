@@ -134,7 +134,7 @@ export default function ChartStyleDrawer({ open = false, onClose = () => {}, cha
         {/* Sizes */}
         <Section title="Sizes & opacity">
           {has("sizes", "nodeSize")      && <SliderRow label={chartType === "bubble" || chartType === "volcano" ? "Dot size" : "Node scale"} testid={`${scope}-size-node`}    min={0.3} max={3}   step={0.05} value={val("nodeSize") ?? style.nodeSize}         onChange={(v) => write({ nodeSize: v })} />}
-          {has("sizes", "edgeThickness") && <SliderRow label={chartType === "md" ? "Line width" : "Edge thickness"} testid={`${scope}-size-edge`}    min={0.3} max={6}   step={0.1}  value={val("edgeThickness") ?? style.edgeThickness} onChange={(v) => write({ edgeThickness: v })} />}
+          {has("sizes", "edgeThickness") && <SliderRow label={chartType === "md" ? "Line width" : chartType === "venn" ? "Circle stroke" : "Edge thickness"} testid={`${scope}-size-edge`}    min={0.3} max={6}   step={0.1}  value={val("edgeThickness") ?? style.edgeThickness} onChange={(v) => write({ edgeThickness: v })} />}
           {has("sizes", "labelSize")     && <SliderRow label="Label size" testid={`${scope}-size-label`}   min={8}   max={22}  step={1}    value={val("labelSize") ?? style.labelSize}       onChange={(v) => write({ labelSize: v })} />}
           {has("sizes", "opacity")       && <SliderRow label="Opacity"    testid={`${scope}-size-opacity`} min={0.2} max={1}   step={0.05} value={val("opacity") ?? style.opacity}           onChange={(v) => write({ opacity: v })} />}
         </Section>
@@ -197,7 +197,7 @@ export default function ChartStyleDrawer({ open = false, onClose = () => {}, cha
 
         {/* Palette editor */}
         {has("palette") && (
-          <Section title={chartType === "heatmap" ? "Colour scale" : "Palette"}>
+          <Section title={chartType === "heatmap" ? "Colour scale" : chartType === "venn" ? "Set colours (A · B · …)" : "Palette"}>
             <PaletteEditor
               testidPrefix={`${scope}-palette`}
               palette={applyToAll
