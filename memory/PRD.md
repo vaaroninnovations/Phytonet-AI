@@ -180,3 +180,24 @@ fields; sortable/searchable/paginated results table; export CSV/XLSX/JSON.
 **Manual (user-only) actions still pending:**
 - 🔴 Verify Google OAuth end-to-end by clicking "Continue with Google" on the live URL.
 - 🔴 Ship `/app/Dockerfile` via "Save to Github" so the deploy pipeline picks up AutoDock Vina.
+
+
+## 2026-02-21 — Deployment Readiness ✅
+- **Auth gate re-enabled for production**:
+  - `/app/backend/.env` → `AUTH_GATE_ENABLED="on"`
+  - `/app/frontend/src/context/AuthContext.jsx` → `export const AUTH_GATE_ENABLED = true;`
+  - Verified: anon `/api/auth/me` → 401, admin login → 200, protected `/api/projects` requires cookie.
+- **deployment_agent** health check: **PASS** — no blockers.
+  - ✅ All secrets in env vars (no hardcoded values in source)
+  - ✅ Supervisor config correct for FastAPI+React+Mongo
+  - ✅ `craco start` frontend script valid
+  - ✅ CORS `*` acceptable
+  - ✅ MongoDB via env vars only
+  - ✅ Google OAuth redirect URI in `.env` (auto-updated by platform on deploy)
+  - ✅ No compilation errors
+- **Ready to deploy** via the "Deploy" button in the chat toolbar.
+
+**Post-deploy manual steps for user:**
+- 🔴 Update Google OAuth Console → Authorized Redirect URIs with the new production domain
+- 🔴 Verify Groq API key balance and Resend sender domain in production
+- 🔴 Ensure `/app/Dockerfile` is pushed via "Save to Github" so AutoDock Vina/Open Babel/GROMACS are baked into the deployment image (self-healing `deps_check.py` is a fallback but Docker layer install is preferred)
