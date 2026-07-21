@@ -59,12 +59,26 @@ export function AuthModal() {
           <X className="h-4 w-4" />
         </button>
         <div className="px-8 pt-8">
-          <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">
-            Continue with your PhytoNet account
-          </p>
-          <h2 className="mt-1 font-display text-2xl font-bold tracking-tight text-[#0B0B18]">
-            {modalTab === "signin" ? "Welcome back" : "Create your account"}
-          </h2>
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-[#5139ED]/25 via-[#395AED]/20 to-[#2BB673]/20 blur-md" aria-hidden="true" />
+              <img
+                data-testid="auth-modal-logo"
+                src="/logo512.png"
+                alt="PhytoNet AI"
+                className="relative h-12 w-12 drop-shadow-[0_10px_25px_rgba(81,57,237,0.35)]"
+                draggable={false}
+              />
+            </div>
+            <div>
+              <p className="font-heading text-[10px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">
+                Continue with your PhytoNet account
+              </p>
+              <h2 className="mt-0.5 font-display text-2xl font-bold tracking-tight text-[#0B0B18]">
+                {modalTab === "signin" ? "Welcome back" : "Create your account"}
+              </h2>
+            </div>
+          </div>
           <div className="mt-4 inline-flex items-center gap-1 rounded-full border border-[#E7E7F3] bg-white p-1">
             <button data-testid="auth-tab-signin" onClick={() => setModalTab("signin")}
                     className={`rounded-full px-4 py-1.5 text-xs font-bold uppercase tracking-widest ${modalTab === "signin" ? "bg-[#5139ED] text-white" : "text-[#0B0B18] hover:text-[#5139ED]"}`}>

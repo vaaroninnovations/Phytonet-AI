@@ -9,6 +9,7 @@
         <link rel="icon" href="%PUBLIC_URL%/logo192.png" type="image/png" sizes="192x192" />
         <link rel="icon" href="%PUBLIC_URL%/logo512.png" type="image/png" sizes="512x512" />
         <link rel="apple-touch-icon" href="%PUBLIC_URL%/apple-touch-icon.png" />
+        <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
         <meta property="og:image" content="%PUBLIC_URL%/logo512.png" />
         <meta name="twitter:image" content="%PUBLIC_URL%/logo512.png" />
         <meta name="description" content="AI-powered medicinal plant research platform integrating network pharmacology, target prediction, cheminformatics, enrichment analysis, AI manuscript generation, graphical abstracts, and scientific workflows." />
@@ -38,7 +39,27 @@
     </head>
     <body>
         <noscript>You need to enable JavaScript to run this app.</noscript>
-        <div id="root"></div>
+        <style>
+            /* Boot splash — replaced by React once the bundle mounts. */
+            .pn-splash{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;background:radial-gradient(1200px 800px at 50% 20%,#F5F3FE 0%,#FAFAFF 55%,#FFFFFF 100%);font-family:'Plus Jakarta Sans','Inter',system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
+            .pn-splash-logo{width:96px;height:96px;filter:drop-shadow(0 20px 40px rgba(81,57,237,.25));animation:pn-splash-pulse 2.2s ease-in-out infinite}
+            .pn-splash-title{font-family:'Manrope','Plus Jakarta Sans',sans-serif;font-size:22px;font-weight:800;letter-spacing:-.02em;color:#0B0B18;margin:0}
+            .pn-splash-title>span{background:linear-gradient(90deg,#5139ED,#395AED 55%,#8139ED);-webkit-background-clip:text;background-clip:text;color:transparent}
+            .pn-splash-sub{font-size:12px;color:#64748B;letter-spacing:.18em;text-transform:uppercase;font-weight:600;margin:-8px 0 4px}
+            .pn-splash-bar{width:180px;height:3px;border-radius:99px;background:#E7E7F3;overflow:hidden;position:relative}
+            .pn-splash-bar::after{content:"";position:absolute;inset:0;width:40%;border-radius:99px;background:linear-gradient(90deg,#5139ED,#395AED,#8139ED);animation:pn-splash-slide 1.4s cubic-bezier(.4,0,.2,1) infinite}
+            @keyframes pn-splash-pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.04);opacity:.92}}
+            @keyframes pn-splash-slide{0%{left:-40%}100%{left:100%}}
+            @media (prefers-color-scheme: dark){.pn-splash{background:#0B0B18}.pn-splash-title{color:#F5F3FE}.pn-splash-sub{color:#94A3B8}.pn-splash-bar{background:#1E1E2E}}
+        </style>
+        <div id="root">
+            <div class="pn-splash" role="status" aria-live="polite">
+                <img class="pn-splash-logo" src="%PUBLIC_URL%/logo512.png" alt="PhytoNet AI" />
+                <p class="pn-splash-sub">PhytoNet · AI Scientist</p>
+                <h1 class="pn-splash-title">Loading <span>PhytoNet AI</span></h1>
+                <div class="pn-splash-bar" aria-hidden="true"></div>
+            </div>
+        </div>
         <!--
       This HTML file is a template.
       If you open it directly in the browser, you will see an empty page.
