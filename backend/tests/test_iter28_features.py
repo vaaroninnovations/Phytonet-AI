@@ -1,10 +1,10 @@
 """Iteration 28 backend tests — Google OAuth + SSE Docking."""
-import os
 import re
 import requests
-import pytest
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://herbal-nexus.preview.emergentagent.com").rstrip("/")
+from conftest import TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD, TEST_BASE_URL
+
+BASE_URL = TEST_BASE_URL
 
 
 # ----- Google OAuth -----
@@ -69,7 +69,7 @@ class TestAuthRegression:
     def test_admin_login(self):
         r = requests.post(
             f"{BASE_URL}/api/auth/login",
-            json={"email": "admin@phytonet.ai", "password": "Admin123!"},
+            json={"email": TEST_ADMIN_EMAIL, "password": TEST_ADMIN_PASSWORD},
             timeout=10,
         )
         assert r.status_code == 200

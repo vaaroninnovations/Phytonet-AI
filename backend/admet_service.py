@@ -5,7 +5,7 @@ import asyncio
 import logging
 import math
 import threading
-from typing import Iterable, List, Optional
+from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 

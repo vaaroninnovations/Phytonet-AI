@@ -9,17 +9,17 @@ Covers:
   - Basic homepage regressions (module imports & routes exist)
 """
 from __future__ import annotations
-import os
-import time
 import uuid
 import pytest
 import requests
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://herbal-nexus.preview.emergentagent.com").rstrip("/")
+from conftest import TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD, TEST_BASE_URL
+
+BASE_URL = TEST_BASE_URL
 API = f"{BASE_URL}/api"
 
-ADMIN_EMAIL = "admin@phytonet.ai"
-ADMIN_PASSWORD = "Admin123!"
+ADMIN_EMAIL = TEST_ADMIN_EMAIL
+ADMIN_PASSWORD = TEST_ADMIN_PASSWORD
 
 
 # ─────────────────────────── Fixtures ───────────────────────────

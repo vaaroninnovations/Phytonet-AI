@@ -22,9 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import math
-from collections import defaultdict
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Dict, List, Optional
 from urllib.parse import quote
 
 import httpx
@@ -278,16 +276,15 @@ async def _predict_for_compound(
     if not similar:
         return []
 
-    # 2. Compute exact query fingerprint (for consistent AI-prediction score).
-    q_fp = morgan_fp(query_smiles)
-
-    # 3. Gather activities in parallel per neighbour.
+    # 2. Gather activities in parallel per neighbour.
+    # (The similarity float returned by ChEMBL is used verbatim — no
+    #  local Morgan fingerprint recompute is required here.)
     mol_ids = [m.get("molecule_chembl_id") for m in similar if m.get("molecule_chembl_id")]
     activities_lists = await asyncio.gather(
         *[chembl_activities_for_molecule(client, mid) for mid in mol_ids]
     )
 
-    # 4. Aggregate per target.
+    # 3. Aggregate per target.
     per_target: Dict[str, dict] = {}
     # Map neighbour → similarity float
     sim_by_id = {}

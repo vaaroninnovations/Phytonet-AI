@@ -15,11 +15,10 @@ Run state is persisted to Mongo (`assistant_runs`) and can be polled via
 `GET /api/assistant/status/{run_id}`.
 """
 from __future__ import annotations
-import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from bson import ObjectId
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -27,6 +26,28 @@ from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/assistant")
+
+# ── Dependency injection: plant search callable ─────────────────────────────
+# `server.py` registers its `plant_search` handler here at import time so this
+# module never needs to `import server` (avoids circular-import coupling).
+# Signature: async (plant: str, limit: int, want_structure: bool, want_physchem: bool) -> dict | None
+_plant_search_impl: Optional[Any] = None
+
+
+def register_plant_search(fn) -> None:
+    """Register the plant search callable used by the Assistant workflow."""
+    global _plant_search_impl
+    _plant_search_impl = fn
+
+
+async def _do_plant_search(plant: str, limit: int, want_structure: bool, want_physchem: bool) -> Optional[dict]:
+    if _plant_search_impl is None:
+        logger.warning("Assistant: plant_search implementation not registered; skipping IMPPAT/LOTUS lookup.")
+        return None
+    return await _plant_search_impl(
+        plant=plant, limit=limit,
+        want_structure=want_structure, want_physchem=want_physchem,
+    )
 
 STAGES = [
     ("collect_phytochemicals",   "Collecting phytochemicals"),
@@ -73,7 +94,6 @@ async def initialize(db):
 
 async def _run_workflow(db, run_id: ObjectId, payload: AssistantRunRequest):
     """Background task — runs the pipeline stages and updates Mongo doc."""
-    now = datetime.now(timezone.utc)
     total = len(STAGES)
     completed_stages: list[dict] = []
 
@@ -95,25 +115,20 @@ async def _run_workflow(db, run_id: ObjectId, payload: AssistantRunRequest):
         )
 
     try:
-        # ── Direct service imports — no server.py dependency, no circular imports ──
+        # ── Direct service imports — decoupled from server.py (assistant_service
+        # no longer imports server, eliminating circular import). Plant search
+        # is injected by server.py at startup via `register_plant_search()`. ──
         import admet_service
         import disease_service
         import network_service
         import report_service
         import target_service
 
-        # `server` still owns plant/LC-MS endpoints; use a lazy import guarded
-        # by try to avoid coupling assistant_service to server bootstrap order.
-        try:
-            import server as _server
-        except Exception:
-            _server = None  # type: ignore
-
         # ═══ 1) Collect phytochemicals via IMPPAT+LOTUS search ═══
         await mark("collect_phytochemicals", "Collecting phytochemicals", "running")
         compounds: list[dict] = []
         try:
-            search_result = await _server.plant_search(
+            search_result = await _do_plant_search(
                 plant=payload.plant_name, limit=25,
                 want_structure=True, want_physchem=True,
             )

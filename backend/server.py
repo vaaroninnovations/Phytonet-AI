@@ -11,20 +11,13 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from pydantic import BaseModel, Field
-from typing import List, Optional, Literal, Dict, Any
+from typing import List, Optional
 from urllib.parse import quote
 import httpx
 from bs4 import BeautifulSoup
 
 from plants_seed import PLANTS_SEED
 import admet_service
-import target_service
-import disease_service
-import network_service
-import docking_service
-import md_service
-import execution_engines
-import report_service
 import projects_service
 import assistant_service
 import deps_check
@@ -404,6 +397,11 @@ async def plant_search(
         logging.warning(f"cache/index write failed: {e}")
 
     return result
+
+
+# Register plant_search with assistant_service so it can be called without
+# a circular import back into `server`.
+assistant_service.register_plant_search(plant_search)
 
 
 # ---------------------------------------------------------------------------
@@ -1234,7 +1232,6 @@ async def _startup():
     # docking / MD endpoints will return 503 with the same message instead of
     # exploding mid-batch with ENOENT.
     try:
-        import deps_check
         deps_check.check_all()
         deps_check.selftest_vina()
         missing = deps_check.get_missing_required()

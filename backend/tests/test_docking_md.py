@@ -1,6 +1,5 @@
 """Integration tests for the Molecular Docking + MD backend endpoints."""
 import os
-import time
 import httpx
 
 BASE = (os.environ.get("BASE_URL") or "http://localhost:8001").rstrip("/")

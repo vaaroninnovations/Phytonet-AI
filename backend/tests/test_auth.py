@@ -1,19 +1,20 @@
 """Auth-service integration tests."""
-import os
 import uuid
 import httpx
 
-BASE = (os.environ.get("BASE_URL") or "http://localhost:8001").rstrip("/")
+from conftest import TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD, TEST_BASE_URL
+
+BASE = TEST_BASE_URL
 
 
 def test_admin_login_returns_user_profile():
     """Login works when hit as HTTPS (Secure cookies are stripped on plain HTTP)."""
     r = httpx.post(f"{BASE}/api/auth/login",
-                   json={"email": "admin@phytonet.ai", "password": "Admin123!"},
+                   json={"email": TEST_ADMIN_EMAIL, "password": TEST_ADMIN_PASSWORD},
                    timeout=15.0)
     assert r.status_code == 200, r.text
     user = r.json()["user"]
-    assert user["email"] == "admin@phytonet.ai"
+    assert user["email"] == TEST_ADMIN_EMAIL
     assert user["role"] == "admin"
 
 
@@ -39,6 +40,6 @@ def test_register_creates_user_and_verifies_verification_token():
 
 def test_login_wrong_password_returns_401():
     r = httpx.post(f"{BASE}/api/auth/login",
-                   json={"email": "admin@phytonet.ai", "password": "wrongpass"},
+                   json={"email": TEST_ADMIN_EMAIL, "password": "wrongpass"},
                    timeout=15.0)
     assert r.status_code == 401

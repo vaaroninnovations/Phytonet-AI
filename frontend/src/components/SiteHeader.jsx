@@ -84,22 +84,13 @@ export default function SiteHeader() {
           {user && <SaveProjectMenu />}
 
           {!user ? (
-            <>
-              <button
-                data-testid="header-signin"
-                onClick={() => openModal("signin")}
-                className="hidden rounded-full border border-[#E7E7F3] bg-white px-3.5 py-1.5 text-[13px] font-semibold text-[#111827] hover:border-[#5139ED]/40 hover:text-[#5139ED] md:inline-flex"
-              >
-                Sign In
-              </button>
-              <button
-                data-testid="header-cta"
-                onClick={() => navigate("/phytonet-ai")}
-                className="group relative inline-flex items-center gap-1.5 overflow-hidden rounded-full bg-gradient-to-r from-[#5139ED] via-[#395AED] to-[#8139ED] px-4 py-2 text-[13px] font-bold text-white shadow-[0_6px_18px_-6px_rgba(81,57,237,0.55)] transition-all hover:shadow-[0_10px_28px_-6px_rgba(81,57,237,0.75)] hover:-translate-y-0.5"
-              >
-                <span className="relative z-10">Start Research</span>
-              </button>
-            </>
+            <button
+              data-testid="header-signin"
+              onClick={() => openModal("signin")}
+              className="inline-flex items-center rounded-full border border-[#E7E7F3] bg-white px-4 py-1.5 text-[13px] font-semibold text-[#111827] hover:border-[#5139ED]/40 hover:text-[#5139ED]"
+            >
+              Sign In
+            </button>
           ) : (
             <div className="relative">
               <button

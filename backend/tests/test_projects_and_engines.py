@@ -1,12 +1,13 @@
 """Projects service integration tests."""
-import os
 import uuid
 import httpx
 
-BASE = (os.environ.get("BASE_URL") or "http://localhost:8001").rstrip("/")
+from conftest import TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD, TEST_BASE_URL
+
+BASE = TEST_BASE_URL
 
 
-def _login_client(email="admin@phytonet.ai", password="Admin123!"):
+def _login_client(email: str = TEST_ADMIN_EMAIL, password: str = TEST_ADMIN_PASSWORD):
     # Use HTTPS-flavoured base if configured; otherwise keep localhost. httpx
     # respects Secure cookies only on HTTPS — for local test we manually copy the
     # Set-Cookie header into the client cookie jar (bypasses Secure enforcement).

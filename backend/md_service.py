@@ -14,13 +14,12 @@ import io
 import json
 import os
 import re
-import shutil
 import textwrap
 import uuid
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 MD_ROOT = Path(os.environ.get("MD_WORKDIR", "/tmp/phytonet_md"))
 MD_ROOT.mkdir(parents=True, exist_ok=True)

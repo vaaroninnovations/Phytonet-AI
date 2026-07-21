@@ -384,7 +384,7 @@ function InteractionDiagram2D({ pairId, interactions, ligandName, receptor }) {
           const style = INTERACTION_STYLE[r.type] || { color: "#94A3B8", stroke: "#64748B", label: r.type };
           const mx = (CX + x) / 2, my = (CY + y) / 2;
           return (
-            <g key={i}>
+            <g key={`${r.type}-${r.residue}-${r.chain}-${r.ligand_atom}-${i}`}>
               <line x1={CX} y1={CY} x2={x} y2={y} stroke={style.stroke}
                     strokeWidth="1.4"
                     strokeDasharray={r.type === "hydrogen_bond" ? "5,4" : r.type === "salt_bridge" ? "2,2" : "1,3"} />
@@ -441,7 +441,7 @@ function InteractionsTable({ interactions, pairId }) {
             {rows.map((r, i) => {
               const s = INTERACTION_STYLE[r.type] || { color: "#94A3B8", label: r.type };
               return (
-                <tr key={i} className={i % 2 ? "bg-white" : "bg-[#FAFAFF]"}>
+                <tr key={`${r.type}-${r.residue}-${r.chain}-${r.ligand_atom}-${i}`} className={i % 2 ? "bg-white" : "bg-[#FAFAFF]"}>
                   <td className="px-3 py-1.5 font-semibold text-[#0B0B18]">{r.residue}</td>
                   <td className="px-3 py-1.5 text-[#64748B]">{r.chain}</td>
                   <td className="px-3 py-1.5 font-mono text-[#64748B]">{r.ligand_atom}</td>

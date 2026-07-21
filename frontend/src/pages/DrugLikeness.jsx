@@ -1478,7 +1478,7 @@ function ScoreBreakdown({ score }) {
             </tr>
           ) : (
             score.breakdown.map((b, i) => (
-              <tr key={i} className="border-b border-[#F1F1FA]">
+              <tr key={`${b.category}-${b.parameter}-${i}`} className="border-b border-[#F1F1FA]">
                 <td className="px-2 py-1.5 text-[#64748B]">{catLabel[b.category]}</td>
                 <td className="px-2 py-1.5 font-semibold text-[#0B0B18]">
                   {b.parameter}

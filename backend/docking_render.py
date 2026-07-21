@@ -91,7 +91,6 @@ def render_complex_snapshot(
     palette = palette or {}
     receptor_color = palette.get("receptor", "#94A3B8")
     active_color   = palette.get("active",   "#F59E0B")
-    ligand_color   = palette.get("ligand",   "#5139ED")
     hbond_color    = palette.get("hbond",    "#0F7A47")
 
     atoms = _read_pdb_atoms(complex_pdb_text)

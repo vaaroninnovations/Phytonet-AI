@@ -478,8 +478,8 @@ export default function MolecularDocking() {
                 <details className="mt-2">
                   <summary className="cursor-pointer text-[10px] font-semibold text-[#5139ED]">Activity log ({progressEvents.length})</summary>
                   <ul data-testid="dock-progress-log" className="mt-2 max-h-40 overflow-y-auto space-y-1 font-mono text-[10px]">
-                    {progressEvents.slice(-40).reverse().map((e, i) => (
-                      <li key={i} className={
+                    {progressEvents.slice(-40).reverse().map((e) => (
+                      <li key={`${e.at}-${e.type}-${e.compound}-${e.target}`} className={
                         e.type === "error" ? "text-red-600" :
                         e.type === "done"  ? "text-[#2BB673]" : "text-[#64748B]"
                       }>

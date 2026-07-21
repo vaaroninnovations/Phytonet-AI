@@ -7,10 +7,9 @@ GROQ_API_KEY is unset.
 Model: `GROQ_MODEL` env var (default `llama-3.3-70b-versatile`).
 """
 from __future__ import annotations
-import json
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 import httpx
 

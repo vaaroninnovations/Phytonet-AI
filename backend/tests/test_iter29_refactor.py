@@ -10,8 +10,6 @@ Report-download tests use FastAPI TestClient with a mocked LLM (the live
 Emergent LLM is intermittently 502'ing in preview), so we still exercise the
 real router + report_service pipeline, just not the model call itself.
 """
-import os
-import re
 import sys
 import time
 import zipfile
@@ -20,10 +18,9 @@ from unittest.mock import patch
 import requests
 import pytest
 
-BASE_URL = os.environ.get(
-    "REACT_APP_BACKEND_URL",
-    "https://herbal-nexus.preview.emergentagent.com",
-).rstrip("/")
+from conftest import TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD, TEST_BASE_URL
+
+BASE_URL = TEST_BASE_URL
 
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
@@ -270,7 +267,7 @@ class TestAssistantDocxRegression:
         s = requests.Session()
         s.post(
             f"{BASE_URL}/api/auth/login",
-            json={"email": "admin@phytonet.ai", "password": "Admin123!"},
+            json={"email": TEST_ADMIN_EMAIL, "password": TEST_ADMIN_PASSWORD},
             timeout=15,
         )
         r = s.get(
@@ -312,7 +309,7 @@ class TestRegressionMainRouter:
         s = requests.Session()
         r = s.post(
             f"{BASE_URL}/api/auth/login",
-            json={"email": "admin@phytonet.ai", "password": "Admin123!"},
+            json={"email": TEST_ADMIN_EMAIL, "password": TEST_ADMIN_PASSWORD},
             timeout=15,
         )
         assert r.status_code == 200
@@ -322,4 +319,4 @@ class TestRegressionMainRouter:
         body = r2.json()
         # /me may return either {email:...} or {user:{email:...}}
         email = body.get("email") or (body.get("user") or {}).get("email")
-        assert email == "admin@phytonet.ai"
+        assert email == TEST_ADMIN_EMAIL

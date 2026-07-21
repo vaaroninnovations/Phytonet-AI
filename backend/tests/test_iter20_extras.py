@@ -1,14 +1,16 @@
 """Iter 20 additional coverage: cloud engine, restore-version, resend-verification-public, engine options schema."""
-import os
+from __future__ import annotations
 import io
 import uuid
 import zipfile
 import httpx
 
-BASE = (os.environ.get("BASE_URL") or "http://localhost:8001").rstrip("/")
+from conftest import TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD, TEST_BASE_URL
+
+BASE = TEST_BASE_URL
 
 
-def _login_client(email="admin@phytonet.ai", password="Admin123!"):
+def _login_client(email: str = TEST_ADMIN_EMAIL, password: str = TEST_ADMIN_PASSWORD):
     c = httpx.Client(base_url=BASE, timeout=20.0)
     r = c.post("/api/auth/login", json={"email": email, "password": password})
     assert r.status_code == 200, r.text
