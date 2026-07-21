@@ -221,7 +221,7 @@ export default function PlantDatabase({ topRightSlot = null }) {
       if (!p) return toast.error("Enter a plant name");
       if (typeof plantOverride === "string") setPlant(p);
       setSourcePlant(p);
-      try { networkCtx?.setPlantName?.(p); } catch (e) {}
+      try { networkCtx?.setPlantName?.(p); } catch (e) { console.debug("networkCtx.setPlantName failed:", e); }
       return runSearch(
         () =>
           searchPlant(p, {

@@ -1322,7 +1322,7 @@ function HubSubgraphNetwork({ ppiResult, scores, metric, topN }) {
 
   useEffect(() => {
     const cy = cyRef.current; if (!cy) return;
-    try { cy.layout({ name: layout, animate: false, fit: true, padding: 30, concentric: (n) => n.data("scoreNorm") || 0.1, levelWidth: () => 2, minNodeSpacing: 30 }).run(); } catch (e) {}
+    try { cy.layout({ name: layout, animate: false, fit: true, padding: 30, concentric: (n) => n.data("scoreNorm") || 0.1, levelWidth: () => 2, minNodeSpacing: 30 }).run(); } catch (e) { console.debug("cy.layout run failed:", e); }
   }, [layout, elements]);
 
   const hubStyle = useAppliedStyle("hub");
@@ -1680,8 +1680,8 @@ function GOBarChart({ terms }) {
     <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} className="mt-3"
          style={{ fontFamily: s.fontFamily, borderRadius: s.borderRadius, border: s.showBorder ? `1px solid ${s.borderColor}` : "none" }}>
       <rect x="0" y="0" width={w} height={h} fill={s.background} />
-      {s.showGrid && [0.25, 0.5, 0.75, 1].map((f, i) => (
-        <line key={i} x1={labelW + f * barMax} x2={labelW + f * barMax} y1={20} y2={h - 40}
+      {s.showGrid && [0.25, 0.5, 0.75, 1].map((f) => (
+        <line key={`grid-${f}`} x1={labelW + f * barMax} x2={labelW + f * barMax} y1={20} y2={h - 40}
               stroke={s.grid} strokeWidth="0.5" />
       ))}
       {terms.map((t, i) => {
@@ -1744,9 +1744,9 @@ function GODotPlot({ terms }) {
     <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} className="mt-3"
          style={{ fontFamily: s.fontFamily, borderRadius: s.borderRadius, border: s.showBorder ? `1px solid ${s.borderColor}` : "none" }}>
       <rect x="0" y="0" width={w} height={h} fill={s.background} />
-      {s.showGrid && [0.25, 0.5, 0.75, 1].map((f, i) => (
+      {s.showGrid && [0.25, 0.5, 0.75, 1].map((f) => (
         <line
-          key={i}
+          key={`grid-${f}`}
           x1={plotL + f * plotW}
           x2={plotL + f * plotW}
           y1={20}
@@ -2192,8 +2192,8 @@ function KEGGDotPlot({ rows }) {
     <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} className="mt-3"
          style={{ fontFamily: s.fontFamily, borderRadius: s.borderRadius, border: s.showBorder ? `1px solid ${s.borderColor}` : "none" }}>
       <rect x="0" y="0" width={w} height={h} fill={s.background} />
-      {s.showGrid && [0.25, 0.5, 0.75, 1].map((f, i) => (
-        <line key={i} x1={plotL + f * plotW} x2={plotL + f * plotW} y1={20} y2={h - 40}
+      {s.showGrid && [0.25, 0.5, 0.75, 1].map((f) => (
+        <line key={`grid-${f}`} x1={plotL + f * plotW} x2={plotL + f * plotW} y1={20} y2={h - 40}
               stroke={s.grid} strokeWidth="0.5" />
       ))}
       {rows.map((r, i) => {

@@ -156,7 +156,7 @@ export default function MolecularDynamics() {
           (first.options || []).forEach((o) => { opts[o.key] = o.default; });
           setEngineOptions(opts);
         }
-      } catch (e) {}
+      } catch (e) { console.debug("mdEngines fetch failed:", e); }
     })();
   }, []);
 
@@ -178,7 +178,7 @@ export default function MolecularDynamics() {
 
   useEffect(() => {
     (async () => {
-      try { const est = await mdEstimate(cfg); setEstimate(est); } catch (e) {}
+      try { const est = await mdEstimate(cfg); setEstimate(est); } catch (e) { console.debug("mdEstimate failed:", e); }
     })();
   }, [cfg]);
 

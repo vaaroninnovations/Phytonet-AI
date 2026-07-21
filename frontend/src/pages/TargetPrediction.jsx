@@ -110,8 +110,10 @@ export default function TargetPrediction() {
               setStatus("failed");
               toast.error("Target prediction failed — please retry.");
             }
-          } catch {
-            /* ignore */
+          } catch (e) {
+            // Poll transient errors are non-fatal — log for observability but
+            // keep polling. Real failures are surfaced via the setStatus above.
+            console.debug("target poll transient error:", e);
           }
         }, 1200);
       } catch (e) {

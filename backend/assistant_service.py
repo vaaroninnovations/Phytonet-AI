@@ -95,12 +95,19 @@ async def _run_workflow(db, run_id: ObjectId, payload: AssistantRunRequest):
         )
 
     try:
-        # ── Real service imports (direct calls — no HTTP-to-self overhead) ──
-        import server as _server
+        # ── Direct service imports — no server.py dependency, no circular imports ──
         import admet_service
         import disease_service
         import network_service
         import report_service
+        import target_service
+
+        # `server` still owns plant/LC-MS endpoints; use a lazy import guarded
+        # by try to avoid coupling assistant_service to server bootstrap order.
+        try:
+            import server as _server
+        except Exception:
+            _server = None  # type: ignore
 
         # ═══ 1) Collect phytochemicals via IMPPAT+LOTUS search ═══
         await mark("collect_phytochemicals", "Collecting phytochemicals", "running")
@@ -149,24 +156,21 @@ async def _run_workflow(db, run_id: ObjectId, payload: AssistantRunRequest):
         compound_targets: list[dict] = []
         try:
             picks_for_targets = (admet_rows or compounds)[:15]
-            job_payload = _server.TargetPredictPayload(compounds=[
-                _server.TargetCompound(compound_name=c.get("compound_name") or c.get("name", "cpd"),
-                                       smiles=c["smiles"])
+            cpd_list = [
+                {"compound_name": c.get("compound_name") or c.get("name", "cpd"),
+                 "smiles": c["smiles"]}
                 for c in picks_for_targets if c.get("smiles")
-            ])
-            job_res = await _server.target_predict(job_payload)
-            jid = job_res.get("job_id")
-            if jid:
-                # poll up to ~180s to accommodate slow ChEMBL responses
-                for _ in range(180):
-                    await asyncio.sleep(1.0)
-                    st = await _server.target_status(jid)
-                    if st.get("status") == "done":
-                        compound_targets = st.get("rows", []) or []
-                        break
-                    if st.get("status") == "failed":
-                        logger.warning(f"target_predict job failed: {st.get('error')}")
-                        break
+            ]
+            # Call the underlying service directly — bypasses the HTTP route
+            # (which lives in /app/backend/routes/target.py) but reuses the
+            # same core logic. No caching layer, which is fine for a one-shot
+            # assistant run.
+            async def _noop(*_a, **_kw):
+                return None
+            compound_targets = await target_service.run_target_prediction_job(
+                cpd_list, on_progress=_noop,
+                cache_lookup=_noop, cache_store=_noop,
+            ) or []
         except Exception as e:
             logger.warning(f"target_predict failed: {e}")
         await mark("target_prediction", "Predicting molecular targets", "done",

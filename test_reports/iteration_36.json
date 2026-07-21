@@ -1,0 +1,39 @@
+{
+  "summary": "Backend-only regression + focused verification of the assistant_service circular/stale import fix. Backend starts cleanly (no ImportError, [deps] ✓ vina, Application startup complete). All 7 verification cases passed: (1) /api/deps/status HTTP 200 ok=true; (2) GET /api/assistant/runs HTTP 200 (imports clean after target_service refactor); (3) POST /api/assistant/run + poll /api/assistant/status/{id} → completed with status='done', progress=100, all 10 stages green, target_prediction stage reported n_targets=2 with NO AttributeError about TargetPredictPayload; (4) POST /api/target/predict + GET /api/target/status/{job_id} HTTP 200 both; (5) POST /api/docking/run aspirin×PTGS1 HTTP 200; (6) Full pytest regression 12/12 pass + 1 auth-gate skip. Old 'target_predict failed: module server has no attribute TargetPredictPayload' warnings in backend.err.log are all pre-fix (dated 2026-07-15 / 2026-07-20); zero such warnings after the fix (2026-07-21 14:40 run).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "server.py startup", "issue": "Multiple PydanticDeprecatedSince20 warnings (class-based Config on AdmetCompound L425 & StandardizeCompoundIn L534) and FastAPI on_event deprecation warnings — non-blocking, but should migrate to ConfigDict and lifespan events before Pydantic V3 / FastAPI upgrades."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_docking_pose.py",
+    "/app/backend/tests/test_report.py",
+    "/app/backend/tests/test_target_disease.py",
+    "/app/backend/tests/test_projects_and_engines.py",
+    "/app/test_reports/pytest/iter36_results.xml"
+  ],
+  "action_items": [
+    "OPTIONAL cleanup: migrate class-based Pydantic Config -> ConfigDict (server.py:425, 534) and on_event -> lifespan handlers (server.py:1181, 1252) to silence deprecation warnings.",
+    "Consider removing the residual `try: import server as _server` lazy-guard in assistant_service.py once plant_search / LC-MS endpoints are moved out of server.py to their own service module (currently only used at L116)."
+  ],
+  "critical_code_review_comments": [
+    "assistant_service.py L157-177 fix is clean: calls target_service.run_target_prediction_job directly with no-op progress/cache callbacks — no server.py coupling for target-prediction step. Verified by successful run producing n_targets=2 for Curcuma longa top-15 compounds.",
+    "Fallback `try: import server as _server; except: _server=None` at L107-110 is pragmatic but hides the fact that plant_search / lcms_extract / etc. still live in server.py. A subsequent NoneType error would only surface at runtime inside the try/except at L115-122 (currently caught and logged as warning). Acceptable short-term; long-term move plant_service out of server.py.",
+    "Empty-catch fixes in frontend (PlantDatabase L224, NetworkAnalysis L1325, MolecularDynamics L159/L181, TargetPrediction L113) are appropriate — console.debug preserves observability without spamming users.",
+    "Index-as-key fix in NetworkAnalysis.jsx (grid-${f}) is correct for static [0.25,0.5,0.75,1] arrays that never reorder."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "not tested (backend-only per request)"},
+  "test_credentials": "AUTH_GATE_ENABLED=off — synthetic admin user resolved automatically by auth_service.make_get_current_user for all protected endpoints.",
+  "seed_data_creation": "None. One assistant run created (id=6a5f84d1beb3bcb4c6e01266) as part of verification; a docking job (job_id=ef2b7ed78df2) and target-prediction job also created. All are ephemeral verification artifacts.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The assistant workflow completes end-to-end in ~30s for Curcuma longa × diabetes (docking is deferred/skipped in the assistant path per business rule). Final status is 'done' (not 'completed'). The 'TargetPredictPayload' AttributeError bug is fully resolved — no reproductions after 2026-07-21 14:40. Regression suite: run `BASE_URL=<REACT_APP_BACKEND_URL> pytest /app/backend/tests/test_docking_pose.py tests/test_report.py tests/test_target_disease.py tests/test_projects_and_engines.py -v` (12 pass, 1 skip expected).",
+  "rca of the issue": "ROOT CAUSE: A previous refactor moved TargetPredictPayload / target_predict / target_status from server.py to /app/backend/routes/target.py but assistant_service.py still called them via `_server.TargetPredictPayload`, `_server.target_predict`, `_server.target_status`. Because `import server as _server` succeeded, the failure only surfaced at attribute-lookup time inside the target_prediction stage, where a broad `except Exception` swallowed it into a WARNING log and marked the stage 'done' with n_targets=0 — silent data loss. REPRODUCTION (pre-fix): trigger any assistant run and grep backend.err.log for 'no attribute TargetPredictPayload' (visible entries from 2026-07-15 & 2026-07-20). MITIGATION (applied): assistant_service.py L157-177 now calls target_service.run_target_prediction_job(cpd_list, on_progress=_noop, cache_lookup=_noop, cache_store=_noop) directly, using the same core logic the route uses; server.py import kept only as a lazy guard for the plant_search endpoint still hosted there. VERIFIED: fresh assistant run 6a5f84d1beb3bcb4c6e01266 completed with target_prediction n_targets=2 and zero AttributeError entries after 14:40."
+}
