@@ -16,18 +16,22 @@ import { DataTable } from "@/components/network/DataTable";
 import { useAppliedStyle } from "@/context/ChartStyleContext";
 import { CustomizeFigureButton } from "@/components/CustomizeFigureButton";
 
+// Reviewer-specified node styling (Plant hex-green, Compound ● blue,
+// Target ▭ orange, Pathway ◆ purple, Disease ⬣ red). These map 1:1 with
+// PCTDP_PALETTE / PCTDP_SHAPES in `pctdpBuilder.js`.
 const TYPE_META = {
-  plant:    { color: "#10B981", shape: "round-rectangle", label: "Plant" },
-  compound: { color: "#8139ED", shape: "ellipse",         label: "Compound" },
-  target:   { color: "#5139ED", shape: "diamond",         label: "Target" },
-  disease:  { color: "#EF4444", shape: "hexagon",         label: "Disease" },
-  pathway:  { color: "#F59E0B", shape: "round-rectangle", label: "KEGG Pathway" },
+  plant:    { color: "#10B981", shape: "hexagon",         label: "Plant" },
+  compound: { color: "#2563EB", shape: "ellipse",         label: "Compound" },
+  target:   { color: "#F59E0B", shape: "round-rectangle", label: "Target Gene" },
+  pathway:  { color: "#8139ED", shape: "diamond",         label: "KEGG Pathway" },
+  disease:  { color: "#DC2626", shape: "octagon",         label: "Disease" },
 };
 const REL_COLOR = {
   contains: "#10B981",
-  targets: "#8139ED",
-  associated_with: "#EF4444",
+  targets: "#2563EB",
   part_of: "#F59E0B",
+  involved_in: "#8139ED",
+  associated_with: "#DC2626",
   disease_pathway: "#94A3B8",
 };
 
@@ -48,6 +52,28 @@ export function PCTDPPanel({ intersectingGenes = [], selectedKeggPathways = [], 
   const cyRef = useRef(null);
   const containerRef = useRef(null);
 
+  // ── Progressive expansion state ─────────────────────────────────────────
+  // Initially only the plant node is "expanded" — user clicks each level to
+  // reveal its children. `null` means fully-expanded (Show-all button).
+  const plantId = plantInput ? `plant::${plantInput.trim().replace(/\s+/g, "_")}` : null;
+  const [expanded, setExpanded] = useState(() => new Set(plantId ? [plantId] : []));
+  const [showAll, setShowAll] = useState(false);
+  useEffect(() => {
+    // When the plant name changes, seed the expansion set with the new plant id.
+    if (plantId) setExpanded((s) => (s.has(plantId) ? s : new Set([...s, plantId])));
+  }, [plantId]);
+  const toggleExpand = (id) => setExpanded((prev) => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+  const collapseAll = () => setExpanded(new Set(plantId ? [plantId] : []));
+  const expandAll = () => setShowAll(true);
+  const setSelective = () => setShowAll(false);
+
+  // Hovered node for tooltip.
+  const [hover, setHover] = useState(null);   // { x, y, node }
+
   const graph = useMemo(() => buildPCTDPGraph({
     plantName: plantInput || "Unknown Plant",
     selectedCompounds,
@@ -57,7 +83,8 @@ export function PCTDPPanel({ intersectingGenes = [], selectedKeggPathways = [], 
     intersectingGenes,
     keggPathways: selectedKeggPathways,
     include,
-  }), [plantInput, selectedCompounds, compoundTargets, diseaseTargets, selectedDisease, intersectingGenes, selectedKeggPathways, include]);
+    expanded: showAll ? null : expanded,
+  }), [plantInput, selectedCompounds, compoundTargets, diseaseTargets, selectedDisease, intersectingGenes, selectedKeggPathways, include, expanded, showAll]);
 
   const metrics = useMemo(() => computeNetworkMetrics(graph.nodes, graph.edges), [graph]);
 
@@ -278,15 +305,47 @@ export function PCTDPPanel({ intersectingGenes = [], selectedKeggPathways = [], 
             No data available yet. Complete the previous Network Analysis steps to populate compounds, targets, disease and pathways.
           </div>
         ) : (
-          <div className="h-[620px] w-full rounded-2xl border border-[#F1F1FA]" style={{ background: chartStyle.background }}>
+          <div className="relative h-[620px] w-full rounded-2xl border border-[#F1F1FA]" style={{ background: chartStyle.background }}>
             <CytoscapeComponent
               key={"pctdp-" + elements.length}
-              cy={(cy) => { cyRef.current = cy; }}
+              cy={(cy) => {
+                cyRef.current = cy;
+                // Progressive expansion: tap a node to reveal its children.
+                cy.off("tap", "node"); cy.off("mouseover", "node"); cy.off("mouseout", "node");
+                cy.on("tap", "node", (evt) => {
+                  const id = evt.target.id();
+                  toggleExpand(id);
+                });
+                cy.on("mouseover", "node", (evt) => {
+                  const n = graph.nodes.find((x) => x.id === evt.target.id());
+                  if (!n) return;
+                  const pos = evt.renderedPosition || evt.target.renderedPosition();
+                  const rect = cy.container().getBoundingClientRect();
+                  setHover({ x: rect.left + pos.x, y: rect.top + pos.y, node: n });
+                });
+                cy.on("mouseout", "node", () => setHover(null));
+              }}
               elements={elements}
               layout={layoutOptions(layout, graph.nodes.length)}
               stylesheet={stylesheet}
               style={{ width: "100%", height: "100%" }}
             />
+            {/* Hover tooltip */}
+            {hover && <PCTDPTooltip x={hover.x} y={hover.y} node={hover.node} />}
+            {/* Expansion controls (floating top-right) */}
+            <div data-testid="pctdp-expansion-controls" className="absolute right-3 top-3 flex gap-1.5 rounded-full border border-[#E7E7F3] bg-white/95 p-1 shadow-[0_4px_12px_-4px_rgba(0,0,0,0.15)]">
+              <button data-testid="pctdp-selective" onClick={setSelective}
+                      className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest ${!showAll ? "bg-[#5139ED] text-white" : "text-[#64748B] hover:bg-[#F5F3FE]"}`}>Selective</button>
+              <button data-testid="pctdp-expand-all" onClick={expandAll}
+                      className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest ${showAll ? "bg-[#5139ED] text-white" : "text-[#64748B] hover:bg-[#F5F3FE]"}`}>Show All</button>
+              <button data-testid="pctdp-collapse" onClick={collapseAll}
+                      className="rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-[#64748B] hover:bg-[#F5F3FE]">Collapse</button>
+            </div>
+            {!showAll && (
+              <p data-testid="pctdp-hint" className="pointer-events-none absolute bottom-3 left-3 rounded-full bg-white/95 px-3 py-1 text-[10px] font-semibold text-[#64748B] shadow-sm">
+                Click any node to expand its children · Plant → Compound → Target → Pathway → Disease
+              </p>
+            )}
           </div>
         )}
         {/* Legend */}
@@ -378,3 +437,52 @@ function layoutOptions(name, nodeCount = 20) {
   }
   return { name, animate: false, fit: true, padding: 40 };
 }
+
+// ─────────────────────────────────────────────────────────────
+// Hover tooltip — shows contextual fields for each node type.
+// ─────────────────────────────────────────────────────────────
+function PCTDPTooltip({ x, y, node }) {
+  if (!node) return null;
+  const rows = [];
+  if (node.type === "plant") {
+    rows.push(["Species", node.label]);
+  } else if (node.type === "compound") {
+    rows.push(["Compound", node.label]);
+    if (node.imppat_id)      rows.push(["IMPPAT", node.imppat_id]);
+    if (node.pubchem_cid)    rows.push(["PubChem", node.pubchem_cid]);
+    if (node.mw != null)     rows.push(["Mol. weight", `${Number(node.mw).toFixed(2)} Da`]);
+    if (node.logp != null)   rows.push(["LogP", Number(node.logp).toFixed(2)]);
+    if (node.drug_likeness != null) rows.push(["Drug-likeness", Number(node.drug_likeness).toFixed(2)]);
+  } else if (node.type === "target") {
+    rows.push(["Gene symbol", node.label]);
+    if (node.uniprot)        rows.push(["UniProt", node.uniprot]);
+    if (node.protein_name)   rows.push(["Protein", node.protein_name]);
+    if (node.intersecting)   rows.push(["Intersecting", "Yes"]);
+  } else if (node.type === "pathway") {
+    rows.push(["Pathway", node.fullLabel || node.label]);
+    if (node.gene_count != null) rows.push(["Mapped targets", node.gene_count]);
+    if (node.adj_p_value != null) rows.push(["Adj. P", Number(node.adj_p_value).toExponential(2)]);
+  } else if (node.type === "disease") {
+    rows.push(["Disease", node.label]);
+    if (node.n_pathways != null) rows.push(["Assoc. pathways", node.n_pathways]);
+    if (node.db_ids)              rows.push(["Database ID", node.db_ids]);
+  }
+  const W = 240, H = 22 * rows.length + 40;
+  const left = Math.min(Math.max(8, x + 14), window.innerWidth - W - 8);
+  const top  = Math.min(Math.max(8, y + 14), window.innerHeight - H - 8);
+  return (
+    <div style={{ position: "fixed", left, top, width: W, zIndex: 90 }}
+         className="pointer-events-none rounded-xl border border-[#E7E7F3] bg-white/98 px-3 py-2 shadow-[0_10px_25px_-10px_rgba(0,0,0,0.25)] backdrop-blur">
+      <p className="text-[9px] font-bold uppercase tracking-widest text-[#5139ED]">{node.type}</p>
+      <div className="mt-1 space-y-0.5">
+        {rows.map(([k, v]) => (
+          <div key={k} className="flex items-baseline gap-2 text-[11px]">
+            <span className="w-24 shrink-0 text-[#64748B]">{k}</span>
+            <span className="min-w-0 flex-1 truncate font-semibold text-[#0B0B18]">{String(v)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
