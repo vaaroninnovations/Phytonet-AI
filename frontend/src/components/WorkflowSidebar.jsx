@@ -75,7 +75,15 @@ export default function WorkflowSidebar() {
         >
           {step.label}
         </span>
-        {active && (
+        {step.comingSoon && (
+          <span
+            data-testid={`workflow-badge-${step.id}`}
+            className="rounded-full border border-[#F59E0B]/40 bg-[#FEF3C7] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-[#92400E]"
+          >
+            {step.badge || "Soon"}
+          </span>
+        )}
+        {active && !step.comingSoon && (
           <span className="rounded-full bg-[#5139ED]/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-[#5139ED]">
             Now
           </span>

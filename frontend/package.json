@@ -45,6 +45,7 @@
     "cytoscape-svg": "^0.4.0",
     "date-fns": "4.1.0",
     "dayjs": "1.11.13",
+    "docx": "^9.7.1",
     "embla-carousel-react": "8.6.0",
     "file-saver": "^2.0.5",
     "framer-motion": "11.18.0",

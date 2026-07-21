@@ -9,6 +9,9 @@ import {
 /**
  * Nine-step workflow shared by all modules. Compound Standardization is an
  * automatic backend step and does NOT appear here.
+ *
+ * Molecular Dynamics is placeholder-only in v1.0 (`comingSoon: true`).
+ * It does not block Report Generation (see `isAccessible`).
  */
 export const WORKFLOW_STEPS = [
   { id: "plant-database", label: "Plant Database", route: "/phytonet-ai" },
@@ -17,8 +20,8 @@ export const WORKFLOW_STEPS = [
   { id: "disease-target-identification", label: "Disease Target Identification", route: "/disease-target-identification" },
   { id: "network-analysis", label: "Network Analysis", route: "/network-analysis" },
   { id: "molecular-docking", label: "Molecular Docking", route: "/molecular-docking" },
-  { id: "molecular-dynamics", label: "Molecular Dynamics", route: "/molecular-dynamics" },
-  { id: "ai-scientific-report", label: "AI Scientific Report", route: "/ai-scientific-report" },
+  { id: "molecular-dynamics", label: "Molecular Dynamics", route: "/molecular-dynamics", comingSoon: true, badge: "v2.0" },
+  { id: "ai-scientific-report", label: "Report Generation", route: "/ai-scientific-report" },
 ];
 
 const stepIndex = (id) => WORKFLOW_STEPS.findIndex((s) => s.id === id);
@@ -43,14 +46,17 @@ export function WorkflowProvider({ children }) {
   const isCompleted = useCallback((stepId) => !!completed[stepId], [completed]);
 
   /**
-   * A step is accessible if every step before it is completed. This locks
-   * future steps until the current workflow position advances.
+   * A step is accessible if every non-`comingSoon` step before it is
+   * completed. `comingSoon` steps are never required — v1.0 skips MD as a
+   * prerequisite so Report Generation opens after Docking.
    */
   const isAccessible = useCallback(
     (stepId) => {
       const i = stepIndex(stepId);
       if (i < 0) return false;
-      return WORKFLOW_STEPS.slice(0, i).every((s) => !!completed[s.id]);
+      return WORKFLOW_STEPS.slice(0, i).every(
+        (s) => s.comingSoon || !!completed[s.id]
+      );
     },
     [completed]
   );
