@@ -1,48 +1,62 @@
 // Figure-scoped chart customization drawer.
 //
-// Controlled component. Consumers embed it as:
-//    <ChartStyleDrawer open={open} onClose={...} chartType="go" />
-//
-// The drawer:
-//   • Shows only options relevant to the given chartType (schema-driven).
-//   • Writes changes to `byChart[chartType]` by default (this figure only).
-//   • Offers a "Apply current style to all figures in this project" toggle
-//     that instead writes to global scope + clears the per-chart override so
-//     changes propagate everywhere.
-import { useMemo, useState } from "react";
-import { Palette, RotateCcw, X, Grid, Type as TypeIcon, LayoutGrid } from "lucide-react";
+// Preview / Apply / Cancel semantics:
+//   • While the drawer is open, every control write goes into an EPHEMERAL
+//     preview layer (context.preview[chartType]). Consumers of
+//     useAppliedStyle() see the preview immediately → live preview without
+//     touching localStorage.
+//   • Apply commits the preview into the persistent applied state.
+//   • Cancel / clicking the backdrop / pressing Esc discards the preview,
+//     restoring the previously applied configuration.
+//   • Reset clears the per-chart applied override entirely.
+import { useEffect, useMemo, useState } from "react";
+import { Palette, RotateCcw, X, Grid, Type as TypeIcon, LayoutGrid, Check } from "lucide-react";
 import { useChartStyle, THEMES, CHART_TYPES, schemaFor } from "@/context/ChartStyleContext";
 
 export default function ChartStyleDrawer({ open = false, onClose = () => {}, chartType = "global" }) {
   const [applyToAll, setApplyToAll] = useState(false);
-  const { style, raw, set, setForChart, resetChart, reset } = useChartStyle();
+  const {
+    style, raw, preview,
+    set, setForChart, resetChart, reset,
+    previewPatch, discardPreview, commitPreview,
+  } = useChartStyle();
 
-  const scope = applyToAll ? "global" : chartType;
-  const chartOverride = (raw.byChart || {})[chartType] || {};
+  const scope = applyToAll ? "__global" : chartType;
+  const chartOverride  = (raw.byChart || {})[chartType] || {};
+  const globalPreview  = (preview || {}).__global || {};
+  const chartPreview   = (preview || {})[chartType] || {};
   const schema = useMemo(() => schemaFor(chartType), [chartType]);
 
-  // Write: either global raw.* or per-chart byChart[chartType]
-  const write = (patch) => {
-    if (applyToAll) {
-      // Push to global AND clear the per-chart override so the global change
-      // becomes visible on this figure.
-      set(patch);
-      const keysToClear = Object.keys(patch);
-      const nextOverride = { ...chartOverride };
-      keysToClear.forEach((k) => { delete nextOverride[k]; });
-      if (raw.byChart?.[chartType]) {
-        // resetChart wipes the entire override; we want a partial clear.
-        // Emulate by pushing an object where only the affected keys are gone.
-        setForChart(chartType, {});
-      }
-      void nextOverride;
-    } else {
-      setForChart(chartType, patch);
+  // Discard any leftover preview when the drawer is closed via unmount.
+  useEffect(() => {
+    if (!open) {
+      // Only discard if user closed WITHOUT applying — the Apply button clears it.
+      // Guard: if there is nothing in preview, this is a no-op.
+      discardPreview(scope);
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  // Escape closes the drawer without applying.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => { if (e.key === "Escape") handleCancel(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, scope]);
+
+  // Write into the preview layer (never straight to applied state).
+  const write = (patch) => previewPatch(scope, patch);
+
+  // Resolve current value in strict priority order:
+  //   preview[scope]  →  applied per-chart  →  applied global
   const val = (k) => {
-    if (applyToAll) return raw[k] ?? null;
-    return chartOverride[k] ?? raw[k] ?? null;
+    // preview may store patch keys either as store keys (backgroundColor) or applied keys.
+    const p = applyToAll ? globalPreview : chartPreview;
+    if (p[k] !== undefined) return p[k];
+    if (!applyToAll && chartOverride[k] !== undefined) return chartOverride[k];
+    return raw[k] ?? null;
   };
   const has = (section, field) => {
     if (!schema[section]) return false;
@@ -53,20 +67,45 @@ export default function ChartStyleDrawer({ open = false, onClose = () => {}, cha
   const chartMeta = useMemo(() =>
     CHART_TYPES.find((c) => c.key === chartType), [chartType]);
 
+  const hasPending = Object.keys(applyToAll ? globalPreview : chartPreview).length > 0;
+
+  const handleApply = () => {
+    commitPreview(scope);
+    onClose();
+  };
+  const handleCancel = () => {
+    discardPreview(scope);
+    onClose();
+  };
+  const handleResetToDefault = () => {
+    // Reset clears both applied override AND active preview.
+    if (applyToAll) reset(); else resetChart(chartType);
+    discardPreview(scope);
+  };
+
+  // Effective palette that the palette editor should render (preview → applied → theme).
+  const effectivePalette = useMemo(() => {
+    if (applyToAll) {
+      return globalPreview.paletteOverride ?? raw.paletteOverride ?? style.palette;
+    }
+    return chartPreview.palette ?? chartOverride.palette ?? style.palette;
+  }, [applyToAll, globalPreview, chartPreview, chartOverride, raw, style]);
+
   if (!open) return null;
 
   return (
     <div
       data-testid="chart-style-backdrop"
       className="fixed inset-0 z-[80] flex justify-end bg-[#0B0B18]/30 backdrop-blur-sm"
-      onClick={onClose}
+      onClick={handleCancel}
     >
       <aside
         data-testid="chart-style-drawer"
         onClick={(e) => e.stopPropagation()}
-        className="flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-[#E7E7F3] bg-white p-6 shadow-2xl"
+        className="flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-[#E7E7F3] bg-white shadow-2xl"
       >
-        <div className="flex items-center justify-between">
+        {/* Sticky header */}
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#F1F1FA] bg-white/95 px-6 py-4 backdrop-blur">
           <div>
             <p className="font-headline text-[11px] font-bold uppercase tracking-widest text-[#5139ED]">
               Figure customization
@@ -75,27 +114,35 @@ export default function ChartStyleDrawer({ open = false, onClose = () => {}, cha
               {chartMeta?.label || "Figure style"}
             </h2>
           </div>
-          <button data-testid="chart-style-close" onClick={onClose}
-                  className="grid h-8 w-8 place-items-center rounded-full text-[#64748B] hover:bg-[#F8FAFC]">
-            <X className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-1">
+            {hasPending && <span data-testid="chart-style-dirty" className="rounded-full bg-[#FEF3C7] px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-[#92400E]">Preview</span>}
+            <button data-testid="chart-style-close" onClick={handleCancel}
+                    className="grid h-8 w-8 place-items-center rounded-full text-[#64748B] hover:bg-[#F8FAFC]"
+                    aria-label="Cancel">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
+        <div className="flex-1 space-y-5 px-6 py-5">
         {/* Scope toggle */}
-        <label className="mt-4 flex items-center gap-2 rounded-2xl border border-[#5139ED]/20 bg-[#F5F3FE] p-3">
-          <input
-            data-testid="chart-style-apply-all"
-            type="checkbox"
+        <label className="flex items-center gap-3 rounded-2xl border border-[#5139ED]/20 bg-[#F5F3FE] p-3">
+          <Switch
+            testid="chart-style-apply-all"
             checked={applyToAll}
-            onChange={(e) => setApplyToAll(e.target.checked)}
-            className="h-4 w-4 accent-[#5139ED]"
+            onCheckedChange={(v) => {
+              // When the user flips scope while there's a preview, discard it —
+              // otherwise the preview payload would target the wrong scope.
+              discardPreview(scope);
+              setApplyToAll(v);
+            }}
           />
           <div className="flex-1">
-            <p className="text-[12px] font-bold text-[#0B0B18]">Apply current style to all figures in this project</p>
-            <p className="mt-0.5 text-[10.5px] text-[#64748B]">
+            <p className="text-[12px] font-bold text-[#0B0B18]">Apply to all figures in this project</p>
+            <p className="mt-0.5 text-[10.5px] leading-snug text-[#64748B]">
               {applyToAll
-                ? "Changes propagate to every figure globally."
-                : "Changes apply only to this figure."}
+                ? "Changes will propagate to every figure globally on Apply."
+                : "Changes will apply only to this figure on Apply."}
             </p>
           </div>
         </label>
@@ -104,20 +151,24 @@ export default function ChartStyleDrawer({ open = false, onClose = () => {}, cha
         {applyToAll && (
           <Section title="Theme" icon={<Palette className="h-3 w-3" />}>
             <div className="grid grid-cols-1 gap-2">
-              {Object.entries(THEMES).map(([k, t]) => (
-                <button key={k} data-testid={`theme-${k}`} onClick={() => set({ themeKey: k })}
-                        className={`flex items-center gap-3 rounded-xl border p-2.5 text-left transition-all ${
-                          raw.themeKey === k
-                            ? "border-[#5139ED] bg-[#F5F3FE]"
-                            : "border-[#E7E7F3] bg-white hover:border-[#5139ED]/40"}`}>
-                  <div className="flex gap-0.5">
-                    {t.palette.slice(0, 5).map((c) => (
-                      <span key={c} className="h-4 w-2.5 rounded-sm" style={{ background: c }} />
-                    ))}
-                  </div>
-                  <p className="flex-1 text-[12px] font-bold text-[#0B0B18]">{t.label}</p>
-                </button>
-              ))}
+              {Object.entries(THEMES).map(([k, t]) => {
+                const active = (val("themeKey") ?? raw.themeKey) === k;
+                return (
+                  <button key={k} data-testid={`theme-${k}`} onClick={() => write({ themeKey: k })}
+                          className={`flex items-center gap-3 rounded-xl border p-2.5 text-left transition-all ${
+                            active
+                              ? "border-[#5139ED] bg-[#F5F3FE]"
+                              : "border-[#E7E7F3] bg-white hover:border-[#5139ED]/40"}`}>
+                    <div className="flex gap-0.5">
+                      {t.palette.slice(0, 5).map((c) => (
+                        <span key={c} className="h-4 w-2.5 rounded-sm" style={{ background: c }} />
+                      ))}
+                    </div>
+                    <p className="flex-1 text-[12px] font-bold text-[#0B0B18]">{t.label}</p>
+                    {active && <Check className="h-3.5 w-3.5 text-[#5139ED]" />}
+                  </button>
+                );
+              })}
             </div>
           </Section>
         )}
@@ -181,9 +232,9 @@ export default function ChartStyleDrawer({ open = false, onClose = () => {}, cha
                 <button
                   key={f.label}
                   data-testid={`font-${f.label}`}
-                  onClick={() => set({ fontFamily: f.k })}
+                  onClick={() => write({ fontFamily: f.k })}
                   className={`rounded-lg border px-2 py-1.5 text-[11px] font-bold transition-all ${
-                    (raw.fontFamily || null) === (f.k || null)
+                    (val("fontFamily") || null) === (f.k || null)
                       ? "border-[#5139ED] bg-[#F5F3FE] text-[#5139ED]"
                       : "border-[#E7E7F3] bg-white text-[#0B0B18] hover:border-[#5139ED]/40"}`}
                   style={f.k ? { fontFamily: f.k } : {}}
@@ -200,37 +251,34 @@ export default function ChartStyleDrawer({ open = false, onClose = () => {}, cha
           <Section title={chartType === "heatmap" ? "Colour scale" : chartType === "venn" ? "Set colours (A · B · …)" : "Palette"}>
             <PaletteEditor
               testidPrefix={`${scope}-palette`}
-              palette={applyToAll
-                ? (raw.paletteOverride ?? style.palette)
-                : (chartOverride.palette || style.palette)}
+              palette={effectivePalette}
               onChange={(next) => applyToAll
-                ? set({ paletteOverride: next })
-                : setForChart(chartType, { palette: next })}
+                ? write({ paletteOverride: next })
+                : write({ palette: next })}
             />
           </Section>
         )}
-
-        {/* Actions */}
-        <div className="mt-6 flex items-center justify-between gap-3">
-          {applyToAll ? (
-            <button data-testid="chart-style-reset" onClick={reset}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-[#E7E7F3] bg-white px-4 py-2 text-[12px] font-bold text-[#0B0B18] hover:border-[#5139ED]/40">
-              <RotateCcw className="h-3.5 w-3.5" /> Reset all figures
-            </button>
-          ) : (
-            <button data-testid={`chart-style-reset-${chartType}`} onClick={() => resetChart(chartType)}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-[#E7E7F3] bg-white px-4 py-2 text-[12px] font-bold text-[#0B0B18] hover:border-[#5139ED]/40">
-              <RotateCcw className="h-3.5 w-3.5" /> Reset this figure
-            </button>
-          )}
-          <button data-testid="chart-style-save" onClick={onClose}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-[#5139ED] px-5 py-2 text-[12px] font-bold text-white hover:bg-[#4127c9]">
-            Done
-          </button>
         </div>
-        <p className="mt-2 text-[10px] text-[#94A3B8]">
-          Preferences are saved locally to your browser and applied to this figure on all devices logged into this account.
-        </p>
+
+        {/* Sticky footer — Reset / Cancel / Apply */}
+        <div className="sticky bottom-0 z-10 flex items-center justify-between gap-2 border-t border-[#F1F1FA] bg-white/95 px-6 py-3 backdrop-blur">
+          <button data-testid={applyToAll ? "chart-style-reset" : `chart-style-reset-${chartType}`}
+                  onClick={handleResetToDefault}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-[#E7E7F3] bg-white px-3 py-2 text-[12px] font-bold text-[#0B0B18] hover:border-[#5139ED]/40">
+            <RotateCcw className="h-3.5 w-3.5" /> Reset
+          </button>
+          <div className="flex items-center gap-2">
+            <button data-testid="chart-style-cancel" onClick={handleCancel}
+                    className="rounded-full border border-[#E7E7F3] bg-white px-4 py-2 text-[12px] font-bold text-[#0B0B18] hover:border-[#5139ED]/40">
+              Cancel
+            </button>
+            <button data-testid="chart-style-apply" onClick={handleApply}
+                    disabled={!hasPending}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-[#5139ED] px-5 py-2 text-[12px] font-bold text-white shadow-[0_4px_12px_-4px_rgba(81,57,237,0.5)] hover:bg-[#4127c9] disabled:cursor-not-allowed disabled:opacity-40">
+              <Check className="h-3.5 w-3.5" /> Apply
+            </button>
+          </div>
+        </div>
       </aside>
     </div>
   );
@@ -239,18 +287,18 @@ export default function ChartStyleDrawer({ open = false, onClose = () => {}, cha
 /* ── Building blocks ────────────────────────────────────────────────── */
 function Section({ title, icon, children }) {
   return (
-    <div className="mt-6">
+    <div>
       <p className="font-headline flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-[#64748B]">
         {icon}{title}
       </p>
-      <div className="mt-3 space-y-2.5">{children}</div>
+      <div className="mt-2.5 space-y-2.5">{children}</div>
     </div>
   );
 }
 
 function ColorRow({ label, testid, value, onChange }) {
   return (
-    <div className="flex items-center justify-between rounded-lg border border-[#E7E7F3] bg-[#FAFAFF] px-3 py-2">
+    <div className="flex h-10 items-center justify-between rounded-lg border border-[#E7E7F3] bg-[#FAFAFF] px-3">
       <span className="text-[12px] font-semibold text-[#0B0B18]">{label}</span>
       <label className="flex cursor-pointer items-center gap-2">
         <input data-testid={testid} type="color" value={value || "#000000"}
@@ -264,7 +312,7 @@ function ColorRow({ label, testid, value, onChange }) {
 
 function SliderRow({ label, testid, min, max, step, value, onChange }) {
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex h-10 items-center gap-3 rounded-lg border border-[#E7E7F3] bg-[#FAFAFF] px-3">
       <span className="w-28 text-[11px] font-semibold text-[#0B0B18]">{label}</span>
       <input data-testid={testid} type="range" min={min} max={max} step={step}
              value={value} onChange={(e) => onChange(Number(e.target.value))}
@@ -276,20 +324,44 @@ function SliderRow({ label, testid, min, max, step, value, onChange }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// Switch — shadcn/ui-spec sizing.
+//   track:  h-6  w-11   (24 × 44)
+//   thumb:  h-5  w-5    (20 × 20)
+//   off:    thumb translate-x-0.5   (2px in)
+//   on:     thumb translate-x-[22px] (22px right, leaves 2px margin)
+// Thumb is CENTERED vertically via top-1/2 + -translate-y-1/2 so it never
+// escapes the track when the label text wraps or the parent uses baseline.
+// ─────────────────────────────────────────────────────────────────────
+function Switch({ testid, checked, onCheckedChange, disabled = false }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      data-testid={testid}
+      disabled={disabled}
+      onClick={() => onCheckedChange(!checked)}
+      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5139ED] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${
+        checked ? "bg-[#5139ED]" : "bg-[#D5D5E8]"
+      }`}
+    >
+      <span
+        aria-hidden="true"
+        className={`pointer-events-none block h-5 w-5 rounded-full bg-white shadow ring-0 transition-transform ${
+          checked ? "translate-x-[22px]" : "translate-x-0.5"
+        }`}
+      />
+    </button>
+  );
+}
+
 function ToggleRow({ label, testid, value, onChange }) {
   return (
-    <label className="flex cursor-pointer items-center justify-between rounded-lg border border-[#E7E7F3] bg-[#FAFAFF] px-3 py-2">
+    <div className="flex h-10 items-center justify-between rounded-lg border border-[#E7E7F3] bg-[#FAFAFF] px-3">
       <span className="text-[12px] font-semibold text-[#0B0B18]">{label}</span>
-      <button
-        data-testid={testid}
-        type="button"
-        onClick={() => onChange(!value)}
-        aria-pressed={value}
-        className={`relative h-5 w-9 rounded-full transition-all ${value ? "bg-[#5139ED]" : "bg-[#D5D5E8]"}`}
-      >
-        <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${value ? "translate-x-4" : "translate-x-0.5"}`} />
-      </button>
-    </label>
+      <Switch testid={testid} checked={!!value} onCheckedChange={onChange} />
+    </div>
   );
 }
 

@@ -244,6 +244,9 @@ export function ChartStyleProvider({ children }) {
       return { ...DEFAULT_STYLE, ...s, byChart: { ...(s.byChart || {}) } };
     } catch { return DEFAULT_STYLE; }
   });
+  // Ephemeral preview overrides, keyed by chartType. Never persisted.
+  // Consumers read via `useAppliedStyle` which layers preview on top of applied.
+  const [preview, setPreview] = useState({});   // { [chartType]: {patch}, __global?: {patch} }
 
   useEffect(() => {
     try { localStorage.setItem(KEY, JSON.stringify(style)); } catch { /* ignore */ }
@@ -267,6 +270,19 @@ export function ChartStyleProvider({ children }) {
       return { ...s, byChart: next };
     }), []);
   const reset = useCallback(() => setStyle({ ...DEFAULT_STYLE }), []);
+
+  // ── Preview API — ephemeral edits, read by useAppliedStyle ──────────
+  const previewPatch = useCallback((scope, patch) =>
+    setPreview((p) => ({ ...p, [scope]: { ...(p[scope] || {}), ...patch } })), []);
+  const discardPreview = useCallback((scope) =>
+    setPreview((p) => { const n = { ...p }; delete n[scope]; return n; }), []);
+  const commitPreview = useCallback((scope) => {
+    const patch = preview[scope];
+    if (!patch) return;
+    if (scope === "__global") set(patch);
+    else setForChart(scope, patch);
+    discardPreview(scope);
+  }, [preview, set, setForChart, discardPreview]);
 
   const resolveBase = useMemo(() => ({
     theme,
@@ -295,9 +311,12 @@ export function ChartStyleProvider({ children }) {
   const value = useMemo(() => ({
     style: resolveBase,
     raw: style,
+    preview,
     set, setForChart, resetChart, reset,
+    previewPatch, discardPreview, commitPreview,
     THEMES, CHART_TYPES,
-  }), [resolveBase, style, set, setForChart, resetChart, reset]);
+  }), [resolveBase, style, preview, set, setForChart, resetChart, reset,
+      previewPatch, discardPreview, commitPreview]);
 
   return <ChartStyleContext.Provider value={value}>{children}</ChartStyleContext.Provider>;
 }
@@ -330,24 +349,51 @@ export function mixHex(hex, target = "#FFFFFF", t = 0.75) {
  * Convenience hook: universal style merged with per-chart-type overrides.
  * Chart components should use this and treat it as their live style.
  *
+ * Layering (highest priority last):
+ *   1. universal applied  (raw.*)
+ *   2. per-chart applied  (raw.byChart[chartType])
+ *   3. universal preview  (preview.__global)
+ *   4. per-chart preview  (preview[chartType])
+ *
+ * Preview layers are ephemeral — they never touch localStorage. This lets the
+ * drawer live-preview while editing and discard the edits on Cancel.
+ *
  *   const s = useAppliedStyle("go");
  *   <rect fill={s.palette[0]} />
  */
 export function useAppliedStyle(chartType) {
-  const { style, raw } = useChartStyle();
+  const { style, raw, preview } = useChartStyle();
   return useMemo(() => {
-    const override = (raw.byChart || {})[chartType] || {};
-    const merged = { ...style };
+    const chartApplied  = (raw.byChart || {})[chartType] || {};
+    const globalPreview = (preview || {}).__global || {};
+    const chartPreview  = (preview || {})[chartType] || {};
     const passthrough = [
       "background", "node", "edge", "labelColor", "grid",
       "nodeSize", "edgeThickness", "labelSize", "opacity",
       "legendPosition", "showGrid", "showBorder", "borderColor",
       "borderRadius", "showLegend", "fontFamily",
     ];
-    passthrough.forEach((k) => { if (override[k] !== undefined && override[k] !== null) merged[k] = override[k]; });
-    if (Array.isArray(override.palette) && override.palette.length) {
-      merged.palette = override.palette;
-    }
+    // Map style-store keys (e.g. `backgroundColor`) → applied keys (`background`)
+    const keyMap = {
+      backgroundColor: "background",
+      nodeColor: "node",
+      edgeColor: "edge",
+      labelColor: "labelColor",
+      gridColor: "grid",
+    };
+    const merged = { ...style };
+    const layer = (src) => {
+      Object.entries(src).forEach(([k, v]) => {
+        if (v === undefined || v === null) return;
+        const mk = keyMap[k] || k;
+        if (passthrough.includes(mk)) merged[mk] = v;
+        if (k === "palette" && Array.isArray(v) && v.length) merged.palette = v;
+        if (k === "paletteOverride" && Array.isArray(v) && v.length) merged.palette = v;
+      });
+    };
+    layer(chartApplied);
+    layer(globalPreview);
+    layer(chartPreview);
     return merged;
-  }, [style, raw, chartType]);
+  }, [style, raw, preview, chartType]);
 }

@@ -130,6 +130,14 @@ export function PCTDPPanel({ intersectingGenes = [], selectedKeggPathways = [], 
     { selector: ":selected", style: { "border-color": "#F97316", "border-width": 3 } },
   ], [chartStyle]);
 
+  // Live-apply PCTDP stylesheet to the mounted Cytoscape without re-mounting.
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    try { cy.style().fromJson(stylesheet).update(); }
+    catch (e) { console.debug("pctdp cy.style update failed:", e); }
+  }, [stylesheet]);
+
   const nodeTableRows = useMemo(() => graph.nodes.map((n) => {
     const c = centrality?.get(n.id) || {};
     return {

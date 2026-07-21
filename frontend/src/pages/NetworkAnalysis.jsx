@@ -928,6 +928,22 @@ function PPIPanel({ genes, ppiResult, setPpiResult, onComplete }) {
     },
   ], [ppiStyle]);
 
+  // Live-apply stylesheet to the mounted Cytoscape instance whenever the
+  // computed stylesheet changes — react-cytoscapejs does not do this on prop
+  // updates, so we bridge it manually. This preserves zoom / pan / selection
+  // (no re-mount) and delivers the live-preview behaviour required by the
+  // customization panel.
+  useEffect(() => {
+    const cy = ppiCyRef.current;
+    if (!cy) return;
+    try {
+      cy.style().fromJson(stylesheet).update();
+      // Also reflect the background (Cytoscape does not manage the wrapper's
+      // background; we set it via inline style on the CytoscapeComponent host,
+      // and React will re-render when ppiStyle changes, so this is a no-op).
+    } catch (e) { console.debug("cy.style update failed:", e); }
+  }, [stylesheet]);
+
   const exportEdges = () => {
     if (!filteredResult) return;
     const flat = filteredResult.edges.map((e) => ({
@@ -1345,6 +1361,14 @@ function HubSubgraphNetwork({ ppiResult, scores, metric, topN }) {
       "opacity": 0.6 * hubStyle.opacity,
     } },
   ], [hubStyle, hubNodeLow]);
+
+  // Live-apply hub stylesheet without re-mounting (preserves zoom / pan).
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    try { cy.style().fromJson(stylesheet).update(); }
+    catch (e) { console.debug("hub cy.style update failed:", e); }
+  }, [stylesheet]);
 
   if (subgraph.nodes.length === 0) return null;
   return (
