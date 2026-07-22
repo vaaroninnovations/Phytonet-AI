@@ -52,17 +52,38 @@ usermod -aG docker phytonet
 su - phytonet
 git clone https://github.com/<your-org>/phytonet-ai.git
 cd phytonet-ai
-
-cp .env.example .env
-nano .env                # fill REQUIRED values (see §4)
 ```
 
-### 3.1 Generate strong secrets
+### 3.1 Zero-touch first boot (dev-safe defaults)
+
+The compose file ships with dev-only defaults for every mandatory value.
+A fresh clone can be started immediately:
 
 ```bash
-# JWT + session secrets
-echo "JWT_SECRET=$(openssl rand -hex 48)"       >> .env
-echo "SESSION_SECRET=$(openssl rand -hex 48)"   >> .env
+docker compose up -d --build
+```
+
+The app boots with `JWT_SECRET`, `SESSION_SECRET`, `ADMIN_PASSWORD` etc. set
+to placeholder values — **safe for a first smoke test, NOT for a public
+deployment**.
+
+### 3.2 Configure for production
+
+Before exposing to the internet, override the dev defaults:
+
+```bash
+cp .env.example .env
+nano .env                # fill REQUIRED values (see §4)
+docker compose up -d --force-recreate backend celery_worker celery_beat frontend
+```
+
+### 3.3 Generate strong secrets
+
+```bash
+{
+  echo "JWT_SECRET=$(openssl rand -hex 48)"
+  echo "SESSION_SECRET=$(openssl rand -hex 48)"
+} >> .env
 ```
 
 ---

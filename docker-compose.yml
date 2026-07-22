@@ -32,11 +32,14 @@ x-backend-env: &backend-env
   CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
   CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
   # ─── Auth / sessions ───
+  # ⚠️ The defaults below let `docker compose up -d --build` work on a fresh
+  #    clone. They are DEV-ONLY. Replace before exposing the app to the
+  #    internet — see README-DEPLOY.md §10 "Security checklist".
   AUTH_GATE_ENABLED: ${AUTH_GATE_ENABLED:-on}
-  JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
-  SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET must be set in .env}
-  ADMIN_EMAIL: ${ADMIN_EMAIL:?ADMIN_EMAIL must be set in .env}
-  ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD must be set in .env}
+  JWT_SECRET: ${JWT_SECRET:-CHANGE_ME_dev_only_jwt_secret_do_not_use_in_production_00000000}
+  SESSION_SECRET: ${SESSION_SECRET:-CHANGE_ME_dev_only_session_secret_do_not_use_in_production}
+  ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@phytonet.local}
+  ADMIN_PASSWORD: ${ADMIN_PASSWORD:-ChangeMe123!}
   CORS_ORIGINS: ${CORS_ORIGINS:-*}
   FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
   # ─── Google OAuth ───
@@ -61,6 +64,8 @@ x-backend-env: &backend-env
   GROMACS_EXECUTABLE: /usr/bin/gmx
   # ─── Runtime tunables ───
   AUTO_INSTALL_MISSING_DEPS: "off"
+  # Ensures `backend.celery_app` resolves inside the worker container.
+  PYTHONPATH: /app
 
 services:
   # ─────────────────────────── Data layer ───────────────────────────
