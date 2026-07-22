@@ -85,6 +85,43 @@ let webpackConfig = {
     },
     configure: (webpackConfig) => {
 
+      // ── Fix for `docx` package build failure ──
+      // CRA runs babel-preset-react-app/dependencies on external .mjs files
+      // (node_modules). That preset includes @babel/plugin-transform-parameters
+      // but not @babel/plugin-transform-classes, which crashes on modern
+      // libraries like `docx` v9+ that emit `super()` inside arrow functions
+      // with rest params. Inject the missing plugin into that specific rule.
+      const injectClassPlugin = (rule) => {
+        if (!rule) return;
+        if (rule.oneOf) {
+          rule.oneOf.forEach(injectClassPlugin);
+          return;
+        }
+        const isDepsRule =
+          rule.loader &&
+          rule.loader.includes('babel-loader') &&
+          rule.options &&
+          Array.isArray(rule.options.presets) &&
+          rule.options.presets.some((p) => {
+            const name = Array.isArray(p) ? p[0] : p;
+            return typeof name === 'string' && name.includes('babel-preset-react-app/dependencies');
+          });
+        if (isDepsRule) {
+          rule.options.plugins = [
+            // Order matters: class-properties + private-methods MUST run
+            // before transform-classes, otherwise the latter chokes on
+            // undeclared class-field syntax (e.g. `_checkCrc;` in fast-png).
+            require.resolve('@babel/plugin-transform-class-properties'),
+            require.resolve('@babel/plugin-transform-private-methods'),
+            require.resolve('@babel/plugin-transform-private-property-in-object'),
+            require.resolve('@babel/plugin-transform-classes'),
+            ...(rule.options.plugins || []),
+          ];
+          console.log('[craco] injected class/props transforms into deps babel-loader rule (plugins now:', rule.options.plugins.length, ')');
+        }
+      };
+      (webpackConfig.module.rules || []).forEach(injectClassPlugin);
+
       // Add ignored patterns to reduce watched directories
         webpackConfig.watchOptions = {
           ...webpackConfig.watchOptions,

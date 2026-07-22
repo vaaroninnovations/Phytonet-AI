@@ -40,8 +40,9 @@ COPY frontend/ ./
 ARG REACT_APP_BACKEND_URL=""
 ENV REACT_APP_BACKEND_URL=$REACT_APP_BACKEND_URL
 
-# Speed up CRA production build and skip source maps for smaller image
-ENV GENERATE_SOURCEMAP=false CI=true
+# Speed up CRA production build, skip source maps and lint (lint is a dev-time
+# check; a prod build should not fail on `exhaustive-deps` warnings).
+ENV GENERATE_SOURCEMAP=false CI=false DISABLE_ESLINT_PLUGIN=true
 
 RUN yarn build
 
