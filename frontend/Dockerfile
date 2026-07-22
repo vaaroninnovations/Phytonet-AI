@@ -18,9 +18,18 @@ FROM node:20-bookworm-slim AS builder
 
 WORKDIR /app/frontend
 
-# Install deps first for optimal layer caching
-COPY frontend/package.json frontend/yarn.lock ./
-RUN yarn install --frozen-lockfile --network-timeout 600000
+# Install deps first for optimal layer caching.
+# NOTE: yarn.lock is glob-copied (`yarn.lock*`) so the build still works if
+# a fresh clone somehow lacks the lockfile — we then fall back to a
+# lockfile-less install. In production the lockfile MUST be tracked.
+COPY frontend/package.json ./
+COPY frontend/yarn.lock* ./
+RUN if [ -f yarn.lock ]; then \
+      yarn install --frozen-lockfile --network-timeout 600000; \
+    else \
+      echo "⚠️  yarn.lock missing — falling back to non-deterministic install"; \
+      yarn install --network-timeout 600000; \
+    fi
 
 # Copy source and build
 COPY frontend/ ./
