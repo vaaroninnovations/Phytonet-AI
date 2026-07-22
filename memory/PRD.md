@@ -201,3 +201,31 @@ fields; sortable/searchable/paginated results table; export CSV/XLSX/JSON.
 - 🔴 Update Google OAuth Console → Authorized Redirect URIs with the new production domain
 - 🔴 Verify Groq API key balance and Resend sender domain in production
 - 🔴 Ensure `/app/Dockerfile` is pushed via "Save to Github" so AutoDock Vina/Open Babel/GROMACS are baked into the deployment image (self-healing `deps_check.py` is a fallback but Docker layer install is preferred)
+
+
+
+## 2026-02-22 — Code Review Fixes (HIGH + MEDIUMs) ✅
+
+Deployment readiness re-check + functional code review completed. Applied blocking fixes only (LOWs deferred).
+
+**Deployment**
+- ✅ Removed `.env` / `.env.*` / `*.env` from `/app/.gitignore` — env files must be tracked so Emergent's build injects prod values.
+- 🔴 Remaining deployment blocker: heavy ML stack in `backend/requirements.txt` (`torch`, `admet_ai`, `chemprop`, `pytorch-lightning`). Exceeds Emergent's 250m CPU / 1Gi memory / 2 replica limits. **Requires product decision** — strip to "Coming Soon (v2.0)" like MD, refactor to external ML API, or self-host with GPU/large-memory infra.
+
+**Code Review — Confirmed defects fixed**
+- 🔴 HIGH — `backend/docking_service.py:761-766`: error-placeholder `DockResult(..., pdb_id=...)` used non-existent field, raising `TypeError` and crashing entire docking batches when any target lacked a PDB structure. Fixed by using `receptor_pdb=` (correct dataclass field).
+- 🟠 MEDIUM — `frontend/src/pages/DiseaseTargets.jsx`: `doExport`/`onContinue` used `displayed` (filtered view) instead of `rows`; genes selected before a filter tightened were silently dropped from Network Analysis. Now filters `rows` by `selected`.
+- 🟠 MEDIUM — `frontend/src/pages/MolecularDocking.jsx`: SSE `error` events weren't appended to results table, and header showed "job undefined". Now (1) captures `job_id` from first `pair_done`, (2) appends failed pairs as result rows so users can see/download them, and (3) conditionally omits "job …" text when no id yet.
+
+**Regression protection**
+- New test `backend/tests/test_docking_no_receptor.py` — asserts `run_docking_batch` returns a graceful error row (not raises) when no PDB structure is found. ✅ Passes.
+
+**LOW defects — deferred (per user)**
+- SSE reader lacks `AbortController`/unmount cancellation in `MolecularDocking.jsx`.
+- Dead branch + duplicate aromatic-ring recomputation in `docking_service.py:406-423`.
+- `reportBuilder.js` fixed section numbers create TOC gaps; "Table undefined" when `hubScores` yields zero rows.
+
+**Next Action Items**
+- Product decision on ML deployment blocker (see options above).
+- P1 backlog: refactor large components (`PlantDatabase.jsx`, `MolecularDocking.jsx`, `DiseaseTargets.jsx`).
+- P2 backlog: Molecular Dynamics server-side execution (v2.0).

@@ -759,7 +759,7 @@ async def run_docking_batch(compounds: List[Dict[str, str]],
             rec = receptors.get(t["uniprot_id"])
             if not rec or rec.get("error"):
                 pairs.append(DockResult(c["name"], c["smiles"], t["uniprot_id"],
-                                        pdb_id=(rec or {}).get("pdb_id", ""),
+                                        receptor_pdb=(rec or {}).get("pdb_id", ""),
                                         best_affinity=0.0, poses=[], interactions={},
                                         pose_pdbqt_path="", log_path="", job_id=job_id,
                                         pair_id=f"{c['name']}_x_{t['uniprot_id']}",

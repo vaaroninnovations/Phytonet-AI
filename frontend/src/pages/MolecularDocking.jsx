@@ -235,7 +235,7 @@ export default function MolecularDocking() {
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
-      let buffer = ""; let finalResults = [];
+      let buffer = ""; let finalResults = []; let streamJobId = null;
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -254,15 +254,40 @@ export default function MolecularDocking() {
           } else if (eName === "pair_done") {
             setProgressDone((d) => d + 1);
             setProgressEvents((p) => [...p, { type: "done", ...data, at: Date.now() }]);
+            if (!streamJobId && data?.result?.job_id) streamJobId = data.result.job_id;
           } else if (eName === "error") {
             setProgressDone((d) => d + 1);
             setProgressEvents((p) => [...p, { type: "error", ...data, at: Date.now() }]);
+            // Surface failed pairs in the results table so users can see them.
+            const cmp = selectedComp.find((c) => c.name === data.compound) || {};
+            const tgt = targets.find((t) => (t.gene_symbol || t.uniprot_id) === data.target) || {};
+            finalResults.push({
+              ligand_name: data.compound || cmp.name || "",
+              ligand_smiles: cmp.smiles || "",
+              receptor_uniprot: tgt.uniprot_id || "",
+              receptor_pdb: tgt.pdb_id || "",
+              best_affinity: 0.0,
+              poses: [],
+              interactions: {},
+              pose_pdbqt_path: "",
+              log_path: "",
+              job_id: streamJobId || "",
+              pair_id: `${data.compound || "?"}_x_${tgt.uniprot_id || data.target || "?"}`,
+              error: data.error || "Docking failed",
+            });
           } else if (eName === "done") {
-            finalResults = data.results || [];
+            const doneResults = data.results || [];
+            // Merge streamed error entries with backend-reported successes.
+            const errorEntries = finalResults.filter((r) => r.error);
+            finalResults = [...doneResults, ...errorEntries];
+            if (!streamJobId) {
+              const jid = doneResults.find((r) => r?.job_id)?.job_id;
+              if (jid) streamJobId = jid;
+            }
           }
         }
       }
-      const res = { results: finalResults };
+      const res = { results: finalResults, job_id: streamJobId || "" };
       setResult(res);
       setDockingResults(res);
       markComplete("molecular-docking");
@@ -549,7 +574,7 @@ export default function MolecularDocking() {
             <div className="rounded-3xl border border-[#E7E7F3] bg-white p-5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">Docking Results — job {result.job_id}</p>
+                  <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">Docking Results{result.job_id ? ` — job ${result.job_id}` : ""}</p>
                   <h2 className="mt-1 font-display text-lg font-bold tracking-tight text-[#0B0B18]">Ranked by binding affinity (kcal/mol)</h2>
                 </div>
                 <TableToolbar

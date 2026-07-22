@@ -195,7 +195,7 @@ export default function DiseaseTargets() {
   };
 
   const doExport = (fn, filename) => {
-    const list = displayed.filter((r) => selected[rowId(r)]);
+    const list = rows.filter((r) => selected[rowId(r)]);
     if (list.length === 0) return toast.error("Select targets to export");
     const flat = list.map((r) => ({
       Disease: chosen?.name || "",
@@ -216,7 +216,7 @@ export default function DiseaseTargets() {
   };
 
   const onContinue = () => {
-    const list = displayed.filter((r) => selected[rowId(r)]);
+    const list = rows.filter((r) => selected[rowId(r)]);
     if (list.length === 0) return toast.error("Select at least one disease target");
     setNetworkTargets(list);
     markComplete("disease-target-identification");
