@@ -191,3 +191,6 @@ websockets==16.0
 xarray==2026.7.0
 yarl==1.24.2
 zipp==4.1.0
+# --- Background task scaffolding (Redis + Celery) ---
+celery==5.3.6
+redis==5.0.4

@@ -113,3 +113,4 @@ frontend/node_modules/.cache/default-development/13.pack
 .env
 .env.*
 *.env
+!.env.example

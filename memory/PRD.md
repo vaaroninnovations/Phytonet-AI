@@ -229,3 +229,44 @@ Deployment readiness re-check + functional code review completed. Applied blocki
 - Product decision on ML deployment blocker (see options above).
 - P1 backlog: refactor large components (`PlantDatabase.jsx`, `MolecularDocking.jsx`, `DiseaseTargets.jsx`).
 - P2 backlog: Molecular Dynamics server-side execution (v2.0).
+
+
+## 2026-02-22 — Hostinger VPS Deployment Setup ✅
+
+User chose self-host on Hostinger (≥ 8 GB VPS, keep full ML stack). Generated production deployment files at repo root.
+
+**New files:**
+- `/app/docker-compose.yml` — 6 services (mongodb, redis, backend, celery_worker, celery_beat, frontend), all on `phytonet-net` bridge network with named volumes for `mongo_data`, `mongo_config`, `redis_data`, `dock_jobs`, `md_jobs`.
+- `/app/.env.example` — templated env with required/optional sections, generation commands for `JWT_SECRET`/`SESSION_SECRET`.
+- `/app/frontend/Dockerfile` — multi-stage build: Node 20 builder → nginx:alpine runtime (~40 MB image). CRA `REACT_APP_BACKEND_URL` inlined via `--build-arg` (default: same-origin, nginx proxies `/api`).
+- `/app/frontend/nginx.conf` — SPA fallback, gzip, long-lived cache for `/static/`, reverse-proxy `/api/*` and `/auth/*` to `backend:8001`. SSE-friendly (`proxy_buffering off`, 1 h read/send timeout). `/healthz` for container liveness.
+- `/app/backend/celery_app.py` — Celery scaffolding (broker/backend on Redis, empty `include` list, `phytonet.ping` health task). `beat_schedule = {}` for future periodic jobs.
+- `/app/README-DEPLOY.md` — 12-section deployment guide (VPS sizing, one-time server setup, secret generation, TLS via Caddy/Certbot, ops runbook, Celery how-to, troubleshooting matrix, security checklist).
+
+**Config decisions:**
+- Kept **MongoDB** (per user choice 1a) — no data-layer refactor.
+- Redis + Celery worker + beat added as **scaffolding only** (2b) — no tasks registered yet.
+- Frontend served via **nginx multi-stage** (3a) — production-grade, tiny image.
+- Backend uses existing `/app/Dockerfile` (Vina + OpenBabel + GROMACS + full ML stack, ≥ 8 GB RAM target — user choice 5a).
+- Added `celery==5.3.6` and `redis==5.0.4` to `backend/requirements.txt`.
+- `.gitignore`: kept `.env*` ignored (correct for self-host — never commit real secrets), added `!.env.example` exception so the template is trackable.
+
+**Ports & networking:**
+- Frontend host `${FRONTEND_PORT:-3000}` → container 3000 (nginx)
+- Backend host `${BACKEND_PORT:-8001}` → container 8001 (uvicorn)
+- MongoDB/Redis exposed only inside the compose network (no host binding) → correct security posture.
+
+**Verified:**
+- `docker-compose.yml` parses cleanly (all 6 services enumerated).
+- `.env.example` contains all required keys (`ADMIN_EMAIL`, `JWT_SECRET`, `MONGO_URL`, `REDIS_URL`, `CELERY_BROKER_URL`, `FRONTEND_URL`, `GOOGLE_CLIENT_ID`, `GROQ_API_KEY`).
+- `backend.celery_app` imports cleanly with broker `redis://redis:6379/0`.
+- Backend `/api/health` still 200 in preview.
+
+**GitHub push:**
+User must use **"Save to Github"** in the chat toolbar — the sandbox has no push credentials. Files ready to be committed.
+
+**Next Action Items**
+- Click **"Save to Github"** to publish deployment files.
+- On the Hostinger VPS follow `README-DEPLOY.md` §§ 1-6.
+- After first boot, verify Celery ping: `docker compose exec backend python -c "from backend.celery_app import celery_app; print(celery_app.send_task('phytonet.ping').get(timeout=5))"` → `pong`.
+

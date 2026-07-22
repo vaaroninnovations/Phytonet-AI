@@ -1,0 +1,189 @@
+# PhytoNet AI — production docker-compose (Hostinger VPS / any Docker host)
+# ---------------------------------------------------------------
+# Usage:
+#   cp .env.example .env         # then edit values
+#   docker compose up -d --build # build + start everything
+#   docker compose logs -f       # tail logs
+#   docker compose down          # stop; add -v to nuke volumes
+#
+# Services:
+#   mongodb        — MongoDB 7, persistent volume
+#   redis          — Redis 7, persistent volume (broker + result backend)
+#   backend        — FastAPI (uses ./Dockerfile at repo root)
+#   celery_worker  — Celery worker (same image as backend)
+#   celery_beat    — Celery beat scheduler (same image as backend)
+#   frontend       — nginx serving CRA build, proxies /api → backend
+# ---------------------------------------------------------------
+
+name: phytonet
+
+x-backend-image: &backend-image
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: phytonet/backend:latest
+
+x-backend-env: &backend-env
+  # ─── Datastore ───
+  MONGO_URL: ${MONGO_URL:-mongodb://mongodb:27017}
+  DB_NAME: ${DB_NAME:-phytonet}
+  # ─── Cache / broker ───
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+  CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+  CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+  # ─── Auth / sessions ───
+  AUTH_GATE_ENABLED: ${AUTH_GATE_ENABLED:-on}
+  JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
+  SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET must be set in .env}
+  ADMIN_EMAIL: ${ADMIN_EMAIL:?ADMIN_EMAIL must be set in .env}
+  ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD must be set in .env}
+  CORS_ORIGINS: ${CORS_ORIGINS:-*}
+  FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+  # ─── Google OAuth ───
+  GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+  GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+  GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
+  # ─── LLM ───
+  GROQ_API_KEY: ${GROQ_API_KEY:-}
+  GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
+  EMERGENT_LLM_KEY: ${EMERGENT_LLM_KEY:-}
+  # ─── Email (optional) ───
+  EMAIL_PROVIDER: ${EMAIL_PROVIDER:-smtp}
+  EMAIL_FROM: ${EMAIL_FROM:-}
+  SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_USERNAME: ${SMTP_USERNAME:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  SMTP_TLS: ${SMTP_TLS:-true}
+  # ─── Docking / MD binaries (baked into the backend image) ───
+  VINA_EXECUTABLE: /usr/bin/vina
+  OBABEL_EXECUTABLE: /usr/bin/obabel
+  GROMACS_EXECUTABLE: /usr/bin/gmx
+  # ─── Runtime tunables ───
+  AUTO_INSTALL_MISSING_DEPS: "off"
+
+services:
+  # ─────────────────────────── Data layer ───────────────────────────
+  mongodb:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+      - mongo_config:/data/configdb
+    networks: [phytonet-net]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis_data:/data
+    networks: [phytonet-net]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+  # ─────────────────────────── Backend API ───────────────────────────
+  backend:
+    <<: *backend-image
+    restart: unless-stopped
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment: *backend-env
+    volumes:
+      - dock_jobs:/app/backend/_dock_jobs
+      - md_jobs:/app/backend/_md_jobs
+    ports:
+      - "${BACKEND_PORT:-8001}:8001"
+    networks: [phytonet-net]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8001/api/health', timeout=3).status==200 else 1)"]
+      interval: 30s
+      timeout: 6s
+      retries: 5
+      start_period: 30s
+
+  # ─────────────────────────── Celery worker (scaffold) ───────────────────────────
+  celery_worker:
+    <<: *backend-image
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    environment: *backend-env
+    volumes:
+      - dock_jobs:/app/backend/_dock_jobs
+      - md_jobs:/app/backend/_md_jobs
+    working_dir: /app
+    command: >
+      celery -A backend.celery_app worker
+      --loglevel=info
+      --concurrency=${CELERY_CONCURRENCY:-2}
+      -n worker@%h
+    networks: [phytonet-net]
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A backend.celery_app inspect ping -d worker@$$HOSTNAME || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  # ─────────────────────────── Celery beat (scaffold) ───────────────────────────
+  celery_beat:
+    <<: *backend-image
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment: *backend-env
+    working_dir: /app
+    command: >
+      celery -A backend.celery_app beat
+      --loglevel=info
+      --schedule=/tmp/celerybeat-schedule
+    networks: [phytonet-net]
+
+  # ─────────────────────────── Frontend (nginx) ───────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        REACT_APP_BACKEND_URL: ${REACT_APP_BACKEND_URL:-}
+    image: phytonet/frontend:latest
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    networks: [phytonet-net]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mongo_data:
+  mongo_config:
+  redis_data:
+  dock_jobs:
+  md_jobs:
+
+networks:
+  phytonet-net:
+    driver: bridge
