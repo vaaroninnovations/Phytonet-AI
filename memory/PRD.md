@@ -366,3 +366,43 @@ Fixed the "standalone modules still leak into the AI Agent workflow" architectur
 - Optional: `testing_agent_v3_fork` sweep to confirm no regression in the AI Agent workflow path.
 - Push via **Save to Github**.
 
+
+
+## 2026-02-23 (pm-2) — Molecular Docking as Standalone Module ✅
+
+Added Molecular Docking to the modular platform, matching the same standalone-independence pattern applied to the other modules.
+
+**Changes**
+- `hooks/useIsStandalone.js` — `/molecular-docking` added to `STANDALONE_ROUTES`.
+- `pages/Home.jsx` — new Molecular Docking card inserted at position 6 (between Disease Target Prediction and Databases). Icon: `Microscope`, tint `#DB2777` (magenta). CTA: "Run Docking".
+- `components/standalone/StandaloneDockingInput.jsx` — **new**, ~230 lines. Ligand textarea + CSV/XLSX batch upload, Target textarea (UniProt or gene symbol) with UniProt-format detection, "Load curated examples" (Curcumin/Withaferin A/Quercetin × TNF/IL6). On commit, pushes into `useNetwork().setSelectedCompounds`, `setCompoundTargets`, `setIntersectingGenes` so the existing docking priority matrix + engine renders immediately.
+- `pages/MolecularDocking.jsx`:
+  - Renders `StandaloneDockingInput` in the empty-state when `standalone && noInputs`.
+  - `markComplete("molecular-docking")` gated by `!standalone`.
+  - "Proceed to Molecular Dynamics" link hidden in standalone mode.
+
+**Final homepage card order (7):**
+1. PhytoNet AI Agent (flagship)
+2. Plant Database
+3. ADMET & Drug-Likeness Prediction
+4. Compound Target Prediction
+5. Disease Target Prediction
+6. Molecular Docking
+7. Databases
+
+**Verified**
+- Home cards enumerate in exact order via DOM check.
+- `/molecular-docking` opens with `data-standalone="true"` on `WorkflowLayout`, sidebar hidden (0 `<aside>` elements), `standalone-docking-input` mounted, both textareas + upload + examples buttons wired.
+- Frontend compiles clean (1 pre-existing lint warning, unchanged).
+
+**Deferred (P2, out of scope for this architectural pass)**
+- Extra ligand input formats: MOL, MOL2, SDF file parsing (backend supports MOL/SDF via Open Babel; UI stub required).
+- Custom PDB upload (user-supplied receptor structure) — backend can already consume `pdb_id` override; upload UI + BLOB pipe required.
+- Advanced settings panel on the input step: docking engine choice, custom binding-site coordinates, flexibility flags (backend already exposes `exhaustiveness`, `num_modes`, `box_padding` via existing controls after inputs are loaded).
+- Batch job progress dashboard with queue/ETA (currently SSE stream shows live progress once run starts).
+
+**Next Action Items**
+- Push via **Save to Github**.
+- Rebuild frontend on Hostinger: `git pull && docker compose up -d --build frontend`.
+- Consider a `testing_agent_v3_fork` regression sweep across the 7 module routes.
+

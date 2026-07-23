@@ -1,6 +1,9 @@
 // Molecular Docking (AutoDock Vina) — Step 6 of the 9-step workflow.
+// Also mounted at /molecular-docking as a fully standalone research module.
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { useIsStandalone } from "@/hooks/useIsStandalone";
+import StandaloneDockingInput from "@/components/standalone/StandaloneDockingInput";
 import WorkflowLayout from "@/components/WorkflowLayout";
 import { useNetwork } from "@/context/NetworkContext";
 import { useResults } from "@/context/ResultsContext";
@@ -19,6 +22,7 @@ const DEFAULT_MODES = 9;
 const DEFAULT_PADDING = 8;
 
 export default function MolecularDocking() {
+  const { standalone } = useIsStandalone();
   const { compoundTargets, diseaseTargets, selectedCompounds, intersectingGenes: ctxIntersect, hubScores, setDockingResults } = useNetwork();
   const { compounds: allCompounds } = useResults();
   const { markComplete } = useWorkflow();
@@ -290,7 +294,7 @@ export default function MolecularDocking() {
       const res = { results: finalResults, job_id: streamJobId || "" };
       setResult(res);
       setDockingResults(res);
-      markComplete("molecular-docking");
+      if (!standalone) markComplete("molecular-docking");
       toast.success(`Docking complete · ${finalResults.length} pairs`);
     } catch (e) { toast.error("Docking run failed: " + (e.response?.data?.detail || e.message)); }
     finally { setRunning(false); setProgressPair(null); }
@@ -382,6 +386,13 @@ export default function MolecularDocking() {
 
   const noInputs = compoundOptions.length === 0 || targetOptions.length === 0;
   if (noInputs) {
+    if (standalone) {
+      return (
+        <WorkflowLayout>
+          <StandaloneDockingInput />
+        </WorkflowLayout>
+      );
+    }
     return (
       <WorkflowLayout>
         <main data-testid="dock-empty" className="mx-auto max-w-3xl px-6 pb-24 pt-14 text-center">
@@ -623,11 +634,13 @@ export default function MolecularDocking() {
                   ))}
                 </div>
               </div>
-              <div className="mt-4 flex justify-end">
-                <Link data-testid="dock-to-md" to="/molecular-dynamics" className="inline-flex items-center gap-2 rounded-full bg-[#5139ED] px-5 py-2.5 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 hover:bg-[#4127c9]">
-                  Proceed to Molecular Dynamics<ArrowRight className="h-4 w-4" />
-                </Link>
-              </div>
+              {!standalone && (
+                <div className="mt-4 flex justify-end">
+                  <Link data-testid="dock-to-md" to="/molecular-dynamics" className="inline-flex items-center gap-2 rounded-full bg-[#5139ED] px-5 py-2.5 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 hover:bg-[#4127c9]">
+                    Proceed to Molecular Dynamics<ArrowRight className="h-4 w-4" />
+                  </Link>
+                </div>
+              )}
             </div>
           </div>
         )}

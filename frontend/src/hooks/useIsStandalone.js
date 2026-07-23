@@ -13,6 +13,7 @@ const STANDALONE_ROUTES = new Set([
   "/drug-likeness",
   "/compound-target-prediction",
   "/disease-target-prediction",
+  "/molecular-docking",
 ]);
 
 /**

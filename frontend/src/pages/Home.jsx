@@ -142,6 +142,16 @@ const RESEARCH_MODULES = [
     accent: "from-[#F97316]/10 to-[#F97316]/4",
   },
   {
+    id: "molecular-docking",
+    title: "Molecular Docking",
+    desc: "AutoDock Vina docking with auto receptor prep from RCSB PDB, batch ligands, interaction analysis and 3D visualisation.",
+    cta: "Run Docking",
+    to: "/molecular-docking",
+    icon: Microscope,
+    tint: "#DB2777",
+    accent: "from-[#DB2777]/10 to-[#DB2777]/4",
+  },
+  {
     id: "databases",
     title: "Databases",
     desc: "Central index of every biological, chemical and pharmacological source we integrate.",
