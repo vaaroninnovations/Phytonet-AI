@@ -3,6 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { useSelection, compoundKey } from "@/context/SelectionContext";
 import { useWorkflow } from "@/context/WorkflowContext";
 import { useNetwork } from "@/context/NetworkContext";
+import { useIsStandalone } from "@/hooks/useIsStandalone";
+import StandaloneSMILESInput from "@/components/standalone/StandaloneSMILESInput";
 import WorkflowLayout from "@/components/WorkflowLayout";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -116,6 +118,7 @@ const INITIAL_FILTERS = {
 
 export default function DrugLikeness() {
   const navigate = useNavigate();
+  const { standalone } = useIsStandalone();
   const {
     selectedCompounds,
     count: inputCount,
@@ -148,8 +151,9 @@ export default function DrugLikeness() {
   const scoringEnabled = weightsValid && totalSelected(selMap) > 0;
 
   useEffect(() => {
+    if (standalone) return; // Standalone view: don't touch the guided-workflow progress tracker.
     markComplete("plant-database");
-  }, [markComplete]);
+  }, [markComplete, standalone]);
 
   useEffect(() => {
     if (inputCount === 0) return;
@@ -279,6 +283,10 @@ export default function DrugLikeness() {
     if (finalCount === 0) return toast.error("Select at least one compound");
     // Publish the selected compounds so Step 3 (Target Prediction) can pick them up.
     setNetworkCompounds(Object.values(finalSel));
+    if (standalone) {
+      toast.success(`${finalCount} compound${finalCount === 1 ? "" : "s"} saved. Use the export buttons to download results.`);
+      return;
+    }
     markComplete("admet-drug-likeness");
     navigate("/target-prediction");
   };
@@ -376,7 +384,14 @@ export default function DrugLikeness() {
   if (inputCount === 0) {
     return (
       <WorkflowLayout>
-        <EmptySelection />
+        {standalone ? (
+          <StandaloneSMILESInput
+            title="ADMET & Drug-Likeness Analysis"
+            subtitle="Paste SMILES, upload a CSV/Excel file, or start with a curated example — no workflow prerequisite."
+          />
+        ) : (
+          <EmptySelection />
+        )}
       </WorkflowLayout>
     );
   }

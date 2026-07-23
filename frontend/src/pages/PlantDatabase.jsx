@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useIsStandalone } from "@/hooks/useIsStandalone";
 import {
   searchPlant,
   lotusSimple,
@@ -76,6 +77,7 @@ const SOURCE_OPTIONS = [
 
 export default function PlantDatabase({ topRightSlot = null }) {
   const navigate = useNavigate();
+  const { standalone } = useIsStandalone();
   const {
     isSelected,
     toggle: toggleSelect,
@@ -283,6 +285,10 @@ export default function PlantDatabase({ topRightSlot = null }) {
 
   const openConfirm = () => {
     if (selectedCount === 0) return toast.error("Select at least one compound");
+    if (standalone) {
+      toast.success(`${selectedCount} compound${selectedCount === 1 ? "" : "s"} saved. Use the export buttons below to download results.`);
+      return;
+    }
     setConfirmOpen(true);
   };
 
@@ -936,7 +942,7 @@ export default function PlantDatabase({ topRightSlot = null }) {
                 disabled={selectedCount === 0}
                 className="inline-flex items-center gap-2 rounded-full bg-[#5139ED] px-5 py-2.5 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 hover:bg-[#4127c9] disabled:pointer-events-none disabled:opacity-50"
               >
-                Proceed to Drug-Likeness Screening
+                {standalone ? "Save Selection" : "Proceed to Drug-Likeness Screening"}
                 <ArrowRight className="h-4 w-4" />
               </button>
             </div>

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useIsStandalone } from "@/hooks/useIsStandalone";
+import StandaloneSMILESInput from "@/components/standalone/StandaloneSMILESInput";
 import WorkflowLayout from "@/components/WorkflowLayout";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -49,7 +51,8 @@ const FILTER_TOOLTIPS = {
 
 export default function TargetPrediction() {
   const navigate = useNavigate();
-  const { selectedCompounds, setCompoundTargets } = useNetwork();
+  const { standalone } = useIsStandalone();
+  const { selectedCompounds, setCompoundTargets, setSelectedCompounds: setNetworkCompounds } = useNetwork();
   const { markComplete } = useWorkflow();
 
   const [jobId, setJobId] = useState(null);
@@ -73,8 +76,9 @@ export default function TargetPrediction() {
   const rowId = (r) => `${r.uniprot_id || r.target_chembl_id}::${r.compound_name || ""}`;
 
   useEffect(() => {
+    if (standalone) return; // Standalone view: skip workflow progress mutation.
     markComplete("admet-drug-likeness");
-  }, [markComplete]);
+  }, [markComplete, standalone]);
 
   useEffect(() => {
     if (!selectedCompounds || selectedCompounds.length === 0) return;
@@ -241,11 +245,26 @@ export default function TargetPrediction() {
     const chosen = filtered.filter((r) => selected[rowId(r)]);
     if (chosen.length === 0) return toast.error("Select at least one target to continue");
     setCompoundTargets(chosen);
+    if (standalone) {
+      toast.success(`${chosen.length} target${chosen.length === 1 ? "" : "s"} saved. Use the export buttons below to download results.`);
+      return;
+    }
     markComplete("target-prediction");
     navigate("/disease-target-identification");
   };
 
   if (!selectedCompounds || selectedCompounds.length === 0) {
+    if (standalone) {
+      return (
+        <WorkflowLayout>
+          <StandaloneSMILESInput
+            title="Compound Target Prediction"
+            subtitle="Paste SMILES, upload a CSV/Excel file, or start with a curated example — no workflow prerequisite."
+            onCommit={(compounds) => setNetworkCompounds(compounds)}
+          />
+        </WorkflowLayout>
+      );
+    }
     return (
       <WorkflowLayout>
         <main

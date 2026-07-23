@@ -321,3 +321,48 @@ Reorganised PhytoNet AI into a modular research platform without touching the He
 - P1 refactor still pending: large page components.
 - P2 backlog: MD server-side execution (v2.0).
 
+
+
+## 2026-02-23 (pm) — Standalone Module Independence ✅
+
+Fixed the "standalone modules still leak into the AI Agent workflow" architectural bug.
+
+**Root cause found by direct code trace:**
+- Every module page (`PlantDatabase`, `DrugLikeness`, `TargetPrediction`, `DiseaseTargets`) rendered inside `<WorkflowLayout>` which shows the workflow sidebar with step trackers.
+- Every "Continue" button unconditionally called `markComplete("current-step")` + `navigate("/next-step")` — pushing standalone users into the guided flow.
+- ADMET/`DrugLikeness` and `TargetPrediction` hard-blocked with an empty state ("Complete the previous step") when no compounds were pre-selected from the workflow — making them unusable as standalone tools.
+
+**Fixes**
+- **`hooks/useIsStandalone.js`** (new) — reads `useLocation()` against a `STANDALONE_ROUTES` set (`/plant-database`, `/admet`, `/drug-likeness`, `/compound-target-prediction`, `/disease-target-prediction`).
+- **`components/WorkflowLayout.jsx`** — now conditional: renders the sidebar in workflow mode, and a plain full-width container (`data-standalone="true"`) in standalone mode.
+- **`components/standalone/StandaloneSMILESInput.jsx`** (new, ~200 lines) — reusable input card with three entry points: paste SMILES textarea, CSV/XLSX batch upload (dynamic import of `xlsx`), and "Load curated examples". Accepts an `onCommit(compounds)` prop so each page decides which context store receives the compounds (SelectionContext for ADMET, NetworkContext for TargetPrediction).
+- **Home cards reordered** to 6 items per spec: PhytoNet AI Agent → Plant Database → **ADMET & Drug-Likeness (merged)** → Compound Target Prediction → Disease Target Prediction → Databases. Standalone Drug-Likeness card removed (module unified with ADMET as user requested).
+- **Per-page workflow guards** — every `markComplete()` + `navigate("/next-step")` call now returns early when `standalone === true`, showing a success toast referencing the export buttons instead of pushing to the next module.
+- **Standalone entry points wired** — `DrugLikeness` and `TargetPrediction` empty states now render `StandaloneSMILESInput` when accessed via a standalone route. `DiseaseTargets` already has a disease-name search as its primary input, so no empty-state change needed. `PlantDatabase` already renders as its own page with search — the CTA is now context-aware ("Save Selection" standalone vs "Proceed to Drug-Likeness Screening" in workflow).
+
+**Verified end-to-end**
+- `/admet` — Standalone input UI shows immediately (Paste SMILES + Batch upload + Load examples). No workflow sidebar (`data-standalone="true"`).
+- `/compound-target-prediction` — Clicking "Load curated examples" toasts "3 compounds loaded" → Target Prediction fires immediately, progress bar advances, no workflow chrome.
+- Home cards enumerate in the correct 6-item order.
+- All 9 routes return 200; frontend compiles clean (1 pre-existing lint warning, unchanged).
+
+**Files touched**
+- `frontend/src/hooks/useIsStandalone.js` (new)
+- `frontend/src/components/WorkflowLayout.jsx` (conditional layout)
+- `frontend/src/components/standalone/StandaloneSMILESInput.jsx` (new, reusable input)
+- `frontend/src/pages/Home.jsx` (card reorder + ADMET merge)
+- `frontend/src/pages/PlantDatabase.jsx` (context-aware CTA)
+- `frontend/src/pages/DrugLikeness.jsx` (standalone empty state + Continue guard)
+- `frontend/src/pages/TargetPrediction.jsx` (standalone empty state + Continue guard)
+- `frontend/src/pages/DiseaseTargets.jsx` (Continue guard only — already had own search input)
+
+**Deferred to a follow-up task (P2 feature scope, not architectural)**
+- Plant Database search extensions (by family, compound, disease, target, traditional use) + CSV upload for batch plant-name lookup.
+- Compound Target Prediction extra input types (MOL, SDF).
+- Extended drug-likeness output panels (Ghose, Egan, Muegge, QED, SA, Lead-likeness, MedChem Alerts) — some already computed under the hood; needs UI surfacing.
+- Databases hub category groupings (already filterable by category; explicit visual grouping deferred).
+
+**Next Action Items**
+- Optional: `testing_agent_v3_fork` sweep to confirm no regression in the AI Agent workflow path.
+- Push via **Save to Github**.
+

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useIsStandalone } from "@/hooks/useIsStandalone";
 import WorkflowLayout from "@/components/WorkflowLayout";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -46,6 +47,7 @@ const FILTER_TOOLTIPS = {
 
 export default function DiseaseTargets() {
   const navigate = useNavigate();
+  const { standalone } = useIsStandalone();
   const { setDiseaseTargets: setNetworkTargets, selectedDisease, setSelectedDisease } =
     useNetwork();
   const { markComplete } = useWorkflow();
@@ -219,6 +221,10 @@ export default function DiseaseTargets() {
     const list = rows.filter((r) => selected[rowId(r)]);
     if (list.length === 0) return toast.error("Select at least one disease target");
     setNetworkTargets(list);
+    if (standalone) {
+      toast.success(`${list.length} target${list.length === 1 ? "" : "s"} saved. Use the export buttons below to download results.`);
+      return;
+    }
     markComplete("disease-target-identification");
     navigate("/network-analysis");
   };
