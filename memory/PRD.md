@@ -514,3 +514,42 @@ Shipped Phase 1 of the monetisation stack per user brief (1a · 2c · 3a · 4a �
 - Optional Phase 2: dedicated /pricing page + dashboard redesign.
 - Phase 3 (payments): call `integration_playbook_expert_v2` with "Razorpay" once user shares intent to enable purchases; wire the response into `POST /api/nodes/purchase-intent`.
 
+
+
+## 2026-02-23 (pm-5) — Intelligent Compound Resolution across ADMET / Drug-Likeness / Target Prediction ✅
+
+Extended the compound-name lookup previously exclusive to Molecular Docking to every standalone module that consumes SMILES. Backend endpoint (`/api/compound/lookup` — added earlier for the docking assistant) is reused unchanged; the frontend `StandaloneSMILESInput.jsx` was rewritten into a tabbed intelligent-lookup component. Because ADMET, Drug-Likeness and Compound Target Prediction all mount the same component, a single edit lit up **three modules simultaneously**.
+
+**New `StandaloneSMILESInput.jsx` — 3 tabs (single component, ~330 lines):**
+1. **By name (recommended, default)** — text input → hits `/api/compound/lookup` → resolved compound chip is appended to a growing batch (name, PubChem CID, MW, formula, InChIKey, canonical SMILES). Each chip is dismissible with an X button. "Analyze N compounds" CTA commits the batch. Curated examples button as instant fallback.
+2. **Paste SMILES** — original textarea flow preserved for power users.
+3. **Batch upload** — CSV/XLSX with `Name` and/or `SMILES` columns. Rows missing SMILES but having a `Name` are **auto-resolved via PubChem** in sequence with a live progress bar (`Resolving compounds — X/Y`). An amber "N compounds could not be resolved" panel lists every failed row with the reason — the successful rows still commit normally so a partial upload isn't wasted.
+
+**Where it's used now (no per-page changes needed — same component)**
+- `/admet` — ADMET & Drug-Likeness Analysis
+- `/drug-likeness` — same page (alias)
+- `/compound-target-prediction` — Compound Target Prediction (via `onCommit` prop routing compounds to `NetworkContext.setSelectedCompounds`)
+
+**Preserved existing pipelines** — every resolved row still goes through the same `SelectionContext.setMany()` / `NetworkContext.setSelectedCompounds()` bridge as before, so ADMET / Drug-Likeness / Target Prediction execute their existing pipelines unmodified. Just the entry point got smarter.
+
+**Verified end-to-end** (screenshot on `/admet`)
+- 3 tabs render, "By name" active by default.
+- `Curcumin` → chip with CID 969516, 368.40 g/mol.
+- `Quercetin` → chip with CID 5280343, 302.23 g/mol.
+- Toast "Resolved 'Quercetin' → CID 5280343" fired.
+- "Analyze 2 compounds" CTA visible.
+- No changes required to any downstream prediction code.
+
+**Batch upload auto-resolve** — for CSV/XLSX files:
+- Rows with SMILES pass through untouched.
+- Rows with only a `Name` are resolved one-by-one against PubChem (throttled to avoid rate limits) with an in-UI progress bar.
+- Unresolvable rows are surfaced in a dismissible amber list; resolved rows still commit so the analysis isn't blocked by partial input.
+
+**Files touched**
+- `frontend/src/components/standalone/StandaloneSMILESInput.jsx` — complete rewrite (paste-only → tabbed intelligent lookup)
+
+**Next Action Items**
+- Push via **Save to Github**
+- Rebuild on Hostinger: `git pull && docker compose up -d --build frontend`
+- Optional: extend the same "By name" tab to the docking `StandaloneDockingInput` batch flow (currently that page has its own dual-column resolver — parity item, not a bug).
+
