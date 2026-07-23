@@ -45,6 +45,7 @@ import {
   Beaker,
   Layers,
 } from "lucide-react";
+import { Stat, DlBtn } from "./common";
 
 function HubPanel({ ppiResult, onComplete }) {
   const [topN, setTopN] = useState(10);

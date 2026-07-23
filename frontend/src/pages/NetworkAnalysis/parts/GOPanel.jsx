@@ -45,6 +45,7 @@ import {
   Beaker,
   Layers,
 } from "lucide-react";
+import { Stat, DlBtn } from "./common";
 
 function GOPanel({ genes, onComplete }) {
   const [loading, setLoading] = useState(false);

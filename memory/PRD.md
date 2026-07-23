@@ -635,3 +635,41 @@ Every menu item in the account dropdown now navigates to a fully functional page
 - P1: Refactor `NetworkAnalysis.jsx` (2505 lines), `DrugLikeness.jsx` (1805), `PlantDatabase.jsx` (1196) into per-page folders — user-approved plan.
 - P2: Wire Razorpay/Stripe payment gateway for node recharge (UI ready, checkout still returns "coming soon").
 - P2: Molecular Dynamics server-side execution (Celery/GROMACS scaffolding already in `docker-compose.yml`).
+
+
+## 2026-02-23 — P1 Refactor Complete: 3 large pages → per-page folders
+
+**Approved plan (user):** Split three large page components into `pages/<Name>/index.jsx + parts/*` with **zero logic changes**, then E2E-test via testing agent.
+
+**Refactor deltas**
+
+| File | Before | After | Parts extracted |
+|---|---|---|---|
+| `PlantDatabase.jsx` | 1202 L | folder | `inputs.jsx` (SearchInput/NumberField/ExportButton), `CellValue.jsx`, `tableStates.jsx` (LoadingRows/EmptyState) |
+| `DrugLikeness.jsx` | 1821 L | folder | `HelpTip`, `ScoringConfigPanel` (+WeightInput), `FilterCards` (FilterCard/FilterControl/groupByCategory/DrugLikenessFilterCard/CriteriaCard), `tableComponents` (ResultsTable/RowRender/ParamCell/StarRow/formatObserved/ScoreBreakdown/Th/ProbCell/BoolCell), `ExportBtn`, `AutoAnalysisCard`, `EmptySelection` |
+| `NetworkAnalysis.jsx` | 2506 L | folder | `common` (SubsectionNav/Stat/DlBtn/PlaceholderPanel), `IntersectionPanel`, `PPIPanel`, `HubPanel` (+HubSubgraphNetwork), `GOPanel` (+GOBarChart/GODotPlot/GOChordPlot), `KeggPanel` (+KEGGDotPlot/KEGGLollipopChart/KEGGSankey) |
+
+Total: 3 files → 3 folders (17 new part files). Webpack picks folder `index.jsx` because the original `.jsx` file was deleted, so `App.js` imports (`@/pages/PlantDatabase`, etc.) resolve unchanged.
+
+**E2E test verdict — `iteration_37.json`: 100% pass**
+- Dashboard, Node Badge popover, Golden Leaf: ✅
+- `/plant-database`: 5 mode tabs, mode swap, real Curcuma-longa search returning 242 compounds (121 IMPPAT · 64 LOTUS · 57 Both), SmilesDrawer canvases (50 rendered), CSV/Excel/JSON exports: ✅
+- `/phytonet-ai` step 1: WorkflowSidebar + all 8 workflow-step test-ids present, LC-MS top-right slot: ✅
+- `/admet` standalone: StandaloneSMILESInput + curated examples loads scoring config, all 3 weight inputs, ADME filters w/ Absorption/Distribution/Metabolism/Excretion rows, auto-analyse: ✅
+- `/network-analysis`: gated PlaceholderPanel behaves correctly: ✅
+
+**Files touched (17 new + 3 removed)**
+- `frontend/src/pages/PlantDatabase/` — `index.jsx` + `parts/{inputs,CellValue,tableStates}.jsx`
+- `frontend/src/pages/DrugLikeness/` — `index.jsx` + `parts/{HelpTip,ScoringConfigPanel,FilterCards,tableComponents,ExportBtn,AutoAnalysisCard,EmptySelection}.jsx`
+- `frontend/src/pages/NetworkAnalysis/` — `index.jsx` + `parts/{common,IntersectionPanel,PPIPanel,HubPanel,GOPanel,KeggPanel}.jsx`
+- Deleted: original `PlantDatabase.jsx`, `DrugLikeness.jsx`, `NetworkAnalysis.jsx`
+
+**P2 follow-ups noted by testing agent (deferred)**
+- PlantDatabase `index.jsx` still ~999 L — could extract results-table + pagination into `parts/ResultsSection.jsx` to reach <700 L.
+- DrugLikeness `index.jsx` (~669 L) and NetworkAnalysis `index.jsx` (~315 L) fine, but could push more panel content into parts.
+- Pre-existing hydration warning `<span> cannot be a child of <option>` (from tooling instrumentation on the `page-size` select) — not a refactor regression; benign.
+
+**Next Action Items**
+- P2: Wire Razorpay/Stripe payment gateway for node recharge.
+- P2: Molecular Dynamics server-side execution (Celery/GROMACS).
+- P3: Further sub-splits if any main `index.jsx` becomes hard to navigate again.

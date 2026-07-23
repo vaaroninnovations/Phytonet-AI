@@ -46,6 +46,15 @@ import {
   Layers,
 } from "lucide-react";
 
+const SUBSECTIONS = [
+  { id: "intersection", label: "Target Intersection Analysis", icon: Target },
+  { id: "ppi", label: "Protein–Protein Interaction", icon: Network },
+  { id: "hubs", label: "Hub Gene Analysis", icon: Waypoints },
+  { id: "go", label: "GO Enrichment", icon: Layers },
+  { id: "kegg", label: "KEGG Pathway Enrichment", icon: Activity },
+  { id: "pctdp", label: "PCTDP Integrative Network", icon: Sparkles },
+];
+
 function SubsectionNav({ active, setActive, completed, canNavigate }) {
   return (
     <aside
@@ -185,4 +194,4 @@ function PlaceholderPanel({ icon, title, description, gene_count, onComplete }) 
 
 // ────────────────────── PPI Panel ─────────────────────
 
-export { SubsectionNav, Stat, DlBtn, PlaceholderPanel };
+export { SUBSECTIONS, SubsectionNav, Stat, DlBtn, PlaceholderPanel };

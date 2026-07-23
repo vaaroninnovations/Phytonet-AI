@@ -47,22 +47,12 @@ import {
 } from "lucide-react";
 
 // ── Refactored per-page parts (2026-02-23) ────────────────────────────
-import { SubsectionNav, Stat, DlBtn, PlaceholderPanel } from "./parts/common";
+import { SUBSECTIONS, SubsectionNav, Stat, DlBtn, PlaceholderPanel } from "./parts/common";
 import { IntersectionPanel } from "./parts/IntersectionPanel";
 import { PPIPanel } from "./parts/PPIPanel";
 import { HubPanel, HubSubgraphNetwork } from "./parts/HubPanel";
 import { GOPanel, GOBarChart, GODotPlot, GOChordPlot } from "./parts/GOPanel";
 import { KeggPanel, KEGGDotPlot, KEGGLollipopChart, KEGGSankey } from "./parts/KeggPanel";
-
-
-const SUBSECTIONS = [
-  { id: "intersection", label: "Target Intersection Analysis", icon: Target },
-  { id: "ppi", label: "Protein–Protein Interaction", icon: Network },
-  { id: "hubs", label: "Hub Gene Analysis", icon: Waypoints },
-  { id: "go", label: "GO Enrichment", icon: Layers },
-  { id: "kegg", label: "KEGG Pathway Enrichment", icon: Activity },
-  { id: "pctdp", label: "PCTDP Integrative Network", icon: Sparkles },
-];
 
 export default function NetworkAnalysis() {
   const {

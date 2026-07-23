@@ -46,6 +46,9 @@ import {
   Layers,
 } from "lucide-react";
 
+import React from "react";
+import { Stat, DlBtn } from "./common";
+
 function IntersectionPanel({
   compoundTargets,
   diseaseTargets,
@@ -433,4 +436,129 @@ function IntersectionPanel({
 
 // ─────────────────────── Small helpers ──────────────────────
 
-export { IntersectionPanel };
+const VennSVG = React.forwardRef(function VennSVG(
+  { n1, n2, nCommon, label1, label2 },
+  ref
+) {
+  const s = useAppliedStyle("venn");
+  const setAColor = (s.palette && s.palette[0]) || "#5139ED";
+  const setBColor = (s.palette && s.palette[1]) || "#8139ED";
+  const bg = s.background || "#FFFFFF";
+  const labelClr = s.labelColor || "#0B0B18";
+  const ff = s.fontFamily || "Inter, sans-serif";
+  const fillAlpha = Math.max(0, Math.min(1, (s.opacity ?? 1) * 0.35));
+  const strokeW = Math.max(0.5, (s.edgeThickness ?? 1) * 2);
+  const countFS = Math.round((s.labelSize ?? 12) * 2.15);   // ≈26 default
+  const midFS   = Math.round((s.labelSize ?? 12) * 2.30);   // ≈28 default
+  const setFS   = Math.round((s.labelSize ?? 12) * 1.15);   // ≈14 default
+  const capFS   = Math.round((s.labelSize ?? 12) * 0.92);   // ≈11 default
+
+  // Two overlapping circles, sized to visually communicate cardinality.
+  const w = 600, h = 400;
+  const cx1 = 220, cx2 = 380, cy = 200;
+  const r = 130;
+  return (
+    <svg
+      ref={ref}
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox={`0 0 ${w} ${h}`}
+      width={w}
+      height={h}
+      role="img"
+      aria-label={`Venn diagram: ${label1} vs ${label2}`}
+      style={{ maxWidth: "100%", height: "auto" }}
+    >
+      <rect x="0" y="0" width={w} height={h} fill={bg} />
+      <title>{`Venn ${label1} vs ${label2}`}</title>
+      <circle
+        cx={cx1}
+        cy={cy}
+        r={r}
+        fill={setAColor}
+        fillOpacity={fillAlpha}
+        stroke={setAColor}
+        strokeWidth={strokeW}
+      />
+      <circle
+        cx={cx2}
+        cy={cy}
+        r={r}
+        fill={setBColor}
+        fillOpacity={fillAlpha}
+        stroke={setBColor}
+        strokeWidth={strokeW}
+      />
+      {/* Left-only */}
+      <text
+        x={cx1 - 60}
+        y={cy}
+        fontFamily={ff}
+        fontSize={countFS}
+        fontWeight="700"
+        textAnchor="middle"
+        fill={labelClr}
+      >
+        {n1 - nCommon}
+      </text>
+      {/* Intersection */}
+      <text
+        x={(cx1 + cx2) / 2}
+        y={cy}
+        fontFamily={ff}
+        fontSize={midFS}
+        fontWeight="800"
+        textAnchor="middle"
+        fill={labelClr}
+      >
+        {nCommon}
+      </text>
+      {/* Right-only */}
+      <text
+        x={cx2 + 60}
+        y={cy}
+        fontFamily={ff}
+        fontSize={countFS}
+        fontWeight="700"
+        textAnchor="middle"
+        fill={labelClr}
+      >
+        {n2 - nCommon}
+      </text>
+      {/* Labels */}
+      <text
+        x={cx1 - 20}
+        y={cy - r - 12}
+        fontFamily={ff}
+        fontSize={setFS}
+        fontWeight="700"
+        textAnchor="middle"
+        fill={setAColor}
+      >
+        {label1}
+      </text>
+      <text
+        x={cx2 + 20}
+        y={cy - r - 12}
+        fontFamily={ff}
+        fontSize={setFS}
+        fontWeight="700"
+        textAnchor="middle"
+        fill={setBColor}
+      >
+        {label2}
+      </text>
+      <text
+        x={(cx1 + cx2) / 2}
+        y={h - 20}
+        fontFamily={ff}
+        fontSize={capFS}
+        textAnchor="middle"
+        fill="#64748B"
+      >
+        Compound targets ∩ Disease targets · PhytoNet AI
+      </text>
+    </svg>
+  );
+});
+
+export { IntersectionPanel, VennSVG };
