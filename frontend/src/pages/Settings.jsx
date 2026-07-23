@@ -21,6 +21,8 @@ function Section({ icon: Ic, title, children, testid }) {
   );
 }
 
+import { Switch } from "@/components/ui/switch";
+
 function ToggleRow({ label, hint, value, onChange, testid }) {
   return (
     <label className="flex items-start justify-between gap-3">
@@ -28,16 +30,12 @@ function ToggleRow({ label, hint, value, onChange, testid }) {
         <div className="text-[13px] font-semibold text-[#0F172A]">{label}</div>
         {hint && <div className="mt-0.5 text-[11.5px] text-[#64748B]">{hint}</div>}
       </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={value}
+      <Switch
+        checked={value}
+        onCheckedChange={onChange}
         data-testid={testid}
-        onClick={() => onChange(!value)}
-        className={`relative h-5 w-9 shrink-0 rounded-full transition ${value ? "bg-[#5139ED]" : "bg-[#E7E7F3]"}`}
-      >
-        <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${value ? "translate-x-4" : "translate-x-0.5"}`} />
-      </button>
+        className="shrink-0 data-[state=checked]:bg-[#5139ED] data-[state=unchecked]:bg-[#E7E7F3]"
+      />
     </label>
   );
 }
