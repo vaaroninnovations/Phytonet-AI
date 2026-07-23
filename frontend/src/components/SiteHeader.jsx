@@ -113,11 +113,11 @@ export default function SiteHeader() {
                     <p className="text-[10px] text-[#6B7280]">{user.email}</p>
                     {!user.email_verified && <p className="mt-1 text-[10px] text-amber-600">Email not yet verified</p>}
                   </div>
-                  <MenuItem icon={<LayoutDashboard className="h-4 w-4" />} label="Dashboard" testid="menu-dashboard" onClick={() => setMenuOpen(false)} />
-                  <MenuItem icon={<FolderOpen className="h-4 w-4" />} label="My Projects" testid="menu-projects" onClick={() => { setMenuOpen(false); navigate("/projects"); }} />
-                  <MenuItem icon={<Download className="h-4 w-4" />} label="Downloads" testid="menu-downloads" onClick={() => setMenuOpen(false)} />
-                  <MenuItem icon={<User className="h-4 w-4" />} label="Profile" testid="menu-profile" onClick={() => setMenuOpen(false)} />
-                  <MenuItem icon={<Settings className="h-4 w-4" />} label="Settings" testid="menu-settings" onClick={() => setMenuOpen(false)} />
+                  <MenuItem icon={<LayoutDashboard className="h-4 w-4" />} label="Dashboard" testid="menu-dashboard" onClick={() => { setMenuOpen(false); navigate("/dashboard"); }} />
+                  <MenuItem icon={<FolderOpen className="h-4 w-4" />} label="My Projects" testid="menu-projects" onClick={() => { setMenuOpen(false); navigate("/my-projects"); }} />
+                  <MenuItem icon={<Download className="h-4 w-4" />} label="Downloads" testid="menu-downloads" onClick={() => { setMenuOpen(false); navigate("/dashboard#downloads"); }} />
+                  <MenuItem icon={<User className="h-4 w-4" />} label="Profile" testid="menu-profile" onClick={() => { setMenuOpen(false); navigate("/profile"); }} />
+                  <MenuItem icon={<Settings className="h-4 w-4" />} label="Settings" testid="menu-settings" onClick={() => { setMenuOpen(false); navigate("/settings"); }} />
                   <MenuItem icon={<LogOut className="h-4 w-4" />} label="Logout" testid="menu-logout" onClick={() => { setMenuOpen(false); logout(); }} />
                 </div>
               )}

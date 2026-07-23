@@ -94,6 +94,10 @@ export const getNodePricing = () => api.get("/nodes/pricing").then((r) => r.data
 export const createPurchaseIntent = (plan_id) =>
   api.post("/nodes/purchase-intent", { plan_id }).then((r) => r.data);
 
+// ── Profile / preferences ─────────────────────────────────────────
+export const updateProfile = (payload) =>
+  api.patch("/auth/me", payload).then((r) => r.data);
+
 // SSE stream — returns EventSource. Caller wires up `pair_start` / `pair_done`
 // / `error` / `done` listeners.
 export const dockingRunStream = (payload) => {

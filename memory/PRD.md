@@ -553,3 +553,48 @@ Extended the compound-name lookup previously exclusive to Molecular Docking to e
 - Rebuild on Hostinger: `git pull && docker compose up -d --build frontend`
 - Optional: extend the same "By name" tab to the docking `StandaloneDockingInput` batch flow (currently that page has its own dual-column resolver — parity item, not a bug).
 
+
+
+## 2026-02-23 (pm-6) — Dashboard, Profile & Settings Pages ✅
+
+Every menu item in the account dropdown now navigates to a fully functional page.
+
+**New backend endpoint** (`auth_service.py`)
+- `PATCH /api/auth/me` — allow-listed field update. Accepts profile fields (`first_name`, `last_name`, `username`, `institution`, `department`, `designation`, `country`, `orcid`, `google_scholar`, `researchgate`, `bio`, `avatar_url`) and preferences (`theme_pref`, `language_pref`, `timezone_pref`, `date_format_pref`, `notify_email`, `notify_workflow`, `notify_low_nodes`, `notify_updates`, `download_format_pref`, `auto_save_projects`). Any other keys are silently dropped. Returns the refreshed user document.
+
+**Frontend — 3 new pages**
+- `pages/Dashboard.jsx` (`/dashboard`) — Account card (avatar + name + email + account type + verified badge + member-since + "Edit profile"), gold Node Balance panel (welcome bonus / purchased / consumed / remaining), 4 stat cards (AI Agent Runs, Docking Jobs, Saved Projects, Downloads), Usage History table (from `/api/nodes/history`, debits), Recharge History table (credits), Saved Projects list (from `listProjects()` with shape-tolerant normaliser), prominent gradient "Buy Nodes" button that opens the existing PurchaseNodesModal.
+- `pages/Profile.jsx` (`/profile`) — Read-only header (email · account type · verified), 10 editable text inputs (first/last name, username, institution, department, designation, country, ORCID, Google Scholar, ResearchGate) + bio textarea. Save/Discard buttons; dirty-state tracking. Connected-accounts block shows Google OAuth state. Backed by `PATCH /api/auth/me`.
+- `pages/Settings.jsx` (`/settings`) — 6 grouped sections (Appearance, Notifications, Privacy & Security, Downloads, Language & Region, Account Management). Custom `<ToggleRow>` and `<SelectRow>` primitives. Sticky "Save settings" button. Persisted via `PATCH /api/auth/me`.
+
+**Dropdown navigation wiring** — `SiteHeader.jsx`
+- Dashboard → `/dashboard` (previously no-op)
+- My Projects → `/my-projects` (fixed from `/projects` which had no route)
+- Downloads → `/dashboard#downloads`
+- Profile → `/profile` (previously no-op)
+- Settings → `/settings` (previously no-op)
+
+**Auth protection** — each page checks `useAuth().user` in a `useEffect`; unauthenticated users are redirected to `/` (the app's login modal shows via `openModal()` from anywhere).
+
+**API wrappers** (`lib/api.js`) — `updateProfile(payload)` → PATCH.
+
+**Verified end-to-end** (screenshots)
+- `/dashboard`: 4 stat cards, Node Balance panel (100 nodes), Recharge History table shows welcome_bonus +100 entry, 1 saved project rendered, Buy Nodes button opens PurchaseNodesModal ✅
+- `/profile`: 13 profile testid inputs, save button, connected-accounts block ✅
+- `/settings`: 6 sections, 10 preference controls, theme/language/timezone dropdowns, sticky save bar ✅
+- Bug caught + fixed during smoke test: `projects.slice is not a function` when `listProjects()` returns non-array shape — now shape-tolerant.
+
+**Files touched**
+- `backend/auth_service.py` — added `PATCH /me`
+- `frontend/src/lib/api.js` — `updateProfile` wrapper
+- `frontend/src/pages/Dashboard.jsx` (new)
+- `frontend/src/pages/Profile.jsx` (new)
+- `frontend/src/pages/Settings.jsx` (new)
+- `frontend/src/components/SiteHeader.jsx` — dropdown navigation
+- `frontend/src/App.js` — 3 new routes
+
+**Next Action Items**
+- Push via **Save to Github**
+- Rebuild on Hostinger: `git pull && docker compose up -d --build backend frontend`
+- Optional P2: monthly-activity chart on Dashboard (Chart.js is already loaded elsewhere), 2FA rollout, invoice PDF downloads on Recharge History.
+

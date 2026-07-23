@@ -341,6 +341,27 @@ def build_router(db, frontend_url: str = ""):
     async def me(user=Depends(dep_user)):
         return {"user": _serialize_user(user)}
 
+    @router.patch("/me")
+    async def update_me(payload: dict, user=Depends(dep_user)):
+        # Allow-list of user-updatable profile fields. Email and role are
+        # deliberately excluded — those require dedicated flows.
+        ALLOWED = {
+            "first_name", "last_name", "username", "institution", "department",
+            "designation", "country", "orcid", "google_scholar", "researchgate",
+            "bio", "avatar_url",
+            # Preferences
+            "theme_pref", "language_pref", "timezone_pref", "date_format_pref",
+            "notify_email", "notify_workflow", "notify_low_nodes", "notify_updates",
+            "download_format_pref", "auto_save_projects",
+        }
+        update = {k: v for k, v in (payload or {}).items() if k in ALLOWED}
+        if not update:
+            raise HTTPException(status_code=400, detail="No updatable fields provided")
+        update["updated_at"] = datetime.now(timezone.utc)
+        await db["users"].update_one({"_id": user["_id"]}, {"$set": update})
+        fresh = await db["users"].find_one({"_id": user["_id"]})
+        return {"user": _serialize_user(fresh)}
+
     @router.post("/refresh")
     async def refresh_token_endpoint(request: Request, response: Response):
         rt = request.cookies.get("refresh_token")

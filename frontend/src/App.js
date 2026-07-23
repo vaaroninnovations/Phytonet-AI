@@ -16,6 +16,9 @@ import VerifyEmail from "@/pages/VerifyEmail";
 import AIAssistant from "@/pages/AIAssistant";
 import GoogleCallback from "@/pages/GoogleCallback";
 import DatabasesHub from "@/pages/DatabasesHub";
+import Dashboard from "@/pages/Dashboard";
+import Profile from "@/pages/Profile";
+import Settings from "@/pages/Settings";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import { SelectionProvider } from "@/context/SelectionContext";
@@ -61,6 +64,9 @@ function App() {
                         element={<DiseaseTargets />}
                       />
                       <Route path="/databases" element={<DatabasesHub />} />
+                      <Route path="/dashboard" element={<Dashboard />} />
+                      <Route path="/profile" element={<Profile />} />
+                      <Route path="/settings" element={<Settings />} />
                       <Route path="/network-analysis" element={<NetworkAnalysis />} />
                       <Route path="/molecular-docking" element={<MolecularDocking />} />
                       <Route path="/molecular-dynamics" element={<MolecularDynamics />} />
