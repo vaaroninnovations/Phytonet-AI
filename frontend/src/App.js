@@ -25,8 +25,10 @@ import { NetworkProvider } from "@/context/NetworkContext";
 import { AuthProvider } from "@/context/AuthContext";
 import { ProjectProvider } from "@/context/ProjectContext";
 import { ChartStyleProvider } from "@/context/ChartStyleContext";
+import { NodeProvider } from "@/context/NodeContext";
 import { AuthModal } from "@/components/AuthModal";
 import ResumeSessionModal from "@/components/ResumeSessionModal";
+import { PurchaseNodesModal, InsufficientNodesModal } from "@/components/nodes/NodeModals";
 import { Toaster } from "sonner";
 
 function App() {
@@ -34,6 +36,7 @@ function App() {
     <div className="App">
       <BrowserRouter>
         <AuthProvider>
+          <NodeProvider>
           <SelectionProvider>
             <ResultsProvider>
               <WorkflowProvider>
@@ -72,12 +75,15 @@ function App() {
                     <SiteFooter />
                     <AuthModal />
                     <ResumeSessionModal />
+                    <PurchaseNodesModal />
+                    <InsufficientNodesModal />
                     </ChartStyleProvider>
                   </ProjectProvider>
                 </NetworkProvider>
               </WorkflowProvider>
             </ResultsProvider>
           </SelectionProvider>
+          </NodeProvider>
         </AuthProvider>
         <Toaster position="top-right" richColors />
       </BrowserRouter>

@@ -450,3 +450,67 @@ Transformed the standalone Molecular Docking entry from a raw paste-SMILES form 
 - Rebuild on Hostinger: `git pull && docker compose up -d --build backend frontend`.
 - Consider testing_agent_v3_fork for the new compound/target lookup endpoints.
 
+
+
+## 2026-02-23 (pm-4) — Node Credit System (Phase 1: core infrastructure) ✅
+
+Shipped Phase 1 of the monetisation stack per user brief (1a · 2c · 3a · 4a · 5a).
+
+**Backend — new centralised service** `backend/routes/nodes.py`
+- Endpoints (all mounted under `/api/nodes`):
+  - `GET /balance` — returns `{ balance, lifetime_used, lifetime_purchased, welcome_bonus_granted, module_costs }`.
+  - `POST /charge` — atomic debit with idempotency by `job_id`. Uses conditional Mongo update `nodes_balance >= amount` so concurrent debits can't overdraw. Returns 402 with `{ error: "insufficient_nodes", balance, required }` when balance too low.
+  - `GET /history` — paginated ledger newest-first, filterable by `direction=debit|credit`.
+  - `GET /pricing` — static INR plans (₹250/10, ₹500/25 [Most Popular], ₹1000/60).
+  - `POST /purchase-intent` — shell endpoint; records intent in `purchase_intents` collection with `status: "coming_soon"` (real Razorpay wires up in Phase 3).
+- **Module cost registry** — single `MODULE_COSTS` dict is the source of truth for both server + client. Free modules absent from map (implicit cost = 0). Adding a new premium module is one line.
+- **Welcome bonus** — 100 nodes granted:
+  - On email register (`auth_service.register`) — added to user doc at creation.
+  - On Google OAuth first login (`google_oauth.py`) — added at doc creation.
+  - Backfill for existing users on first `/balance` call (idempotent via `welcome_bonus_granted` flag) + ledger entry.
+- **Ledger** collection `node_transactions`: immutable append-only rows with `{user_id, direction, amount, balance_after, module, workflow, job_id, reason, meta, at}`.
+
+**Frontend — context, badge, modals**
+- `context/NodeContext.jsx` — global provider. Fetches balance on mount, exposes `costFor(moduleId)`, `preflight(moduleId, workflow)` (auto-pops insufficient modal), `charge({module, amount, jobId, workflow, reason})`. Threshold toasts at 20 / 10 / 5 / 0 fire only on downward crossings.
+- `components/nodes/NodeBadge.jsx` — navbar chip with `<GoldenLeaf />` icon (CSS gradient over `Leaf`), colour-coded pill: green >30, orange 10-30, red <10. Click → popover with balance, "Recharge nodes", "Usage history", "Dashboard".
+- `components/nodes/NodeModals.jsx`:
+  - `<PurchaseNodesModal />` — 3-card pricing grid, Research card highlighted with "Most Popular" gradient badge, ₹/node computed, "Buy plan" writes purchase intent + shows "coming soon" toast.
+  - `<InsufficientNodesModal />` — auto-shows when `NodeContext.insufficient` is set. "Recharge now" chains into purchase modal.
+  - `<ChargeConfirmationDialog />` — imperative pre-run confirmation ("This will consume X nodes · Current balance Y · After run Z").
+
+**Wire-in — 2 premium modules**
+- **PhytoNet AI Agent** (`pages/AIAssistant.jsx`): Launch button reads cost from `costFor("phytonet-ai-agent")` → shows "Launch AI Assistant · 10 nodes". `onStart` runs preflight; if OK, opens ChargeConfirmationDialog. On confirm, kicks off `assistantRun` then fires `chargeNodes({job_id: run.id, ...})` — idempotent so ledger stays correct on retries.
+- **Molecular Docking** (`pages/MolecularDocking.jsx`): Run button shows "Run docking · 5 nodes". Same preflight + ChargeConfirmationDialog pattern. Charge fires after the SSE `done` event with the stream `job_id` for idempotency.
+
+**Global mount** — `App.js` wraps everything in `<NodeProvider>` immediately inside `<AuthProvider>` so `useAuth()` is available. `<PurchaseNodesModal />` + `<InsufficientNodesModal />` are mounted at the root — any child can open them via context.
+
+**Verified end-to-end (screenshot):**
+- Admin login → NodeBadge shows "Nodes: 100" in green tier ✅
+- Click badge → popover with recharge / history / dashboard ✅
+- Click "Recharge nodes" → 3 pricing cards render correctly (₹250/₹500/₹1000; ₹25/₹20/₹16.7 per node; Research card highlighted) ✅
+- Info footer explains payment gateway is being configured ✅
+- Backend `/api/nodes/balance` returns 100, `/api/nodes/pricing` returns 3 INR plans ✅
+
+**Deferred (Phase 2+ per user choice 1a)**
+- Dedicated `/pricing` page (Phase 2).
+- Dashboard redesign — usage table, recharge table, projects/downloads panels, charts (Phase 2).
+- Live Razorpay integration (Phase 3 — waits on user's Razorpay key).
+- Client-side download gate: every download button should call `useAuth().guard(() => download())` — quick pass through the pages (~30 min follow-up, not blocking).
+- Auto-refresh balance polling after external purchases (needs webhook, comes with Razorpay).
+
+**Files touched**
+- `backend/routes/nodes.py` (new, ~230 lines) · `backend/server.py` (mount router) · `backend/auth_service.py` (welcome bonus at register) · `backend/google_oauth.py` (welcome bonus at OAuth first login)
+- `frontend/src/lib/api.js` (5 new wrappers)
+- `frontend/src/context/NodeContext.jsx` (new, ~130 lines)
+- `frontend/src/components/nodes/NodeBadge.jsx` (new, golden-leaf indicator + popover)
+- `frontend/src/components/nodes/NodeModals.jsx` (new, purchase + insufficient + charge-confirm)
+- `frontend/src/components/SiteHeader.jsx` (mount NodeBadge next to user avatar)
+- `frontend/src/App.js` (NodeProvider + global modals)
+- `frontend/src/pages/AIAssistant.jsx` (preflight + confirmation + charge on start)
+- `frontend/src/pages/MolecularDocking.jsx` (preflight + confirmation + charge on done)
+
+**Next Action Items**
+- Push via **Save to Github**
+- Optional Phase 2: dedicated /pricing page + dashboard redesign.
+- Phase 3 (payments): call `integration_playbook_expert_v2` with "Razorpay" once user shares intent to enable purchases; wire the response into `POST /api/nodes/purchase-intent`.
+

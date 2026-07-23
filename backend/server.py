@@ -1285,6 +1285,15 @@ api_router_google = APIRouter(prefix="/api")
 api_router_google.include_router(_google_router)
 app.include_router(api_router_google)
 
+# ─── Nodes (monetisation credit system) — mounted at /api/nodes ───
+from routes import nodes as nodes_routes  # noqa: E402 — lazy import after db init
+_nodes_router = nodes_routes.build_router(
+    db, get_current_user=auth_service.make_get_current_user(db)
+)
+api_router_nodes = APIRouter(prefix="/api")
+api_router_nodes.include_router(_nodes_router)
+app.include_router(api_router_nodes)
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,

@@ -3,12 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useIsStandalone } from "@/hooks/useIsStandalone";
+import { useNodes } from "@/context/NodeContext";
+import { ChargeConfirmationDialog } from "@/components/nodes/NodeModals";
 import StandaloneDockingInput from "@/components/standalone/StandaloneDockingInput";
 import WorkflowLayout from "@/components/WorkflowLayout";
 import { useNetwork } from "@/context/NetworkContext";
 import { useResults } from "@/context/ResultsContext";
 import { useWorkflow } from "@/context/WorkflowContext";
-import { dockingPDBCandidates, dockingRun, dockingRunStream, dockingPoseURL } from "@/lib/api";
+import { dockingPDBCandidates, dockingRun, dockingRunStream, dockingPoseURL, chargeNodes } from "@/lib/api";
 import { toast } from "sonner";
 import { TableToolbar } from "@/components/network/TableToolbar";
 import { DataTable } from "@/components/network/DataTable";
@@ -23,6 +25,9 @@ const DEFAULT_PADDING = 8;
 
 export default function MolecularDocking() {
   const { standalone } = useIsStandalone();
+  const { preflight: preflightNodes, costFor } = useNodes();
+  const [pendingDockOpen, setPendingDockOpen] = useState(false);
+  const [pendingDockCost, setPendingDockCost] = useState(5);
   const { compoundTargets, diseaseTargets, selectedCompounds, intersectingGenes: ctxIntersect, hubScores, setDockingResults } = useNetwork();
   const { compounds: allCompounds } = useResults();
   const { markComplete } = useWorkflow();
@@ -225,6 +230,15 @@ export default function MolecularDocking() {
   const runDocking = async () => {
     if (selectedComp.length === 0) return toast.error("Select at least 1 compound");
     if (selectedGenes.length === 0) return toast.error("Select at least 1 target");
+    // ── Node preflight (5 nodes per docking batch) ──
+    const pf = preflightNodes("molecular-docking", `${selectedComp.length} × ${selectedGenes.length}`);
+    if (!pf.ok) return;
+    setPendingDockCost(pf.required);
+    setPendingDockOpen(true);
+  };
+
+  const confirmAndRunDocking = async () => {
+    setPendingDockOpen(false);
     setRunning(true); setResult(null);
     setProgressEvents([]); setProgressPair(null); setProgressTotal(0); setProgressDone(0);
     try {
@@ -295,6 +309,14 @@ export default function MolecularDocking() {
       setResult(res);
       setDockingResults(res);
       if (!standalone) markComplete("molecular-docking");
+      // Debit nodes now that the batch has completed (charge idempotent by job_id).
+      chargeNodes({
+        module: "molecular-docking",
+        amount: pendingDockCost || 5,
+        jobId: streamJobId || `dock_${Date.now()}`,
+        workflow: `${selectedComp.length} × ${selectedGenes.length}`,
+        reason: "Molecular docking batch",
+      }).catch(() => {});
       toast.success(`Docking complete · ${finalResults.length} pairs`);
     } catch (e) { toast.error("Docking run failed: " + (e.response?.data?.detail || e.message)); }
     finally { setRunning(false); setProgressPair(null); }
@@ -497,7 +519,7 @@ export default function MolecularDocking() {
               </button>
               <button data-testid="dock-run" onClick={runDocking} disabled={running} className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#5139ED] via-[#395AED] to-[#8139ED] px-4 py-2 text-xs font-bold uppercase tracking-widest text-white shadow-[0_10px_30px_-10px_rgba(81,57,237,0.6)] disabled:opacity-40">
                 {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
-                {running ? "Docking…" : "Run docking"}
+                {running ? "Docking…" : `Run docking · ${costFor("molecular-docking")} nodes`}
               </button>
             </div>
           </div>
@@ -645,6 +667,13 @@ export default function MolecularDocking() {
           </div>
         )}
       </main>
+      <ChargeConfirmationDialog
+        open={pendingDockOpen}
+        cost={pendingDockCost}
+        moduleLabel="Run Molecular Docking"
+        onConfirm={confirmAndRunDocking}
+        onCancel={() => setPendingDockOpen(false)}
+      />
     </WorkflowLayout>
   );
 }

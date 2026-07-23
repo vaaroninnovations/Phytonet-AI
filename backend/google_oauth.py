@@ -142,6 +142,10 @@ def build_router(db, auth_service):
                 "created_at": now,
                 "last_login_at": now,
                 "oauth_provider": "google",
+                "nodes_balance": 100,
+                "nodes_lifetime_used": 0,
+                "nodes_lifetime_purchased": 0,
+                "welcome_bonus_granted": True,
             }
             res = await db["users"].insert_one(doc)
             doc["_id"] = res.inserted_id

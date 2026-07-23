@@ -6,20 +6,27 @@ import { motion } from "framer-motion";
 import { Sparkles, Loader2, Check, X, ArrowRight, Download, Gift, AlertCircle, Play } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth, AUTH_GATE_ENABLED } from "@/context/AuthContext";
+import { useNodes } from "@/context/NodeContext";
+import { ChargeConfirmationDialog } from "@/components/nodes/NodeModals";
 import {
   assistantEligibility, assistantRun, assistantStatus, assistantReportURL,
+  chargeNodes,
 } from "@/lib/api";
 
 const POLL_MS = 2500;
 
 export default function AIAssistant() {
   const { user, openModal, guard } = useAuth();
+  const { preflight: preflightNodes, costFor } = useNodes();
   const [plant, setPlant] = useState("");
   const [disease, setDisease] = useState("");
   const [eligible, setEligible] = useState({ eligible: true, is_admin: false, free_used: false });
   const [run, setRun] = useState(null);
   const [starting, setStarting] = useState(false);
   const [checkingElig, setCheckingElig] = useState(false);
+  const [chargeOpen, setChargeOpen] = useState(false);
+  const [chargeCost, setChargeCost] = useState(10);
+  const [pendingRun, setPendingRun] = useState(null);
   const pollRef = useRef(null);
 
   useEffect(() => {
@@ -53,10 +60,30 @@ export default function AIAssistant() {
       toast.error("Free run already used — upgrade to run again.");
       return;
     }
+    // ── Node preflight (10 nodes per full AI Agent workflow) ──
+    const pf = preflightNodes("phytonet-ai-agent", `Plant: ${plant.trim()} · Disease: ${disease.trim()}`);
+    if (!pf.ok) return;
+    setChargeCost(pf.required);
+    setPendingRun({ plant: plant.trim(), disease: disease.trim() });
+    setChargeOpen(true);
+  });
+
+  // Actually launch the run after the user confirms the node charge.
+  const confirmChargeAndRun = async () => {
+    setChargeOpen(false);
+    if (!pendingRun) return;
     setStarting(true);
     try {
-      const r = await assistantRun(plant.trim(), disease.trim());
+      const r = await assistantRun(pendingRun.plant, pendingRun.disease);
       setRun(r);
+      // Debit nodes now that the workflow has actually started.
+      await chargeNodes({
+        module: "phytonet-ai-agent",
+        amount: chargeCost,
+        jobId: r?.id || undefined,
+        workflow: `Plant: ${pendingRun.plant} · Disease: ${pendingRun.disease}`,
+        reason: "PhytoNet AI Agent full workflow",
+      }).catch(() => {}); // ledger failure shouldn't fail the UX
       toast.success("PhytoNet AI Assistant is analysing your query…");
       setEligible((e) => ({ ...e, free_used: !e.is_admin, eligible: e.is_admin }));
     } catch (e) {
@@ -67,8 +94,11 @@ export default function AIAssistant() {
       } else {
         toast.error("Assistant failed to start: " + (e?.response?.data?.detail || e.message));
       }
-    } finally { setStarting(false); }
-  });
+    } finally {
+      setStarting(false);
+      setPendingRun(null);
+    }
+  };
 
   return (
     <main data-testid="ai-assistant-page" className="relative mx-auto max-w-6xl px-6 pb-24 pt-14">
@@ -139,7 +169,7 @@ export default function AIAssistant() {
           <button data-testid="assistant-start" onClick={onStart} disabled={!canStart || (AUTH_GATE_ENABLED && !eligible.eligible)}
                   className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#5139ED] via-[#395AED] to-[#8139ED] px-6 py-3 text-[14px] font-bold text-white shadow-[0_14px_36px_-10px_rgba(81,57,237,0.7)] transition-all hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0">
             {starting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-            {starting ? "Starting…" : "Launch AI Assistant"}
+            {starting ? "Starting…" : `Launch AI Assistant · ${costFor("phytonet-ai-agent")} nodes`}
           </button>
         )}
         {AUTH_GATE_ENABLED && eligible && !eligible.eligible && !eligible.is_admin && (
@@ -226,6 +256,13 @@ export default function AIAssistant() {
           </div>
         ))}
       </div>
+      <ChargeConfirmationDialog
+        open={chargeOpen}
+        cost={chargeCost}
+        moduleLabel="Launch PhytoNet AI Agent"
+        onConfirm={confirmChargeAndRun}
+        onCancel={() => { setChargeOpen(false); setPendingRun(null); }}
+      />
     </main>
   );
 }

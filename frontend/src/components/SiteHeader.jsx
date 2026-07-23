@@ -2,6 +2,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Search, User, LogOut, LayoutDashboard, FolderOpen, Download, Settings, Menu, X } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import NodeBadge from "@/components/nodes/NodeBadge";
 import SaveProjectMenu from "@/components/SaveProjectMenu";
 import BrandLogo from "@/components/BrandLogo";
 
@@ -92,7 +93,9 @@ export default function SiteHeader() {
               Sign In
             </button>
           ) : (
-            <div className="relative">
+            <div className="flex items-center gap-2">
+              <NodeBadge />
+              <div className="relative">
               <button
                 data-testid="header-avatar"
                 onClick={() => setMenuOpen((v) => !v)}
@@ -118,6 +121,7 @@ export default function SiteHeader() {
                   <MenuItem icon={<LogOut className="h-4 w-4" />} label="Logout" testid="menu-logout" onClick={() => { setMenuOpen(false); logout(); }} />
                 </div>
               )}
+              </div>
             </div>
           )}
 

@@ -84,6 +84,16 @@ export const compoundLookup = (name) =>
 export const targetResolve = (query, organism = "Homo sapiens") =>
   api.get("/target/resolve", { params: { query, organism } }).then((r) => r.data);
 
+// ── Node credit system ─────────────────────────────────────────────
+export const getNodeBalance = () => api.get("/nodes/balance").then((r) => r.data);
+export const chargeNodes = (payload) =>
+  api.post("/nodes/charge", payload).then((r) => r.data);
+export const getNodeHistory = (params = {}) =>
+  api.get("/nodes/history", { params }).then((r) => r.data);
+export const getNodePricing = () => api.get("/nodes/pricing").then((r) => r.data);
+export const createPurchaseIntent = (plan_id) =>
+  api.post("/nodes/purchase-intent", { plan_id }).then((r) => r.data);
+
 // SSE stream — returns EventSource. Caller wires up `pair_start` / `pair_done`
 // / `error` / `done` listeners.
 export const dockingRunStream = (payload) => {
