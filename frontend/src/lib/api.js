@@ -78,6 +78,12 @@ export const dockingPDBCandidates = (payload) =>
 export const dockingRun = (payload) =>
   api.post("/docking/run", payload, { timeout: 600000 }).then((r) => r.data);
 
+// Intelligent lookups — compound name → PubChem, gene/protein → UniProt.
+export const compoundLookup = (name) =>
+  api.get("/compound/lookup", { params: { name } }).then((r) => r.data);
+export const targetResolve = (query, organism = "Homo sapiens") =>
+  api.get("/target/resolve", { params: { query, organism } }).then((r) => r.data);
+
 // SSE stream — returns EventSource. Caller wires up `pair_start` / `pair_done`
 // / `error` / `done` listeners.
 export const dockingRunStream = (payload) => {

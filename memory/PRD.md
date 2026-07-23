@@ -406,3 +406,47 @@ Added Molecular Docking to the modular platform, matching the same standalone-in
 - Rebuild frontend on Hostinger: `git pull && docker compose up -d --build frontend`.
 - Consider a `testing_agent_v3_fork` regression sweep across the 7 module routes.
 
+
+
+## 2026-02-23 (pm-3) — Intelligent Docking Assistant ✅
+
+Transformed the standalone Molecular Docking entry from a raw paste-SMILES form into an intelligent lookup assistant. Users now type a compound *name* and a gene/protein *name*; the platform resolves everything (SMILES, InChI, IUPAC, UniProt, PDBs) automatically.
+
+**New backend endpoints** (`server.py` after `/api/health`)
+- `GET /api/compound/lookup?name=…` — resolves compound name via `_pubchem_full()` (PubChem PUG-REST). Returns canonical/isomeric SMILES, InChI, InChIKey, molecular formula/weight, IUPAC name, PubChem CID + URL, top 12 synonyms, and best-effort ChEBI ID.
+- `GET /api/target/resolve?query=…&organism=…` — hits UniProt REST search restricted to reviewed entries with `gene_exact:` or `protein_name:` predicates. Returns UniProt accession + entry name, canonical protein name, up to 6 gene symbols, organism, sequence length, function text (with PubMed IDs), diseases, up to 20 cross-referenced PDB IDs, and the UniProt URL.
+
+**Frontend API wrappers** (`lib/api.js`)
+- `compoundLookup(name)` → GET `/api/compound/lookup`
+- `targetResolve(query, organism = "Homo sapiens")` → GET `/api/target/resolve`
+
+**Frontend rewrite** — `components/standalone/StandaloneDockingInput.jsx` (~340 lines)
+- Two-column resolver grid: Compound (green tint) + Target (magenta tint).
+- Each resolver: input with search icon, Enter-to-resolve, Loader2 spinner during lookup, dedicated result card with all resolved fields, "Clear" X button.
+- **CompoundCard**: formula, MW, PubChem CID, InChIKey, monospace SMILES box, synonym chips, PubChem external link.
+- **TargetCard**: UniProt, sequence length, PDB grid with best pick highlighted with `★`, function text panel with PubMed refs, UniProt external link. If no PDBs exist, notes "will use AlphaFold fallback".
+- **Advanced mode collapse**: paste-override inputs for SMILES / UniProt ID / PDB ID — override the resolved values on commit.
+- Gradient "Load & continue to docking" CTA pushes into NetworkContext (`setSelectedCompounds`, `setCompoundTargets`, `setIntersectingGenes`) so the existing AutoDock Vina pipeline renders unchanged.
+
+**Verified end-to-end**
+- `Curcumin` → CID 969516, canonical SMILES `COC1=C(C=CC(=C1)C=CC(=O)CC(=O)CC2=CC(=C(C=C2)O)OC)O`, MW 368.40, IUPAC name, InChIKey, 6 synonyms rendered.
+- `EGFR` → P00533, 1210 aa, protein name "Epidermal growth factor receptor", 20 PDBs with 1IVO auto-picked, function paragraph rendered with PubMed citations.
+- All handled by two REST calls (`~500 ms compound`, `~800 ms target`) — no shell-out, no additional MongoDB reads, no additional Python deps.
+
+**Files touched**
+- `backend/server.py` — 2 new endpoints (compound/lookup, target/resolve)
+- `frontend/src/lib/api.js` — 2 new API wrappers
+- `frontend/src/components/standalone/StandaloneDockingInput.jsx` — complete rewrite (raw paste → intelligent assistant)
+
+**Deferred (P2 feature scope)**
+- SDF / MOL / MOL2 / PDB file upload (RDKit already loaded; upload UI + BLOB parse required)
+- Auto-execute Target Prediction pipeline after compound resolves (surface predicted targets as a "quick-pick" list next to manual target search)
+- PDB structure ranking modal (resolution + ligand-present + method filter — currently top PDB from UniProt XREF order is selected)
+- AlphaFold model auto-fetch when no experimental PDB exists (backend hook needed)
+- Advanced settings panel: binding-box coordinates, flexibility toggles (backend already exposes these via existing controls after inputs are loaded)
+
+**Next Action Items**
+- Push via **Save to Github**.
+- Rebuild on Hostinger: `git pull && docker compose up -d --build backend frontend`.
+- Consider testing_agent_v3_fork for the new compound/target lookup endpoints.
+

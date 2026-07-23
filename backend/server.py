@@ -414,6 +414,130 @@ async def health():
     return {"status": "ok", "service": "dr-slash", "admet_ready": admet_service.is_ready()}
 
 
+# ─────────────────────────────────────────────────────────────
+# Intelligent lookup endpoints — power the standalone Molecular
+# Docking module's "beginner mode": user types a compound name or
+# a gene/protein name, we resolve everything else (SMILES, InChI,
+# UniProt, PDB candidates) so no manual identifier work is needed.
+# ─────────────────────────────────────────────────────────────
+
+@api_router.get("/compound/lookup")
+async def compound_lookup(name: str = Query(..., min_length=2, max_length=200)):
+    """Resolve a compound *name* to full identifier + structure metadata via PubChem.
+
+    Returns 404 if PubChem can't find the compound.
+    """
+    async with httpx.AsyncClient() as client_:
+        pub = await _pubchem_full(client_, name.strip())
+        if not pub or not pub.get("pubchem_cid"):
+            raise HTTPException(status_code=404, detail=f"No PubChem match for '{name}'.")
+        # Enrich with synonyms + ChEBI when available (best-effort, never blocks).
+        synonyms: list[str] = []
+        try:
+            r = await client_.get(
+                f"{PUBCHEM_BASE}/cid/{pub['pubchem_cid']}/synonyms/JSON",
+                timeout=8.0, headers={"User-Agent": USER_AGENT},
+            )
+            if r.status_code == 200:
+                syn_list = (r.json().get("InformationList", {})
+                              .get("Information", [{}])[0]
+                              .get("Synonym", []) or [])
+                synonyms = syn_list[:12]
+        except Exception:
+            pass
+        chebi = await _chebi_by_name(client_, name.strip())
+        return {
+            **pub,
+            "name": name.strip(),
+            "synonyms": synonyms,
+            "chebi_id": (chebi or {}).get("chebi_id"),
+            "chebi_label": (chebi or {}).get("label"),
+            "pubchem_url": f"https://pubchem.ncbi.nlm.nih.gov/compound/{pub['pubchem_cid']}",
+        }
+
+
+@api_router.get("/target/resolve")
+async def target_resolve(query: str = Query(..., min_length=2, max_length=100),
+                         organism: str = Query("Homo sapiens", max_length=64)):
+    """Resolve a *gene symbol* or *protein name* to a UniProt entry.
+
+    Queries the UniProt REST API restricted to reviewed (SwissProt) entries.
+    Returns the best-scoring match plus available PDB cross-references.
+    """
+    q = query.strip()
+    # UniProt query: prefer exact gene symbol match, restricted to the requested organism
+    uniprot_query = (
+        f'(gene_exact:"{q}" OR protein_name:"{q}") AND '
+        f'organism_name:"{organism}" AND reviewed:true'
+    )
+    fields = "accession,id,protein_name,gene_names,organism_name,length,cc_function,cc_disease,xref_pdb"
+    try:
+        async with httpx.AsyncClient() as client_:
+            r = await client_.get(
+                "https://rest.uniprot.org/uniprotkb/search",
+                params={"query": uniprot_query, "fields": fields, "format": "json", "size": 3},
+                timeout=15.0, headers={"User-Agent": USER_AGENT},
+            )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"UniProt request failed: {e}")
+    if r.status_code != 200:
+        raise HTTPException(status_code=502, detail=f"UniProt returned HTTP {r.status_code}")
+    try:
+        results = r.json().get("results", [])
+    except Exception:
+        raise HTTPException(status_code=502, detail="UniProt returned unparseable JSON")
+    if not results:
+        raise HTTPException(status_code=404, detail=f"No UniProt match for '{query}' ({organism}).")
+    top = results[0]
+    # Parse gene symbols
+    gene_symbols = []
+    for gn in top.get("genes", []) or []:
+        if gn.get("geneName", {}).get("value"):
+            gene_symbols.append(gn["geneName"]["value"])
+        for syn in gn.get("synonyms", []) or []:
+            if syn.get("value"): gene_symbols.append(syn["value"])
+    # Protein name
+    protein_name = (
+        top.get("proteinDescription", {})
+           .get("recommendedName", {})
+           .get("fullName", {})
+           .get("value")
+    ) or query
+    # Function
+    func_text = ""
+    for c in top.get("comments", []) or []:
+        if c.get("commentType") == "FUNCTION":
+            texts = c.get("texts", []) or []
+            if texts:
+                func_text = (texts[0].get("value") or "")[:600]
+                break
+    # Diseases
+    diseases = []
+    for c in top.get("comments", []) or []:
+        if c.get("commentType") == "DISEASE":
+            disease = (c.get("disease") or {}).get("diseaseId")
+            if disease: diseases.append(disease)
+    # PDB IDs
+    pdb_ids = []
+    for x in top.get("uniProtKBCrossReferences", []) or []:
+        if x.get("database") == "PDB" and x.get("id"):
+            pdb_ids.append(x["id"])
+    return {
+        "uniprot_id": top.get("primaryAccession"),
+        "uniprot_entry": top.get("uniProtkbId"),
+        "protein_name": protein_name,
+        "gene_symbols": gene_symbols[:6],
+        "primary_gene": gene_symbols[0] if gene_symbols else None,
+        "organism": (top.get("organism") or {}).get("scientificName") or organism,
+        "sequence_length": (top.get("sequence") or {}).get("length"),
+        "function": func_text,
+        "diseases": diseases[:8],
+        "pdb_ids": pdb_ids[:20],
+        "uniprot_url": f"https://www.uniprot.org/uniprotkb/{top.get('primaryAccession')}",
+    }
+
+
+
 # ---------------------------------------------------------------------------
 # ADMET & Drug-Likeness Prediction (admet-ai)
 # ---------------------------------------------------------------------------
