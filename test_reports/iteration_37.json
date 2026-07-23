@@ -1,0 +1,86 @@
+{
+  "summary": "Frontend-only regression test of the P1 structural refactor (PlantDatabase 1202→940 + parts/, DrugLikeness 1821→multi + parts/, NetworkAnalysis 2506→multi + parts/). PURE STRUCTURAL SPLIT VERIFIED — no logic regressions. All primary routes render, all key test-ids from the review-request resolve, and one full end-to-end search on Plant DB returns 242 compounds with SmilesDrawer canvases and export buttons intact.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Refactor cleanliness: PlantDatabase/index.jsx (~999 lines) still slightly above the 700-line file-size guideline — parts/inputs.jsx (SearchInput/NumberField/ExportButton), parts/CellValue.jsx, parts/tableStates.jsx are well-scoped. Consider extracting the results-table/pagination/proceed-bar section into parts/ResultsSection.jsx in a follow-up P2 to reach <700 lines.",
+    "DrugLikeness/index.jsx and NetworkAnalysis/index.jsx main files also remain sizeable after the split; the extracted parts (ScoringConfigPanel, FilterCards, tableComponents, IntersectionPanel, PPIPanel, HubPanel, GOPanel, KeggPanel, common) are correctly focused single-concern modules.",
+    "PRE-EXISTING (not caused by refactor): a benign React hydration warning \"In HTML, <span> cannot be a child of <option>\" appears on Plant DB pages — it is emitted by the tooling instrumentation (x-ve-dynamic / x-source-editable attrs injecting a <span style=display:contents> inside each mapped <option value={n}>{n}</option>) in the page-size <select data-testid=\"page-size\">. Does not affect functionality or test-ids. Same warning present at both /plant-database and /phytonet-ai identically → confirms it is not a refactor regression."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested (frontend-only per request)", "frontend": "100% of specified refactor checks passed"},
+  "test_credentials": "admin@phytonet.ai / Admin123! — worked via the header sign-in modal (data-testid=header-signin → signin-email/signin-password/signin-submit).",
+  "seed_data_creation": "None. One live IMPPAT/LOTUS search for 'Curcuma longa' issued to verify the Plant DB pipeline (read-only).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Refactor test-id map that resolved cleanly: plant-database-page, mode-tabs, mode-{plant,simple,exact,substructure,molweight}, exact-type, substructure-algo, substructure-max, mw-search, row-count, results-table, results-search, page-size/prev/indicator/next, source-filter-*, sortable-*, row-*, row-check-*, proceed-drug-likeness, confirm-dialog, plant-input, plant-input-submit, admet-page, admet-progress, admet-scoring-config, weight-druglikeness/adme/toxicity, adme-filters (+ absorption/distribution/metabolism rows), auto-analyse-btn, admet-empty (when applicable), standalone-smiles-input, smiles-tab-{name,paste,upload}, standalone-load-examples, network-empty, back-to-target, workflow-layout, workflow-sidebar, workflow-step-*, node-badge, node-balance, node-badge-popover. Login via /login is 404 — use header modal (data-testid=header-signin). /drug-likeness is INTENTIONALLY in STANDALONE_ROUTES (hooks/useIsStandalone.js) so it renders StandaloneSMILESInput not EmptySelection; workflow-only rendering (EmptySelection) is triggered from /phytonet-ai step 3 when no selection exists. /network-analysis is NOT in STANDALONE_ROUTES → it always renders inside WorkflowLayout and shows the gated network-empty placeholder until prerequisites are met.",
+  "detailed_verification_results": {
+    "dashboard_/dashboard": {
+      "renders": true,
+      "account_card": true,
+      "node_balance_card_with_100": true,
+      "golden_leaf_visible": true,
+      "usage_history_card": true,
+      "recharge_history_table_row": "welcome_bonus  +100  balance-after 100",
+      "saved_projects_list_count": 1,
+      "stat_cards_present": ["AI Agent Runs 0", "Docking Jobs 0", "Saved Projects 1", "Downloads 0"]
+    },
+    "node_badge_popover": {
+      "opens_on_click": true,
+      "shows_current_balance_100": true,
+      "menu_items": ["Recharge nodes", "Usage history", "Dashboard"]
+    },
+    "plant_database_/plant-database": {
+      "sidebar_hidden": true,
+      "plant-database-page_testid": true,
+      "mode_tabs_all_5_present": ["mode-plant", "mode-simple", "mode-exact", "mode-substructure", "mode-molweight"],
+      "mode_swap_verified": {
+        "mode-exact -> exact-type select shown": true,
+        "mode-substructure -> substructure-algo select shown": true,
+        "mode-molweight -> mw-search shown": true
+      },
+      "curcuma_longa_search_result": {
+        "row_count": 242,
+        "IMPPAT_count": 121,
+        "LOTUS_count": 64,
+        "Both_databases": 57,
+        "smilesdrawer_canvases_rendered": 50,
+        "first_row_data_ok": "beta-Bisabolene C15H24 204.36 IMPPAT+LOTUS SMILES rendered",
+        "export_buttons": ["CSV", "Excel", "JSON"]
+      }
+    },
+    "plant_database_/phytonet-ai_step1": {
+      "renders_with_WorkflowSidebar": true,
+      "workflow_sidebar_step_testids_present": ["workflow-step-plant-database", "workflow-step-admet-drug-likeness", "workflow-step-target-prediction", "workflow-step-disease-target-identification", "workflow-step-network-analysis", "workflow-step-molecular-docking", "workflow-step-molecular-dynamics", "workflow-step-ai-scientific-report"],
+      "plant-database-page_testid_present": true,
+      "LCMSUpload_topRightSlot_present": true
+    },
+    "admet_/admet_standalone": {
+      "renders_StandaloneSMILESInput": true,
+      "smiles-tab-name/paste/upload_present": true,
+      "load_curated_examples_button": true,
+      "after_load_curated": {
+        "admet-scoring-config": true,
+        "weight-druglikeness/adme/toxicity_inputs": true,
+        "auto-analyse-btn": true,
+        "adme-filters_with_absorption/distribution/metabolism/excretion_rows": true,
+        "all_filter_help_and_filter_testids_present": true
+      }
+    },
+    "drug_likeness_/drug-likeness": {
+      "renders_StandaloneSMILESInput": true,
+      "note": "This route is in STANDALONE_ROUTES so standalone behavior is intended — matches useIsStandalone.js definition."
+    },
+    "network_analysis_/network-analysis": {
+      "network-empty_placeholder_shown": true,
+      "back-to-target_button_present": true,
+      "message": "'Complete Compound Target Identification and Disease Target Identification first' — matches expected gated state."
+    }
+  }
+}
