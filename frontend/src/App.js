@@ -1,7 +1,8 @@
 import "@/App.css";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Home from "@/pages/Home";
 import PhytoNetAI from "@/pages/PhytoNetAI";
+import PlantDatabase from "@/pages/PlantDatabase";
 import DrugLikeness from "@/pages/DrugLikeness";
 import ComingSoon from "@/pages/ComingSoon";
 import TargetPrediction from "@/pages/TargetPrediction";
@@ -14,6 +15,7 @@ import MyProjects from "@/pages/MyProjects";
 import VerifyEmail from "@/pages/VerifyEmail";
 import AIAssistant from "@/pages/AIAssistant";
 import GoogleCallback from "@/pages/GoogleCallback";
+import DatabasesHub from "@/pages/DatabasesHub";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import { SelectionProvider } from "@/context/SelectionContext";
@@ -42,16 +44,20 @@ function App() {
                     <Routes>
                       <Route path="/" element={<Home />} />
                       <Route path="/phytonet-ai" element={<PhytoNetAI />} />
-                      <Route
-                        path="/plant-database"
-                        element={<Navigate to="/phytonet-ai" replace />}
-                      />
+                      <Route path="/plant-database" element={<PlantDatabase />} />
                       <Route path="/drug-likeness" element={<DrugLikeness />} />
+                      <Route path="/admet" element={<DrugLikeness />} />
+                      <Route path="/compound-target-prediction" element={<TargetPrediction />} />
                       <Route path="/target-prediction" element={<TargetPrediction />} />
+                      <Route
+                        path="/disease-target-prediction"
+                        element={<DiseaseTargets />}
+                      />
                       <Route
                         path="/disease-target-identification"
                         element={<DiseaseTargets />}
                       />
+                      <Route path="/databases" element={<DatabasesHub />} />
                       <Route path="/network-analysis" element={<NetworkAnalysis />} />
                       <Route path="/molecular-docking" element={<MolecularDocking />} />
                       <Route path="/molecular-dynamics" element={<MolecularDynamics />} />

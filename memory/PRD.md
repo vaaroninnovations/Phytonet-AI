@@ -270,3 +270,54 @@ User must use **"Save to Github"** in the chat toolbar — the sandbox has no pu
 - On the Hostinger VPS follow `README-DEPLOY.md` §§ 1-6.
 - After first boot, verify Celery ping: `docker compose exec backend python -c "from backend.celery_app import celery_app; print(celery_app.send_task('phytonet.ping').get(timeout=5))"` → `pong`.
 
+
+
+## 2026-02-23 — Modular Platform Architecture ✅
+
+Reorganised PhytoNet AI into a modular research platform without touching the Hero or existing workflow logic.
+
+**Homepage — `pages/Home.jsx`**
+- Hero preserved verbatim (no redesign).
+- **New `ResearchModules` section** injected immediately below Hero, above `AssistantHero`. Glassmorphism cards with Framer-Motion hover animations (`whileHover={y:-6}`), color-tinted icon chips, "STANDALONE" tags, and a flagship badge on the AI Agent card (which spans 2 columns on md+ screens).
+- 7 cards with correct CTAs and routes:
+  - PhytoNet AI Agent → `/phytonet-ai` (flagship)
+  - Plant Database → `/plant-database`
+  - Compound Target Prediction → `/compound-target-prediction`
+  - Disease Target Prediction → `/disease-target-prediction`
+  - ADMET Prediction → `/admet`
+  - Drug-Likeness Prediction → `/drug-likeness`
+  - Databases → `/databases`
+
+**Standalone routes — `App.js`**
+- Removed the `Navigate` redirect from `/plant-database → /phytonet-ai`; page now renders `PlantDatabase.jsx` standalone.
+- Added aliases (no code duplication — same underlying component):
+  - `/compound-target-prediction` → `TargetPrediction`
+  - `/disease-target-prediction` → `DiseaseTargets`
+  - `/admet` → `DrugLikeness` (the existing page already handles ADMET + drug-likeness — single source of truth)
+- All 8 routes verified with `curl` → 200.
+
+**New Databases Hub — `pages/DatabasesHub.jsx`**
+- Route: `/databases`.
+- Curated index of **24 databases** across 7 categories (Chemistry, Targets & PPI, Disease, Pathways, Structures, Phytochemistry, Pharmacology).
+- Each card: description, supported data pills, update cadence, API availability, citation with copy-to-clipboard button, and a "Used in PhytoNet AI" panel explaining exactly how the source is consumed.
+- Client-side search + category chips with counts, empty-state, launch-workflow CTA.
+- Includes: PubChem, ChEMBL, BindingDB, UniProt, GeneCards, DisGeNET, OMIM, Open Targets, DrugBank, STRING, KEGG, Reactome, WikiPathways, GO, PDB, AlphaFold, IMPPAT, NPASS, COCONUT, CMAUP, Dr. Duke's DB, KNApSAcK, FooDB, SwissTargetPrediction.
+
+**No component duplication**
+- Standalone module pages render the exact same components already used inside the AI Agent workflow. The AI Agent orchestrates them via `WorkflowLayout`; the standalone routes render the same page components without the workflow wrapper.
+
+**Verified**
+- Frontend compiles cleanly (webpack: 1 pre-existing lint warning, no new errors).
+- Home page: 7 module cards enumerated in DOM with correct hrefs.
+- `/plant-database`, `/databases`, `/admet` all render without redirect.
+
+**Files touched**
+- `frontend/src/pages/Home.jsx` — added `ResearchModules` section (defined between `Hero` and `Stats`).
+- `frontend/src/App.js` — new routes, dropped Navigate redirect.
+- `frontend/src/pages/DatabasesHub.jsx` — new (498 lines).
+
+**Next Action Items**
+- Optional polish: reuse `data-testid` conventions for `/admet` route so future testing can distinguish it from `/drug-likeness`.
+- P1 refactor still pending: large page components.
+- P2 backlog: MD server-side execution (v2.0).
+
