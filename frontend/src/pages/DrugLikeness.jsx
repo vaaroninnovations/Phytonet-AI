@@ -602,7 +602,7 @@ export default function DrugLikeness() {
           />
         </main>
 
-        {rows.length > 0 && (
+        {!standalone && rows.length > 0 && (
           <div
             data-testid="admet-proceed-bar"
             className="pointer-events-none fixed inset-x-0 bottom-6 z-30 flex justify-center px-4"

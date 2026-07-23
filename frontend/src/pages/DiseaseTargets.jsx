@@ -638,7 +638,7 @@ export default function DiseaseTargets() {
           )}
         </main>
 
-        {rows.length > 0 && !loadingTargets && (
+        {!standalone && rows.length > 0 && !loadingTargets && (
           <div
             data-testid="disease-proceed-bar"
             className="pointer-events-none fixed inset-x-0 bottom-6 z-30 flex justify-center px-4"
