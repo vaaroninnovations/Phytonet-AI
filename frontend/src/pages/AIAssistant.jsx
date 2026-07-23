@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { useAuth, AUTH_GATE_ENABLED } from "@/context/AuthContext";
 import { useNodes } from "@/context/NodeContext";
 import { ChargeConfirmationDialog } from "@/components/nodes/NodeModals";
+import { GoldenLeaf } from "@/components/nodes/NodeBadge";
 import {
   assistantEligibility, assistantRun, assistantStatus, assistantReportURL,
   chargeNodes,
@@ -169,7 +170,7 @@ export default function AIAssistant() {
           <button data-testid="assistant-start" onClick={onStart} disabled={!canStart || (AUTH_GATE_ENABLED && !eligible.eligible)}
                   className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#5139ED] via-[#395AED] to-[#8139ED] px-6 py-3 text-[14px] font-bold text-white shadow-[0_14px_36px_-10px_rgba(81,57,237,0.7)] transition-all hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0">
             {starting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-            {starting ? "Starting…" : `Launch AI Assistant · ${costFor("phytonet-ai-agent")} nodes`}
+            {starting ? "Starting…" : (<><span>Launch AI Assistant · </span><GoldenLeaf size={14} className="ml-0.5" /><span className="ml-0.5">{costFor("phytonet-ai-agent")} nodes</span></>)}
           </button>
         )}
         {AUTH_GATE_ENABLED && eligible && !eligible.eligible && !eligible.is_admin && (

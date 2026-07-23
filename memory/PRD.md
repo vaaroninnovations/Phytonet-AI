@@ -598,3 +598,40 @@ Every menu item in the account dropdown now navigates to a fully functional page
 - Rebuild on Hostinger: `git pull && docker compose up -d --build backend frontend`
 - Optional P2: monthly-activity chart on Dashboard (Chart.js is already loaded elsewhere), 2FA rollout, invoice PDF downloads on Recharge History.
 
+
+
+## 2026-02-23 — Golden Leaf Aesthetic Pass
+
+**User instruction:** *"the colors should match with website colors and node token icon is a golden leaf represented where necessary"*
+
+**Root cause found:** `GoldenLeaf` previously used `WebkitBackgroundClip: text` on a lucide-react `<Leaf>` (which is a stroke-based icon). Background-clip only paints the fill, so the icon was practically invisible at ≤16px on the small NavBar pill and label rows.
+
+**Fix — proper SVG gradient stroke**
+- Replaced `GoldenLeaf` in `components/nodes/NodeBadge.jsx` with an inline `<svg>` using `<linearGradient>` on both stroke and 18%-opacity fill. Gradient renders cleanly from 12px → 220px.
+- Kept the same public API (`size`, `className`) plus a `solid` prop for future dark-mode variants.
+
+**Fix — NavBar pill**
+- Changed tier colours to keep the badge **always gold-toned** (amber gradient at 30+, orange at 10-30, red under 10). Currency icon is now always visually gold, balance tier is expressed via border shade + `AlertTriangle`.
+- Bumped icon from 13 → 16 px, added `tabular-nums`, `uppercase "nodes"` sub-label at ≥sm.
+
+**Fix — Dashboard hero**
+- Balance card now: 44px gold leaf next to the huge "100" number, decorative 220px watermark leaf at 8% opacity, amber gradient background (`#FFFBEB → #FEF3C7`).
+- Recharge History `+100` row prefixed with a 12px leaf, amber `#B45309` text (instead of emerald).
+
+**Fix — CTA buttons**
+- `AIAssistant.jsx` launch button — leaf between "Launch AI Assistant ·" and cost.
+- `MolecularDocking.jsx` run button — leaf between "Run docking ·" and cost.
+
+**Verified via screenshots**
+- Nav pill, popover, Dashboard hero, Recharge History row, Purchase Modal (all 3 tiers) — golden leaf visible everywhere. Colours match site palette (violet primary + amber gold for currency).
+
+**Files touched**
+- `frontend/src/components/nodes/NodeBadge.jsx`
+- `frontend/src/pages/Dashboard.jsx`
+- `frontend/src/pages/AIAssistant.jsx`
+- `frontend/src/pages/MolecularDocking.jsx`
+
+**Next Action Items**
+- P1: Refactor `NetworkAnalysis.jsx` (2505 lines), `DrugLikeness.jsx` (1805), `PlantDatabase.jsx` (1196) into per-page folders — user-approved plan.
+- P2: Wire Razorpay/Stripe payment gateway for node recharge (UI ready, checkout still returns "coming soon").
+- P2: Molecular Dynamics server-side execution (Celery/GROMACS scaffolding already in `docker-compose.yml`).

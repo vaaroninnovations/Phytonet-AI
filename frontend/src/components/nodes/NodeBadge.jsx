@@ -1,34 +1,68 @@
 // Golden-leaf node balance indicator for the top nav.
 // Colour-coded (green >30, orange 10-30, red <10) with a click-through
 // popover exposing balance / recharge / dashboard shortcuts.
-import { useState } from "react";
+import { useState, useId } from "react";
 import { Link } from "react-router-dom";
-import { Leaf, Zap, Wallet, History, LayoutDashboard, AlertTriangle } from "lucide-react";
+import { Wallet, History, LayoutDashboard, AlertTriangle } from "lucide-react";
 import { useNodes } from "@/context/NodeContext";
 import { useAuth } from "@/context/AuthContext";
 
 function tierClass(balance) {
-  if (balance == null) return "text-[#94A3B8] bg-white/60 border-[#E7E7F3]";
-  if (balance > 30)   return "text-[#166534] bg-[#DCFCE7] border-[#86EFAC]";
-  if (balance >= 10)  return "text-[#9A3412] bg-[#FFEDD5] border-[#FDBA74]";
+  // Node currency is the "golden leaf" — always use amber/gold for the badge
+  // so the currency icon stays visually consistent. Balance state is
+  // conveyed via the AlertTriangle warning icon + border shade.
+  if (balance == null)  return "text-[#B45309] bg-[#FFFBEB] border-[#FDE68A]";
+  if (balance > 30)     return "text-[#B45309] bg-gradient-to-r from-[#FFFBEB] to-[#FEF3C7] border-[#FCD34D]";
+  if (balance >= 10)    return "text-[#9A3412] bg-[#FFEDD5] border-[#FDBA74]";
   return "text-[#991B1B] bg-[#FEE2E2] border-[#FCA5A5]";
 }
 
-/** Golden gradient leaf icon — used everywhere the node "currency" appears. */
-export function GoldenLeaf({ size = 14, className = "" }) {
+/**
+ * Golden gradient leaf icon — used everywhere the node "currency" appears.
+ * Uses an inline SVG with a linear-gradient stroke so the gold gradient
+ * remains visible even at small sizes (background-clip:text fails on
+ * stroke-based icons at <20px).
+ */
+export function GoldenLeaf({ size = 14, className = "", solid = false }) {
+  const gid = useId().replace(/[^a-zA-Z0-9]/g, "");
+  const gradId = `goldenLeaf-${gid}`;
+  const stroke = solid ? "#B45309" : `url(#${gradId})`;
   return (
-    <span
-      className={`inline-flex ${className}`}
-      style={{
-        color: "transparent",
-        background: "linear-gradient(135deg, #FBBF24 0%, #F59E0B 45%, #B45309 100%)",
-        WebkitBackgroundClip: "text",
-        backgroundClip: "text",
-      }}
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      className={`inline-block shrink-0 ${className}`}
       aria-hidden
     >
-      <Leaf size={size} strokeWidth={2.4} />
-    </span>
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+          <stop offset="0%"  stopColor="#FDE68A" />
+          <stop offset="40%" stopColor="#F59E0B" />
+          <stop offset="100%" stopColor="#B45309" />
+        </linearGradient>
+      </defs>
+      {/* Leaf path (matches lucide-react Leaf) with gradient stroke + subtle fill */}
+      <path
+        d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19.2 2.96c1.4 3.5 1 8.11-1.19 11.31C15.9 17.87 12 20 11 20Z"
+        stroke={stroke}
+        fill={solid ? "#FEF3C7" : `url(#${gradId})`}
+        fillOpacity={solid ? 1 : 0.18}
+        strokeWidth={2.2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"
+        stroke={stroke}
+        strokeWidth={2.2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+    </svg>
   );
 }
 
@@ -47,11 +81,12 @@ export default function NodeBadge() {
         type="button"
         data-testid="node-badge"
         onClick={() => setOpen((v) => !v)}
-        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[12.5px] font-semibold transition hover:-translate-y-0.5 ${tier}`}
+        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[12.5px] font-semibold shadow-[0_6px_18px_-10px_rgba(180,83,9,0.45)] transition hover:-translate-y-0.5 ${tier}`}
         aria-label={`Nodes: ${balance}`}
       >
-        <GoldenLeaf size={13} />
-        <span data-testid="node-balance">Nodes: {balance}</span>
+        <GoldenLeaf size={16} />
+        <span data-testid="node-balance" className="tabular-nums">{balance}</span>
+        <span className="hidden sm:inline text-[10.5px] font-semibold uppercase tracking-[0.14em] opacity-75">nodes</span>
         {low && <AlertTriangle className="h-3.5 w-3.5" />}
       </button>
 

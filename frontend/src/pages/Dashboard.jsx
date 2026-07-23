@@ -111,15 +111,20 @@ export default function Dashboard() {
           </Link>
         </div>
 
-        <div className="rounded-3xl border border-[#E7E7F3] bg-gradient-to-br from-[#FFFBEB] to-white p-5 backdrop-blur lg:col-span-2">
-          <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-[#B45309]">
-            <GoldenLeaf size={14} /> Node Balance
+        <div className="relative overflow-hidden rounded-3xl border border-[#FCD34D]/60 bg-gradient-to-br from-[#FFFBEB] via-white to-[#FEF3C7] p-5 backdrop-blur lg:col-span-2">
+          {/* Decorative golden-leaf watermark */}
+          <div className="pointer-events-none absolute -right-6 -top-6 opacity-[0.08]">
+            <GoldenLeaf size={220} />
           </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="font-headline text-5xl font-bold text-[#0F172A]">{balance}</span>
+          <div className="relative flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-[#B45309]">
+            <GoldenLeaf size={16} /> Node Balance
+          </div>
+          <div className="relative mt-2 flex items-center gap-3">
+            <GoldenLeaf size={44} />
+            <span className="font-headline text-5xl font-bold text-[#0F172A] tabular-nums">{balance}</span>
             <span className="text-[13px] text-[#94A3B8]">available nodes</span>
           </div>
-          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="relative mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div><div className="text-[10.5px] uppercase tracking-wider text-[#94A3B8]">Welcome bonus</div><div className="mt-0.5 font-bold text-[#0F172A]">{welcomeBonus}</div></div>
             <div><div className="text-[10.5px] uppercase tracking-wider text-[#94A3B8]">Purchased</div><div className="mt-0.5 font-bold text-[#0F172A]">{lifetimePurchased}</div></div>
             <div><div className="text-[10.5px] uppercase tracking-wider text-[#94A3B8]">Consumed</div><div className="mt-0.5 font-bold text-[#0F172A]">{lifetimeUsed}</div></div>
@@ -196,7 +201,9 @@ export default function Dashboard() {
                   <tr key={r.id} className="border-t border-[#F1F1FA]">
                     <td className="px-4 py-2 text-[#0F172A]">{new Date(r.at).toLocaleString()}</td>
                     <td className="px-4 py-2 text-[#0F172A]">{r.workflow || r.reason || "Welcome bonus"}</td>
-                    <td className="px-4 py-2 text-right font-mono text-emerald-600">+{r.amount}</td>
+                    <td className="px-4 py-2 text-right font-mono text-[#B45309]">
+                      <span className="inline-flex items-center gap-1"><GoldenLeaf size={12} />+{r.amount}</span>
+                    </td>
                     <td className="px-4 py-2 text-right text-[#0F172A]">{r.balance_after}</td>
                   </tr>
                 ))}

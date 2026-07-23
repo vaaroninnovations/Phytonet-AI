@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { useIsStandalone } from "@/hooks/useIsStandalone";
 import { useNodes } from "@/context/NodeContext";
 import { ChargeConfirmationDialog } from "@/components/nodes/NodeModals";
+import { GoldenLeaf } from "@/components/nodes/NodeBadge";
 import StandaloneDockingInput from "@/components/standalone/StandaloneDockingInput";
 import WorkflowLayout from "@/components/WorkflowLayout";
 import { useNetwork } from "@/context/NetworkContext";
@@ -519,7 +520,7 @@ export default function MolecularDocking() {
               </button>
               <button data-testid="dock-run" onClick={runDocking} disabled={running} className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#5139ED] via-[#395AED] to-[#8139ED] px-4 py-2 text-xs font-bold uppercase tracking-widest text-white shadow-[0_10px_30px_-10px_rgba(81,57,237,0.6)] disabled:opacity-40">
                 {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
-                {running ? "Docking…" : `Run docking · ${costFor("molecular-docking")} nodes`}
+                {running ? "Docking…" : (<><span>Run docking · </span><GoldenLeaf size={13} className="ml-0.5" /><span className="ml-0.5">{costFor("molecular-docking")} nodes</span></>)}
               </button>
             </div>
           </div>
