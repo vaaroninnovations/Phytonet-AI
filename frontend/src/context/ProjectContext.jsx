@@ -14,6 +14,7 @@
 // Design note: the workflow_state blob is opaque to the backend; only the
 // frontend understands its shape. This keeps schema evolution painless.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { useNetwork } from "@/context/NetworkContext";
 import { useResults } from "@/context/ResultsContext";
@@ -169,10 +170,29 @@ export function ProjectProvider({ children }) {
         const { autosave } = await getAutosave();
         if (autosave && autosave.workflow_state) {
           setAutosaveMeta(autosave);
-          // Only prompt if we haven't already restored (e.g. app just booted anonymously)
+          // Skip prompt if user already has data in memory (e.g. anonymous → sign-in
+          // with an in-flight workflow).
           const alreadyHasData = (net.selectedCompounds && net.selectedCompounds.length > 0) ||
             (res.compounds && res.compounds.length > 0);
-          if (!alreadyHasData) {
+          if (alreadyHasData) return;
+          // Auto-restore silently when the user lands on any workflow route so
+          // that a page reload / redirect never drops them into an empty
+          // "restart from scratch" state. On non-workflow routes (Home,
+          // Dashboard, Docs, etc.) we still show the opt-in modal.
+          const workflowRoutes = new Set(WORKFLOW_STEPS.map((s) => s.route));
+          const pathname = typeof window !== "undefined" ? window.location.pathname : "";
+          const onWorkflowRoute = workflowRoutes.has(pathname);
+          if (onWorkflowRoute) {
+            try {
+              applySnapshot(autosave.workflow_state);
+              (autosave.completed_steps || []).forEach((s) => wf.markComplete(s));
+              const label = autosave.updated_at
+                ? `Restored from autosave (${new Date(autosave.updated_at).toLocaleTimeString()})`
+                : "Workflow restored from autosave";
+              // Show a subtle non-blocking toast so the user knows what happened.
+              try { toast.success(label, { duration: 3000 }); } catch (_) {}
+            } catch (e) { /* fall through to modal */ setResumePrompt(true); }
+          } else {
             setResumePrompt(true);
           }
         }
