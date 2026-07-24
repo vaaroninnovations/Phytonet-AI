@@ -12,7 +12,7 @@ import {
   Search, FlaskConical, FileText, Video, Image as ImageIcon, Beaker,
   Microscope, Brain, Zap, BookOpen, Github, Linkedin, Twitter,
   Play, PlayCircle, Leaf, Cpu, Activity, Database, Workflow, Star, Quote,
-  Target, HeartPulse, Waves,
+  Target, HeartPulse, Waves, X,
 } from "lucide-react";
 import HeroVisual from "@/components/HeroVisual";
 import BrandLogo from "@/components/BrandLogo";
@@ -84,6 +84,221 @@ function Hero() {
 
         <div>
           <HeroVisual />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────────────────── WHY CHOOSE PHYTONET AI ─────────────────────────── */
+const TRADITIONAL_PAIN = [
+  "Multiple disconnected software",
+  "Manual data transfer",
+  "Separate scientific databases",
+  "Repeated file conversion",
+  "Manual result interpretation",
+  "Time-consuming repeat analyses",
+  "Difficult to reproduce",
+  "Weeks of work",
+];
+
+const PHYTONET_STEPS = [
+  { icon: Activity,      label: "Upload LC-MS Data",       desc: "Drag-and-drop or paste; auto-parses mzML, CSV & Excel.",         tone: "#5139ED" },
+  { icon: FlaskConical,  label: "Identify Compounds",      desc: "PubChem & LOTUS resolution with SMILES, InChI, structure.",     tone: "#5139ED" },
+  { icon: ShieldCheck,   label: "Drug-Likeness & ADMET",   desc: "Lipinski, Veber, Ghose + full ADMET panel scored per rule.",    tone: "#395AED" },
+  { icon: Target,        label: "Target Prediction",       desc: "ChEMBL similarity + BindingDB + UniProt evidence-linked hits.", tone: "#395AED" },
+  { icon: HeartPulse,    label: "Disease Target Analysis", desc: "DisGeNET · OMIM · TTD cross-reference for translational focus.",tone: "#8139ED" },
+  { icon: Network,       label: "Network Pharmacology",    desc: "Compound-target-disease graph with hubs & bridges.",            tone: "#8139ED" },
+  { icon: GitBranch,     label: "GO & KEGG Enrichment",    desc: "Pathway analysis with p-values, dot plots and Sankey.",         tone: "#5139ED" },
+  { icon: Atom,          label: "Molecular Docking",       desc: "AutoDock Vina · auto receptor prep · publication-ready poses.", tone: "#395AED" },
+  { icon: Waves,         label: "Molecular Dynamics",      desc: "GROMACS RMSD/RMSF trajectories for stability profiling.",       tone: "#8139ED" },
+  { icon: FileText,      label: "AI Report Generation",    desc: "One-click manuscript, figures & graphical abstract.",           tone: "#2BB673" },
+];
+
+const COMPARISON_ROWS = [
+  { bad: "Multiple disconnected tools",   good: "One integrated platform"        },
+  { bad: "Manual data transfer",          good: "Automated workflow"             },
+  { bad: "Separate scientific databases", good: "Unified database integration"   },
+  { bad: "Repetitive analysis",           good: "AI-assisted analysis"           },
+  { bad: "Manual report preparation",     good: "Publication-ready reports"      },
+  { bad: "Difficult collaboration",       good: "Cloud-based project management" },
+  { bad: "Takes weeks",                   good: "Complete in hours"              },
+];
+
+function WhyChoose() {
+  return (
+    <section id="why-phytonet" data-testid="why-choose" className="relative overflow-hidden bg-gradient-to-b from-white via-[#FAFAFF] to-white py-24">
+      <div aria-hidden className="brand-blur absolute -left-40 top-20 h-[420px] w-[420px] bg-[#5139ED]" />
+      <div aria-hidden className="brand-blur absolute -right-32 bottom-40 h-[380px] w-[380px] bg-[#2BB673]" />
+
+      <div className="relative mx-auto max-w-7xl px-6">
+        {/* ── Section header ── */}
+        <div className="mx-auto max-w-3xl text-center">
+          <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">Why Choose</p>
+          <h2 className="font-headline mt-3 text-[36px] leading-[1.08] tracking-tight text-[#111827] sm:text-[44px]">
+            Why Choose <span className="gradient-text">PhytoNet AI?</span>
+          </h2>
+          <p className="mt-5 text-[14.5px] leading-relaxed text-[#374151]">
+            Traditional medicinal plant research requires switching between multiple software tools,
+            databases, and manual data processing. PhytoNet AI brings the entire workflow together
+            into one intelligent platform — faster, more accurately, with reproducible results.
+          </p>
+        </div>
+
+        {/* ── Two-column comparison (35 / 65) ── */}
+        <div className="mt-16 grid grid-cols-1 gap-6 lg:grid-cols-[35fr_65fr] lg:gap-8">
+          {/* Left — Traditional Research (dark glass card) */}
+          <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-[#0B0B18] p-7 shadow-[0_20px_60px_-20px_rgba(0,0,0,0.5)]">
+            <div aria-hidden className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-red-500/10 blur-3xl" />
+            <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-red-400/90">Traditional Research</p>
+            <h3 className="font-headline mt-2 text-[22px] leading-tight text-white">The old way, in fragments.</h3>
+            <ul className="relative mt-6 space-y-3">
+              {TRADITIONAL_PAIN.map((t) => (
+                <li key={t} className="flex items-start gap-3 text-[13.5px] text-white/85">
+                  <span aria-hidden className="mt-1 inline-block h-2 w-2 shrink-0 rounded-full bg-red-500 shadow-[0_0_10px_2px_rgba(239,68,68,0.6)]" />
+                  {t}
+                </li>
+              ))}
+            </ul>
+            <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+              <p className="font-headline text-[13px] text-white">Time to first insight</p>
+              <p className="mt-1 text-[11px] text-white/70">Typical published network-pharmacology study</p>
+              <p className="mt-3 font-headline text-[36px] font-extrabold text-red-400">2–6 weeks</p>
+            </div>
+          </div>
+
+          {/* Right — PhytoNet AI vertical timeline */}
+          <div className="relative rounded-3xl border border-[#E7E7F3] bg-white p-7 shadow-[0_20px_60px_-24px_rgba(81,57,237,0.35)]">
+            <div className="mb-6 flex items-center justify-between gap-4">
+              <div>
+                <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">PhytoNet AI Workflow</p>
+                <h3 className="font-headline mt-1 text-[22px] leading-tight text-[#111827]">One connected pipeline — 10 steps, zero handoffs.</h3>
+              </div>
+              <span className="hidden shrink-0 rounded-full bg-gradient-to-r from-[#5139ED] to-[#8139ED] px-3 py-1 text-[10px] font-extrabold uppercase tracking-widest text-white sm:inline-flex">
+                Automated
+              </span>
+            </div>
+
+            <ol className="relative pl-4">
+              {/* Central gradient spine */}
+              <span aria-hidden className="absolute left-[26px] top-2 bottom-2 w-[2px] bg-gradient-to-b from-[#5139ED]/70 via-[#8139ED]/40 to-[#2BB673]/60" />
+
+              {PHYTONET_STEPS.map((s, i) => (
+                <motion.li
+                  key={s.label}
+                  initial={{ opacity: 0, x: -12 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: i * 0.05, duration: 0.35 }}
+                  className="group relative flex items-start gap-4 py-2.5"
+                >
+                  {/* Node dot */}
+                  <span
+                    className="relative z-10 grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-white/60 bg-white shadow-[0_6px_18px_-8px_rgba(81,57,237,0.45)] transition-transform group-hover:scale-105"
+                  >
+                    <span
+                      className="absolute inset-0 -z-10 rounded-xl opacity-90"
+                      style={{ background: `linear-gradient(135deg, ${s.tone}18, ${s.tone}05)` }}
+                    />
+                    <s.icon className="h-[18px] w-[18px]" strokeWidth={2.2} style={{ color: s.tone }} />
+                  </span>
+
+                  {/* Text + hover reveal */}
+                  <div className="flex-1 pt-1">
+                    <div className="flex flex-wrap items-baseline gap-x-2">
+                      <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: s.tone }}>
+                        Step {String(i + 1).padStart(2, "0")}
+                      </span>
+                      <p className="text-[14px] font-semibold text-[#0F172A]">{s.label}</p>
+                    </div>
+                    <p className="mt-0.5 max-h-0 overflow-hidden text-[12.5px] leading-relaxed text-[#64748B] transition-[max-height,opacity,margin] duration-300 opacity-0 group-hover:mt-1 group-hover:max-h-16 group-hover:opacity-100">
+                      {s.desc}
+                    </p>
+                  </div>
+                </motion.li>
+              ))}
+            </ol>
+          </div>
+        </div>
+
+        {/* ── Paired comparison rows ── */}
+        <div className="mt-16 overflow-hidden rounded-3xl border border-[#E7E7F3] bg-white shadow-[0_10px_40px_-20px_rgba(11,11,24,0.15)]">
+          <div className="grid grid-cols-2 border-b border-[#E7E7F3] bg-[#FAFAFF]">
+            <div className="px-5 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-red-500">Traditional Research</p>
+            </div>
+            <div className="px-5 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#5139ED]">PhytoNet AI</p>
+            </div>
+          </div>
+          <ul className="divide-y divide-[#F1F1FA]">
+            {COMPARISON_ROWS.map((r) => (
+              <li key={r.bad} className="grid grid-cols-2 items-center">
+                <div className="flex items-center gap-2.5 px-5 py-3 text-[13px] text-[#374151]">
+                  <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-red-500/12 text-red-500">
+                    <X className="h-3 w-3" strokeWidth={3} />
+                  </span>
+                  {r.bad}
+                </div>
+                <div className="flex items-center gap-2.5 border-l border-[#F1F1FA] bg-[#F8FDFB] px-5 py-3 text-[13px] font-semibold text-[#0F172A]">
+                  <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#2BB673]/15 text-[#2BB673]">
+                    <Check className="h-3 w-3" strokeWidth={3} />
+                  </span>
+                  {r.good}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* ── Highlight banner ── */}
+        <div className="mt-14 rounded-3xl bg-gradient-to-br from-[#5139ED] via-[#395AED] to-[#8139ED] p-8 text-white sm:p-12">
+          <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr] lg:items-end">
+            <div>
+              <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-white/80">The PhytoNet Promise</p>
+              <h3 className="font-headline mt-2 text-[28px] leading-[1.1] tracking-tight sm:text-[36px]">
+                From Raw LC-MS Data to Biological Insights
+              </h3>
+              <p className="mt-3 text-[14.5px] font-semibold text-white/90">
+                One platform. One workflow. One report.
+              </p>
+              <p className="mt-3 max-w-2xl text-[13.5px] leading-relaxed text-white/80">
+                Everything required for medicinal plant research — from compound identification to
+                molecular dynamics and AI-powered report generation.
+              </p>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { k: "10", v: "Automated steps" },
+                { k: "1", v: "Unified platform" },
+                { k: "0", v: "Manual exports" },
+              ].map((s) => (
+                <div key={s.v} className="rounded-2xl bg-white/10 p-4 backdrop-blur-sm">
+                  <p className="font-headline text-[32px] font-extrabold leading-none">{s.k}</p>
+                  <p className="mt-1 text-[10.5px] font-semibold uppercase tracking-widest text-white/80">{s.v}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Final callout ── */}
+        <div className="mt-10 rounded-3xl border border-[#5139ED]/20 bg-[#5139ED]/[0.04] p-6 text-center sm:p-8">
+          <p className="font-headline text-[18px] font-semibold text-[#0F172A] sm:text-[20px]">
+            Why switch between multiple software and databases?
+          </p>
+          <p className="mx-auto mt-2 max-w-3xl text-[13.5px] leading-relaxed text-[#374151]">
+            PhytoNet AI integrates every stage of medicinal plant research into a single AI-powered
+            platform, enabling faster discoveries, reproducible analyses, and publication-ready outputs.
+          </p>
+          <Link
+            to="/phytonet-ai"
+            data-testid="why-choose-cta"
+            className="mt-5 inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#5139ED] via-[#395AED] to-[#8139ED] px-6 py-3 text-[13px] font-bold text-white shadow-[0_14px_36px_-10px_rgba(81,57,237,0.6)] transition-all hover:-translate-y-0.5"
+          >
+            Start Free Analysis
+            <ArrowRight className="h-4 w-4" />
+          </Link>
         </div>
       </div>
     </section>
@@ -874,6 +1089,7 @@ export default function Home() {
   return (
     <main data-testid="home-page" className="relative overflow-hidden bg-white">
       <Hero />
+      <WhyChoose />
       <ResearchModules />
       <AssistantHero />
       <AgentVsAssistant />
