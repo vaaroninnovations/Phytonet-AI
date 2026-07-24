@@ -473,67 +473,6 @@ function MiniBubbles() {
   );
 }
 
-/* ─────────────────────────── PLANT DATABASE PREVIEW ─────────────────────────── */
-const PLANTS = [
-  { name: "Ashwagandha",         latin: "Withania somnifera",    compounds: 342, targets: 1290, diseases: 45,  color: "#5139ED" },
-  { name: "Terminalia arjuna",   latin: "Terminalia arjuna",     compounds: 214, targets:  980, diseases: 32,  color: "#395AED" },
-  { name: "Tinospora cordifolia",latin: "Tinospora cordifolia",  compounds: 176, targets:  742, diseases: 28,  color: "#8139ED" },
-  { name: "Withania somnifera",  latin: "Withania somnifera",    compounds: 388, targets: 1410, diseases: 51,  color: "#2BB673" },
-  { name: "Lycopodium clavatum", latin: "Lycopodium clavatum",   compounds:  92, targets:  312, diseases: 18,  color: "#5139ED" },
-];
-function PlantPreview() {
-  return (
-    <section id="plant-preview" data-testid="plant-preview" className="relative bg-[#F8FAFC] py-24">
-      <div className="mx-auto max-w-7xl px-6">
-        <div className="mx-auto max-w-2xl text-center">
-          <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">Plant Database</p>
-          <h2 className="font-headline mt-3 text-[36px] leading-[1.08] tracking-tight text-[#111827] sm:text-[44px]">
-            17,000+ medicinal plants, one query away
-          </h2>
-        </div>
-
-        <div className="mx-auto mt-10 max-w-2xl">
-          <div className="flex items-center gap-2 rounded-full border border-[#E7E7F3] bg-white p-1.5 shadow-[0_6px_24px_-10px_rgba(11,11,24,0.1)]">
-            <div className="pl-3 text-[#9CA3AF]"><Search className="h-4 w-4" /></div>
-            <input
-              data-testid="plant-search-input" type="text" placeholder="Search medicinal plants…"
-              className="flex-1 border-none bg-transparent px-2 py-2 text-[14px] text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none"
-            />
-            <Link to="/phytonet-ai" data-testid="plant-search-go"
-                  className="inline-flex items-center gap-1 rounded-full bg-[#5139ED] px-4 py-2 text-[12px] font-bold text-white hover:bg-[#4127c9]">
-              Search<ArrowRight className="h-3.5 w-3.5" />
-            </Link>
-          </div>
-        </div>
-
-        <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          {PLANTS.map((p, i) => (
-            <motion.div key={p.name}
-              initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
-              transition={{ delay: i * 0.05, duration: 0.4 }}
-              className="group rounded-3xl border border-[#E7E7F3] bg-white p-5 transition-all hover:-translate-y-1 hover:shadow-[0_20px_50px_-20px_rgba(81,57,237,0.35)]"
-            >
-              <div className="grid h-24 place-items-center rounded-2xl" style={{ background: `linear-gradient(135deg, ${p.color}22, ${p.color}08)` }}>
-                <Leaf className="h-9 w-9" style={{ color: p.color }} strokeWidth={1.8} />
-              </div>
-              <h3 className="font-headline mt-4 text-[15px] text-[#111827]">{p.name}</h3>
-              <p className="mt-0.5 font-mono text-[10.5px] italic text-[#6B7280]">{p.latin}</p>
-              <div className="mt-4 grid grid-cols-3 gap-1 text-center">
-                {[{ v: p.compounds, l: "Cpd" }, { v: p.targets, l: "Tgt" }, { v: p.diseases, l: "Dis" }].map((s) => (
-                  <div key={s.l} className="rounded-lg bg-[#F8FAFC] py-1.5">
-                    <p className="font-headline text-[13px] font-extrabold text-[#111827]">{s.v}</p>
-                    <p className="text-[9px] font-bold uppercase tracking-widest text-[#9CA3AF]">{s.l}</p>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
 /* ─────────────────────────── AI ASSISTANT HERO ─────────────────────────── */
 function AssistantHero() {
   return (
@@ -941,7 +880,6 @@ export default function Home() {
       <Stats />
       <Features />
       <ScreenshotSection />
-      <PlantPreview />
       <HowItWorks />
       <Trust />
       <Testimonials />
