@@ -363,42 +363,6 @@ function Features() {
   );
 }
 
-/* ─────────────────────────── WHY PHYTONET ─────────────────────────── */
-function Why() {
-  const cards = [
-    { icon: Brain,      title: "Explainable AI",       body: "Every prediction ships with provenance, evidence and a linkable citation. No black boxes." },
-    { icon: GitBranch,  title: "Reproducible Science", body: "One-click snapshot every workflow. Autosaved sessions restore compound tables, docking scores and figures." },
-    { icon: Cpu,        title: "Integrated Platform",  body: "One canvas replaces a dozen tools — cheminformatics, PPI, docking, GROMACS, manuscript writing." },
-  ];
-  return (
-    <section id="why" data-testid="why" className="py-24">
-      <div className="mx-auto max-w-7xl px-6">
-        <div className="max-w-2xl">
-          <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">Why PhytoNet AI</p>
-          <h2 className="font-headline mt-3 text-[36px] leading-[1.08] tracking-tight text-[#111827] sm:text-[44px]">
-            Built for scientists who care about rigor
-          </h2>
-        </div>
-        <div className="mt-14 grid grid-cols-1 gap-6 md:grid-cols-3">
-          {cards.map((c, i) => (
-            <motion.div key={c.title}
-              initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
-              transition={{ delay: i * 0.1, duration: 0.5 }}
-              className="rounded-3xl border border-[#E7E7F3] bg-gradient-to-br from-white to-[#F8FAFC] p-8 shadow-[0_1px_2px_rgba(11,11,24,0.03)]"
-            >
-              <span className="grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br from-[#5139ED]/10 to-[#8139ED]/10 text-[#5139ED]">
-                <c.icon className="h-5 w-5" strokeWidth={2.4} />
-              </span>
-              <h3 className="font-headline mt-6 text-[20px] text-[#111827]">{c.title}</h3>
-              <p className="mt-3 text-[14px] leading-relaxed text-[#374151]">{c.body}</p>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
 /* ─────────────────────────── SCREENSHOT / DASHBOARD PREVIEW ─────────────────────────── */
 function ScreenshotSection() {
   const floats = [
@@ -880,7 +844,6 @@ export default function Home() {
       <AgentVsAssistant />
       <Stats />
       <Features />
-      <Why />
       <ScreenshotSection />
       <PlantPreview />
       <HowItWorks />
