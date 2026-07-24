@@ -46,9 +46,10 @@ function Hero() {
           </h1>
 
           <p className="mt-6 max-w-xl text-base leading-relaxed text-[#374151] sm:text-[17px]">
-            Transform LC-MS data into biological insights with AI. Identify phytochemicals, predict
-            protein targets, analyze disease pathways, perform molecular docking, and generate
-            publication-ready reports—all in one integrated platform.
+            Simplify medicinal plant research with AI. Start with a plant name or LC-MS/MS data,
+            and PhytoNet AI guides you through compound identification, target prediction, network
+            pharmacology, molecular docking, molecular dynamics, and publication-ready report
+            generation—all in one integrated platform.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
