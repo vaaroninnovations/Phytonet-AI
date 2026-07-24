@@ -136,9 +136,9 @@ function WhyChoose() {
         </div>
 
         {/* ── Two-column comparison (35 / 65) ── */}
-        <div className="mt-16 grid grid-cols-1 items-start gap-6 lg:grid-cols-[35fr_65fr] lg:gap-8">
+        <div className="mt-16 grid grid-cols-1 gap-6 lg:grid-cols-[35fr_65fr] lg:gap-8">
           {/* Left — Traditional Research (dark violet card, brand palette) */}
-          <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-[#0F0E24] via-[#1E1B4B] to-[#12102E] p-7 shadow-[0_20px_60px_-20px_rgba(30,27,75,0.65)]">
+          <div className="relative flex flex-col overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-[#0F0E24] via-[#1E1B4B] to-[#12102E] p-7 shadow-[0_20px_60px_-20px_rgba(30,27,75,0.65)]">
             <div aria-hidden className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-[#8139ED]/25 blur-3xl" />
             <div aria-hidden className="pointer-events-none absolute -left-16 bottom-0 h-48 w-48 rounded-full bg-red-500/10 blur-3xl" />
             <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-red-300">Traditional Research</p>
@@ -151,10 +151,13 @@ function WhyChoose() {
                 </li>
               ))}
             </ul>
-            <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.06] p-4">
-              <p className="font-headline text-[13px] text-white">Time to first insight</p>
-              <p className="mt-1 text-[11px] text-white/70">Typical published network-pharmacology study</p>
-              <p className="mt-2 font-headline text-[32px] font-extrabold text-red-400">2–6 weeks</p>
+            {/* Bottom-anchored callout — flex-col + mt-auto lets it settle at the bottom so the card matches the right column's height */}
+            <div className="relative mt-auto pt-6">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
+                <p className="font-headline text-[13px] text-white">Time to first insight</p>
+                <p className="mt-1 text-[11px] text-white/70">Typical published network-pharmacology study</p>
+                <p className="mt-2 font-headline text-[36px] font-extrabold text-red-400">2–6 weeks</p>
+              </div>
             </div>
           </div>
 
