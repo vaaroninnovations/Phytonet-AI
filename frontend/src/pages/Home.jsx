@@ -363,57 +363,6 @@ function Features() {
   );
 }
 
-/* ─────────────────────────── WORKFLOW TIMELINE ─────────────────────────── */
-const WORKFLOW = [
-  "Ask Research Question",
-  "Collect Plant Data",
-  "Predict Targets",
-  "Disease Intersection",
-  "PPI Network",
-  "GO / KEGG",
-  "Interpret Results",
-  "Generate Figures",
-  "Write Manuscript",
-];
-function WorkflowTimeline() {
-  return (
-    <section id="workflow" data-testid="workflow-timeline" className="relative bg-[#F8FAFC] py-24">
-      <div className="mx-auto max-w-7xl px-6">
-        <div className="flex flex-wrap items-end justify-between gap-6">
-          <div className="max-w-xl">
-            <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">The AI Scientist</p>
-            <h2 className="font-headline mt-3 text-[36px] leading-[1.08] tracking-tight text-[#111827] sm:text-[44px]">
-              A single AI orchestrates your entire workflow
-            </h2>
-          </div>
-          <p className="max-w-md text-[14px] text-[#374151]">
-            Every step is transparent, evidence-linked and reproducible. Data flows automatically from
-            each step to the next — no manual exports.
-          </p>
-        </div>
-
-        <div className="relative mt-14 overflow-x-auto">
-          <div className="absolute left-8 right-8 top-1/2 hidden h-px bg-gradient-to-r from-transparent via-[#5139ED]/30 to-transparent lg:block" />
-          <ol className="relative flex min-w-full gap-4 lg:justify-between">
-            {WORKFLOW.map((step, i) => (
-              <motion.li key={step}
-                initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
-                transition={{ delay: i * 0.06, duration: 0.4 }}
-                className="relative flex min-w-[140px] flex-col items-center text-center"
-              >
-                <span className="grid h-11 w-11 place-items-center rounded-full border border-[#E7E7F3] bg-white text-[13px] font-extrabold text-[#5139ED] shadow-[0_6px_20px_-8px_rgba(81,57,237,0.35)]">
-                  {String(i + 1).padStart(2, "0")}
-                </span>
-                <span className="mt-3 max-w-[130px] text-[12.5px] font-semibold text-[#111827]">{step}</span>
-              </motion.li>
-            ))}
-          </ol>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 /* ─────────────────────────── WHY PHYTONET ─────────────────────────── */
 function Why() {
   const cards = [
@@ -931,7 +880,6 @@ export default function Home() {
       <AgentVsAssistant />
       <Stats />
       <Features />
-      <WorkflowTimeline />
       <Why />
       <ScreenshotSection />
       <PlantPreview />
