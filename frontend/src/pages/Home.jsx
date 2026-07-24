@@ -12,6 +12,7 @@ import {
   Search, FlaskConical, FileText, Video, Image as ImageIcon, Beaker,
   Microscope, Brain, Zap, BookOpen, Github, Linkedin, Twitter,
   Play, PlayCircle, Leaf, Cpu, Activity, Database, Workflow, Star, Quote,
+  Target, HeartPulse, Waves,
 } from "lucide-react";
 import HeroVisual from "@/components/HeroVisual";
 import BrandLogo from "@/components/BrandLogo";
@@ -638,34 +639,128 @@ function AgentVsAssistant() {
 /* ─────────────────────────── HOW IT WORKS ─────────────────────────── */
 function HowItWorks() {
   const steps = [
-    { n: "01", title: "Choose a medicinal plant", body: "Pick from 17,000+ plants or upload your LC-MS data." },
-    { n: "02", title: "AI builds research workflow", body: "Explainable agents plan every downstream step." },
-    { n: "03", title: "Runs every analysis",         body: "Targets, disease intersection, PPI, enrichment, docking, MD." },
-    { n: "04", title: "Publication-ready outputs",   body: "Manuscript, graphical abstract, figures — all exportable." },
+    { n: "01", icon: Activity,     label: "LC-MS Data",             tone: "#5139ED" },
+    { n: "02", icon: FlaskConical, label: "Compound Identification", tone: "#5139ED" },
+    { n: "03", icon: ShieldCheck,  label: "Drug-Likeness & ADMET",   tone: "#395AED" },
+    { n: "04", icon: Target,       label: "Target Prediction",       tone: "#395AED" },
+    { n: "05", icon: HeartPulse,   label: "Disease Targets",         tone: "#8139ED" },
+    { n: "06", icon: Network,      label: "Network Pharmacology",    tone: "#8139ED" },
+    { n: "07", icon: GitBranch,    label: "GO / KEGG Analysis",      tone: "#5139ED" },
+    { n: "08", icon: Atom,         label: "Molecular Docking",       tone: "#395AED" },
+    { n: "09", icon: Waves,        label: "Molecular Dynamics",      tone: "#8139ED" },
+    { n: "10", icon: FileText,     label: "AI Report",               tone: "#2BB673" },
   ];
   return (
     <section id="how" data-testid="how-it-works" className="relative overflow-hidden py-24">
       <div aria-hidden className="brand-blur absolute right-0 top-40 h-[300px] w-[300px] bg-[#8139ED]" />
-      <div className="mx-auto max-w-7xl px-6">
+      <div aria-hidden className="brand-blur absolute -left-32 bottom-24 h-[280px] w-[280px] bg-[#5139ED]" />
+
+      <div className="relative mx-auto max-w-7xl px-6">
         <div className="mx-auto max-w-2xl text-center">
           <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">How It Works</p>
           <h2 className="font-headline mt-3 text-[36px] leading-[1.08] tracking-tight text-[#111827] sm:text-[44px]">
-            From plant to publication in four steps
+            From LC-MS to publication — <span className="gradient-text">10 automated steps</span>
           </h2>
+          <p className="mt-4 text-[14px] leading-relaxed text-[#374151]">
+            Data flows automatically from each step to the next. Every stage is transparent,
+            evidence-linked and reproducible — no manual exports.
+          </p>
         </div>
-        <div className="mt-14 grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+
+        {/* ─── Desktop: horizontal snake grid (5 × 2) with connectors ─── */}
+        <ol className="mt-16 hidden lg:grid lg:grid-cols-5 lg:gap-x-3 lg:gap-y-14">
+          {steps.map((s, i) => {
+            const row = Math.floor(i / 5);         // 0 or 1
+            const col = i % 5;                     // 0..4
+            const displayCol = row === 1 ? 4 - col : col;   // snake: row 2 reverses
+            const isLastInRow = displayCol === 4;
+            const isFirstInRow = displayCol === 0;
+            const goesRight = row === 0;
+            return (
+              <motion.li
+                key={s.n}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.06, duration: 0.4 }}
+                className="relative flex flex-col items-center text-center"
+                style={{ gridColumnStart: displayCol + 1, gridRow: row + 1 }}
+              >
+                {/* Connector to next node (horizontal arrow) */}
+                {i < steps.length - 1 && !(goesRight ? isLastInRow : isFirstInRow) && (
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute top-8 hidden items-center lg:flex"
+                    style={goesRight
+                      ? { left: "calc(50% + 32px)", right: "calc(-50% + 32px)" }
+                      : { right: "calc(50% + 32px)", left: "calc(-50% + 32px)" }}
+                  >
+                    <span className="h-[2px] w-full bg-gradient-to-r from-transparent via-[#5139ED]/40 to-transparent" />
+                    <ArrowRight
+                      className="absolute h-3.5 w-3.5 text-[#5139ED]"
+                      style={goesRight ? { right: -2 } : { left: -2, transform: "rotate(180deg)" }}
+                    />
+                  </span>
+                )}
+
+                {/* Downward connector at end of row 1 → start of row 2 */}
+                {i === 4 && (
+                  <span aria-hidden className="pointer-events-none absolute right-[10%] top-[70px] hidden h-16 items-center lg:flex">
+                    <span className="h-full w-[2px] bg-gradient-to-b from-[#5139ED]/40 to-transparent" />
+                  </span>
+                )}
+
+                {/* Node card */}
+                <div
+                  className="group relative flex h-16 w-16 items-center justify-center rounded-2xl border border-white/60 bg-white shadow-[0_10px_28px_-14px_rgba(81,57,237,0.5)] transition-all hover:-translate-y-1 hover:shadow-[0_18px_36px_-14px_rgba(81,57,237,0.65)]"
+                >
+                  <span
+                    className="absolute inset-0 -z-10 rounded-2xl opacity-90"
+                    style={{ background: `linear-gradient(135deg, ${s.tone}18, ${s.tone}05)` }}
+                  />
+                  <s.icon className="h-6 w-6" strokeWidth={2.2} style={{ color: s.tone }} />
+                  <span
+                    className="absolute -top-2 -right-2 grid h-6 w-6 place-items-center rounded-full text-[10px] font-extrabold text-white shadow"
+                    style={{ background: `linear-gradient(135deg, ${s.tone}, #0B0B18)` }}
+                  >
+                    {s.n}
+                  </span>
+                </div>
+                <p className="mt-3 max-w-[130px] text-[12.5px] font-semibold leading-tight text-[#111827]">
+                  {s.label}
+                </p>
+              </motion.li>
+            );
+          })}
+        </ol>
+
+        {/* ─── Mobile / tablet: vertical column with ↓ arrows ─── */}
+        <ol className="mt-14 flex flex-col items-center gap-4 lg:hidden">
           {steps.map((s, i) => (
-            <motion.div key={s.n}
-              initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
-              transition={{ delay: i * 0.08, duration: 0.45 }}
-              className="rounded-3xl border border-[#E7E7F3] bg-white p-7"
+            <motion.li
+              key={s.n}
+              initial={{ opacity: 0, y: 12 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: i * 0.04, duration: 0.35 }}
+              className="flex w-full max-w-md flex-col items-center"
             >
-              <span className="font-headline text-[42px] font-extrabold text-transparent" style={{ WebkitTextStroke: "1.5px #5139ED" }}>{s.n}</span>
-              <h3 className="font-headline mt-4 text-[19px] text-[#111827]">{s.title}</h3>
-              <p className="mt-2 text-[13.5px] leading-relaxed text-[#6B7280]">{s.body}</p>
-            </motion.div>
+              <div className="flex w-full items-center gap-4 rounded-2xl border border-[#E7E7F3] bg-white p-4 shadow-[0_6px_20px_-10px_rgba(81,57,237,0.35)]">
+                <div className="relative grid h-12 w-12 shrink-0 place-items-center rounded-xl"
+                     style={{ background: `linear-gradient(135deg, ${s.tone}20, ${s.tone}08)` }}>
+                  <s.icon className="h-5 w-5" strokeWidth={2.2} style={{ color: s.tone }} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: s.tone }}>Step {s.n}</span>
+                  <p className="mt-0.5 text-[14px] font-semibold text-[#111827]">{s.label}</p>
+                </div>
+              </div>
+              {i < steps.length - 1 && (
+                <ChevronDown className="my-1 h-4 w-4 text-[#5139ED]/50" strokeWidth={2.5} />
+              )}
+            </motion.li>
           ))}
-        </div>
+        </ol>
       </div>
     </section>
   );
