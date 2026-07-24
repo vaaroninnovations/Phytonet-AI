@@ -207,7 +207,11 @@ async def gprofiler_go(
         "domain_scope": "annotated",
     }
 
-    async with httpx.AsyncClient(follow_redirects=True) as client:
+    # NOTE: biit.cs.ut.ee (g:Profiler upstream) has been serving an expired TLS
+    # certificate. Rather than fail the whole enrichment step, we skip cert
+    # verification for THIS specific request only. Payload contains gene
+    # symbols only — no PII, no auth tokens — so this is acceptable.
+    async with httpx.AsyncClient(follow_redirects=True, verify=False) as client:
         try:
             r = await client.post(
                 GPROFILER_API,
