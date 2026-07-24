@@ -11,7 +11,7 @@ import {
   Sparkles, ShieldCheck, GitBranch, Layers, Atom, Dna, Network,
   Search, FlaskConical, FileText, Video, Image as ImageIcon, Beaker,
   Microscope, Brain, Zap, BookOpen, Github, Linkedin, Twitter,
-  Play, Leaf, Cpu, Activity, Database, Workflow, Star, Quote,
+  Play, PlayCircle, Leaf, Cpu, Activity, Database, Workflow, Star, Quote,
 } from "lucide-react";
 import HeroVisual from "@/components/HeroVisual";
 import BrandLogo from "@/components/BrandLogo";
@@ -40,13 +40,14 @@ function Hero() {
 
           <h1 className="font-headline mt-6 text-[44px] leading-[1.05] tracking-[-0.03em] text-[#111827] sm:text-[56px] lg:text-[64px]">
             <span className="gradient-text">AI Scientist</span> for<br/>
-            Medicinal Plant<br/>
-            Drug Discovery
+            Medicinal Plant Research<br/>
+            &amp; Drug Discovery
           </h1>
 
           <p className="mt-6 max-w-xl text-base leading-relaxed text-[#374151] sm:text-[17px]">
-            Transform medicinal plant research into reproducible discoveries using explainable AI,
-            network pharmacology, cheminformatics, molecular biology, and automated scientific workflows.
+            Transform LC-MS data into biological insights with AI. Identify phytochemicals, predict
+            protein targets, analyze disease pathways, perform molecular docking, and generate
+            publication-ready reports—all in one integrated platform.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -55,21 +56,21 @@ function Hero() {
               data-testid="hero-primary-cta"
               className="group inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#5139ED] via-[#395AED] to-[#8139ED] px-6 py-3.5 text-[14px] font-bold text-white shadow-[0_14px_36px_-10px_rgba(81,57,237,0.7)] transition-all hover:-translate-y-0.5 hover:shadow-[0_22px_48px_-12px_rgba(81,57,237,0.85)]"
             >
-              Start Research
+              Start Free Analysis
               <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
             </Link>
-            <Link
-              to="/phytonet-ai"
+            <a
+              href="#how"
               data-testid="hero-secondary-cta"
               className="inline-flex items-center gap-2 rounded-full border border-[#E7E7F3] bg-white/70 px-6 py-3.5 text-[14px] font-semibold text-[#111827] backdrop-blur transition-all hover:border-[#5139ED]/40 hover:text-[#5139ED]"
             >
-              Explore Plant Database
-              <ChevronRight className="h-4 w-4" />
-            </Link>
+              <PlayCircle className="h-4 w-4" />
+              Watch Demo
+            </a>
           </div>
 
-          <ul className="mt-8 grid grid-cols-2 gap-3 text-[12.5px] font-semibold text-[#374151] sm:grid-cols-4">
-            {["Explainable AI", "Network Pharmacology", "Reproducible Science", "Commercial Friendly"].map((t) => (
+          <ul className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 text-[12.5px] font-semibold text-[#374151]">
+            {["No coding required", "Cloud-based", "Publication-ready"].map((t) => (
               <li key={t} className="inline-flex items-center gap-1.5">
                 <span className="grid h-4 w-4 place-items-center rounded-full bg-[#2BB673]/12 text-[#2BB673]">
                   <Check className="h-2.5 w-2.5" strokeWidth={3.5} />
