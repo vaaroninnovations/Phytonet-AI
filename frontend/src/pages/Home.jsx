@@ -220,14 +220,15 @@ function WhyChoose() {
             <div>
               <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-white/80">The PhytoNet Promise</p>
               <h3 className="font-headline mt-2 text-[28px] leading-[1.1] tracking-tight sm:text-[36px]">
-                From Raw LC-MS Data to Biological Insights
+                Simplifying Medicinal Plant Research with AI
               </h3>
               <p className="mt-3 text-[14.5px] font-semibold text-white/90">
-                One platform. One workflow. One report.
+                Everything you need for medicinal plant research in one AI-powered platform.
               </p>
               <p className="mt-3 max-w-2xl text-[13.5px] leading-relaxed text-white/80">
-                Everything required for medicinal plant research — from compound identification to
-                molecular dynamics and AI-powered report generation.
+                Start with a plant name or LC-MS/MS data and let PhytoNet AI guide you through
+                compound identification, target prediction, biological pathway analysis, molecular
+                docking, molecular dynamics, and publication-ready reporting.
               </p>
             </div>
             <div className="grid grid-cols-3 gap-3">
