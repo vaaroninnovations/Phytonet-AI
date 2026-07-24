@@ -777,7 +777,7 @@ function HowItWorks() {
         <div className="mx-auto max-w-2xl text-center">
           <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">How It Works</p>
           <h2 className="font-headline mt-3 text-[36px] leading-[1.08] tracking-tight text-[#111827] sm:text-[44px]">
-            From LC-MS to publication — <span className="gradient-text">10 automated steps</span>
+            One Platform. <span className="gradient-text">Ten Automated Steps.</span> Endless Discoveries.
           </h2>
           <p className="mt-4 text-[14px] leading-relaxed text-[#374151]">
             Data flows automatically from each step to the next. Every stage is transparent,
