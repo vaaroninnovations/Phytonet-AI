@@ -10,7 +10,6 @@ import { useMemo } from "react";
 const STANDALONE_ROUTES = new Set([
   "/plant-database",
   "/admet",
-  "/drug-likeness",
   "/compound-target-prediction",
   "/disease-target-prediction",
   "/molecular-docking",
