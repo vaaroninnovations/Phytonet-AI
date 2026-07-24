@@ -12,7 +12,7 @@ import {
   Search, FlaskConical, FileText, Video, Image as ImageIcon, Beaker,
   Microscope, Brain, Zap, BookOpen, Github, Linkedin, Twitter,
   Play, PlayCircle, Leaf, Cpu, Activity, Database, Workflow, Star, Quote,
-  Target, HeartPulse, Waves, X,
+  Target, HeartPulse, Waves,
 } from "lucide-react";
 import HeroVisual from "@/components/HeroVisual";
 import BrandLogo from "@/components/BrandLogo";
@@ -115,16 +115,6 @@ const PHYTONET_STEPS = [
   { icon: FileText,      label: "AI Report Generation",    desc: "One-click manuscript, figures & graphical abstract.",           tone: "#2BB673" },
 ];
 
-const COMPARISON_ROWS = [
-  { bad: "Multiple disconnected tools",   good: "One integrated platform"        },
-  { bad: "Manual data transfer",          good: "Automated workflow"             },
-  { bad: "Separate scientific databases", good: "Unified database integration"   },
-  { bad: "Repetitive analysis",           good: "AI-assisted analysis"           },
-  { bad: "Manual report preparation",     good: "Publication-ready reports"      },
-  { bad: "Difficult collaboration",       good: "Cloud-based project management" },
-  { bad: "Takes weeks",                   good: "Complete in hours"              },
-];
-
 function WhyChoose() {
   return (
     <section id="why-phytonet" data-testid="why-choose" className="relative overflow-hidden bg-gradient-to-b from-white via-[#FAFAFF] to-white py-24">
@@ -219,36 +209,6 @@ function WhyChoose() {
               ))}
             </ol>
           </div>
-        </div>
-
-        {/* ── Paired comparison rows ── */}
-        <div className="mt-16 overflow-hidden rounded-3xl border border-[#E7E7F3] bg-white shadow-[0_10px_40px_-20px_rgba(11,11,24,0.15)]">
-          <div className="grid grid-cols-2 border-b border-[#E7E7F3] bg-[#FAFAFF]">
-            <div className="px-5 py-3">
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-red-500">Traditional Research</p>
-            </div>
-            <div className="px-5 py-3">
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#5139ED]">PhytoNet AI</p>
-            </div>
-          </div>
-          <ul className="divide-y divide-[#F1F1FA]">
-            {COMPARISON_ROWS.map((r) => (
-              <li key={r.bad} className="grid grid-cols-2 items-center">
-                <div className="flex items-center gap-2.5 px-5 py-3 text-[13px] text-[#374151]">
-                  <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-red-500/12 text-red-500">
-                    <X className="h-3 w-3" strokeWidth={3} />
-                  </span>
-                  {r.bad}
-                </div>
-                <div className="flex items-center gap-2.5 border-l border-[#F1F1FA] bg-[#F8FDFB] px-5 py-3 text-[13px] font-semibold text-[#0F172A]">
-                  <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#2BB673]/15 text-[#2BB673]">
-                    <Check className="h-3 w-3" strokeWidth={3} />
-                  </span>
-                  {r.good}
-                </div>
-              </li>
-            ))}
-          </ul>
         </div>
 
         {/* ── Highlight banner ── */}
