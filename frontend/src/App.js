@@ -13,7 +13,7 @@ import MolecularDynamics from "@/pages/MolecularDynamics";
 import AIScientificReport from "@/pages/AIScientificReport";
 import MyProjects from "@/pages/MyProjects";
 import VerifyEmail from "@/pages/VerifyEmail";
-import AIAssistant from "@/pages/AIAssistant";
+import PhytoNet from "@/pages/PhytoNet";
 import GoogleCallback from "@/pages/GoogleCallback";
 import DatabasesHub from "@/pages/DatabasesHub";
 import Dashboard from "@/pages/Dashboard";
@@ -74,7 +74,8 @@ function App() {
                       <Route path="/ai-scientific-report" element={<AIScientificReport />} />
                       <Route path="/projects" element={<MyProjects />} />
                       <Route path="/verify-email" element={<VerifyEmail />} />
-                      <Route path="/ai-assistant" element={<AIAssistant />} />
+                      <Route path="/phytonet" element={<PhytoNet />} />
+                      <Route path="/ai-assistant" element={<PhytoNet />} />
                       <Route path="/auth/google/callback" element={<GoogleCallback />} />
                       <Route path="/tool/:slug" element={<ComingSoon />} />
                     </Routes>
