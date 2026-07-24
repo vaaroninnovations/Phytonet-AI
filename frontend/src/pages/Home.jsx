@@ -494,56 +494,6 @@ function Stats() {
   );
 }
 
-/* ─────────────────────────── FEATURES ─────────────────────────── */
-const FEATURES = [
-  { icon: Beaker,       title: "Compound Extraction",         body: "Extract phytochemicals from IMPPAT, LOTUS & PubChem in parallel." },
-  { icon: Dna,          title: "Target Prediction",           body: "Predict protein targets via ligand similarity + bioactivity mining." },
-  { icon: Microscope,   title: "Disease Target Mining",       body: "Aggregate Open Targets, CTD, NCBI Gene & UniProt annotations." },
-  { icon: Network,      title: "Network Pharmacology",        body: "Auto-generate Plant-Compound-Target-Disease-Pathway networks." },
-  { icon: Layers,       title: "GO & KEGG Enrichment",        body: "g:Profiler + Enrichr KEGG_2021_Human with publication figures." },
-  { icon: Activity,     title: "Protein Interaction Networks",body: "Interactive STRING PPI with CytoHubba (10 hub-scoring metrics)." },
-  { icon: Atom,         title: "Molecular Docking",           body: "AutoDock Vina + Meeko + OpenBabel across compound×target grid." },
-  { icon: ShieldCheck,  title: "ADMET Prediction",            body: "Drug-likeness, ADME and toxicity scored with medicinal-chem rules." },
-  { icon: FileText,     title: "AI Report Writer",            body: "Claude-generated IMRAD manuscripts exported as MD/PDF/DOCX." },
-];
-function Features() {
-  return (
-    <section id="features" data-testid="features" className="relative py-24">
-      <div className="mx-auto max-w-7xl px-6">
-        <div className="max-w-2xl">
-          <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">Platform</p>
-          <h2 className="font-headline mt-3 text-[36px] leading-[1.08] tracking-tight text-[#111827] sm:text-[44px]">
-            Everything you need for AI-powered<br className="hidden md:block" /> network pharmacology
-          </h2>
-          <p className="mt-4 max-w-xl text-[15px] text-[#374151]">
-            Twelve first-class research modules — from phytochemical extraction to a Nature-style
-            graphical abstract — orchestrated by a single explainable AI scientist.
-          </p>
-        </div>
-
-        <div className="mt-14 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {FEATURES.map((f, i) => (
-            <motion.div key={f.title}
-              initial={{ opacity: 0, y: 14 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
-              transition={{ duration: 0.45, delay: (i % 3) * 0.06 }}
-              className="group relative overflow-hidden rounded-3xl border border-[#E7E7F3] bg-white p-6 transition-all hover:-translate-y-1 hover:border-transparent hover:shadow-[0_20px_60px_-25px_rgba(81,57,237,0.4)]"
-            >
-              {/* Gradient border on hover */}
-              <span aria-hidden className="pointer-events-none absolute inset-0 -z-10 rounded-3xl bg-gradient-to-br from-[#5139ED] via-[#395AED] to-[#8139ED] opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-                    style={{ padding: 1, WebkitMask: "linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)", WebkitMaskComposite: "xor", maskComposite: "exclude" }} />
-              <span className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-[#5139ED]/10 via-[#395AED]/8 to-[#8139ED]/10 text-[#5139ED] transition-all group-hover:from-[#5139ED] group-hover:via-[#395AED] group-hover:to-[#8139ED] group-hover:text-white">
-                <f.icon className="h-5 w-5" strokeWidth={2.2} />
-              </span>
-              <h3 className="font-headline mt-5 text-[17px] font-extrabold text-[#111827]">{f.title}</h3>
-              <p className="mt-2 text-[13.5px] leading-relaxed text-[#6B7280]">{f.body}</p>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
 /* ─────────────────────────── SCREENSHOT / DASHBOARD PREVIEW ─────────────────────────── */
 function ScreenshotSection() {
   const floats = [
@@ -1058,7 +1008,6 @@ export default function Home() {
       <AssistantHero />
       <AgentVsAssistant />
       <Stats />
-      <Features />
       <ScreenshotSection />
       <HowItWorks />
       <Trust />
