@@ -136,30 +136,31 @@ function WhyChoose() {
         </div>
 
         {/* ── Two-column comparison (35 / 65) ── */}
-        <div className="mt-16 grid grid-cols-1 gap-6 lg:grid-cols-[35fr_65fr] lg:gap-8">
-          {/* Left — Traditional Research (dark glass card) */}
-          <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-[#0B0B18] p-7 shadow-[0_20px_60px_-20px_rgba(0,0,0,0.5)]">
-            <div aria-hidden className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-red-500/10 blur-3xl" />
-            <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-red-400/90">Traditional Research</p>
+        <div className="mt-16 grid grid-cols-1 items-start gap-6 lg:grid-cols-[35fr_65fr] lg:gap-8">
+          {/* Left — Traditional Research (dark violet card, brand palette) */}
+          <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-[#0F0E24] via-[#1E1B4B] to-[#12102E] p-7 shadow-[0_20px_60px_-20px_rgba(30,27,75,0.65)]">
+            <div aria-hidden className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-[#8139ED]/25 blur-3xl" />
+            <div aria-hidden className="pointer-events-none absolute -left-16 bottom-0 h-48 w-48 rounded-full bg-red-500/10 blur-3xl" />
+            <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-red-300">Traditional Research</p>
             <h3 className="font-headline mt-2 text-[22px] leading-tight text-white">The old way, in fragments.</h3>
-            <ul className="relative mt-6 space-y-3">
+            <ul className="relative mt-6 space-y-2.5">
               {TRADITIONAL_PAIN.map((t) => (
                 <li key={t} className="flex items-start gap-3 text-[13.5px] text-white/85">
-                  <span aria-hidden className="mt-1 inline-block h-2 w-2 shrink-0 rounded-full bg-red-500 shadow-[0_0_10px_2px_rgba(239,68,68,0.6)]" />
+                  <span aria-hidden className="mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full bg-red-500 shadow-[0_0_10px_2px_rgba(239,68,68,0.6)]" />
                   {t}
                 </li>
               ))}
             </ul>
-            <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+            <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.06] p-4">
               <p className="font-headline text-[13px] text-white">Time to first insight</p>
               <p className="mt-1 text-[11px] text-white/70">Typical published network-pharmacology study</p>
-              <p className="mt-3 font-headline text-[36px] font-extrabold text-red-400">2–6 weeks</p>
+              <p className="mt-2 font-headline text-[32px] font-extrabold text-red-400">2–6 weeks</p>
             </div>
           </div>
 
           {/* Right — PhytoNet AI vertical timeline */}
           <div className="relative rounded-3xl border border-[#E7E7F3] bg-white p-7 shadow-[0_20px_60px_-24px_rgba(81,57,237,0.35)]">
-            <div className="mb-6 flex items-center justify-between gap-4">
+            <div className="mb-4 flex items-center justify-between gap-4">
               <div>
                 <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">PhytoNet AI Workflow</p>
                 <h3 className="font-headline mt-1 text-[22px] leading-tight text-[#111827]">One connected pipeline — 10 steps, zero handoffs.</h3>
@@ -171,7 +172,7 @@ function WhyChoose() {
 
             <ol className="relative pl-4">
               {/* Central gradient spine */}
-              <span aria-hidden className="absolute left-[26px] top-2 bottom-2 w-[2px] bg-gradient-to-b from-[#5139ED]/70 via-[#8139ED]/40 to-[#2BB673]/60" />
+              <span aria-hidden className="absolute left-[26px] top-1 bottom-1 w-[2px] bg-gradient-to-b from-[#5139ED]/70 via-[#8139ED]/40 to-[#2BB673]/60" />
 
               {PHYTONET_STEPS.map((s, i) => (
                 <motion.li
@@ -180,28 +181,26 @@ function WhyChoose() {
                   whileInView={{ opacity: 1, x: 0 }}
                   viewport={{ once: true }}
                   transition={{ delay: i * 0.05, duration: 0.35 }}
-                  className="group relative flex items-start gap-4 py-2.5"
+                  className="group relative flex items-center gap-4 py-1"
                 >
                   {/* Node dot */}
-                  <span
-                    className="relative z-10 grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-white/60 bg-white shadow-[0_6px_18px_-8px_rgba(81,57,237,0.45)] transition-transform group-hover:scale-105"
-                  >
+                  <span className="relative z-10 grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/60 bg-white shadow-[0_6px_18px_-8px_rgba(81,57,237,0.45)] transition-transform group-hover:scale-105">
                     <span
                       className="absolute inset-0 -z-10 rounded-xl opacity-90"
                       style={{ background: `linear-gradient(135deg, ${s.tone}18, ${s.tone}05)` }}
                     />
-                    <s.icon className="h-[18px] w-[18px]" strokeWidth={2.2} style={{ color: s.tone }} />
+                    <s.icon className="h-[17px] w-[17px]" strokeWidth={2.2} style={{ color: s.tone }} />
                   </span>
 
                   {/* Text + hover reveal */}
-                  <div className="flex-1 pt-1">
+                  <div className="flex-1">
                     <div className="flex flex-wrap items-baseline gap-x-2">
                       <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: s.tone }}>
                         Step {String(i + 1).padStart(2, "0")}
                       </span>
                       <p className="text-[14px] font-semibold text-[#0F172A]">{s.label}</p>
                     </div>
-                    <p className="mt-0.5 max-h-0 overflow-hidden text-[12.5px] leading-relaxed text-[#64748B] transition-[max-height,opacity,margin] duration-300 opacity-0 group-hover:mt-1 group-hover:max-h-16 group-hover:opacity-100">
+                    <p className="max-h-0 overflow-hidden text-[12.5px] leading-relaxed text-[#64748B] transition-[max-height,opacity,margin] duration-300 opacity-0 group-hover:mt-0.5 group-hover:max-h-16 group-hover:opacity-100">
                       {s.desc}
                     </p>
                   </div>
