@@ -18,7 +18,7 @@ import { DataTable } from "@/components/network/DataTable";
 import { HelpTip } from "@/components/network/HelpTip";
 import DockingViewer from "@/components/DockingViewer";
 import { requireAuth } from "@/context/AuthContext";
-import { ArrowLeft, ArrowRight, Beaker, Loader2, Download, Play, ExternalLink, Star } from "lucide-react";
+import { ArrowLeft, ArrowRight, Beaker, Loader2, Download, Play, ExternalLink, Star, Sparkles } from "lucide-react";
 
 const DEFAULT_EXHAUSTIVENESS = 8;
 const DEFAULT_MODES = 9;
@@ -659,11 +659,35 @@ export default function MolecularDocking() {
               </div>
               {!standalone && (
                 <div className="mt-4 flex justify-end">
-                  <Link data-testid="dock-to-md" to="/molecular-dynamics" className="inline-flex items-center gap-2 rounded-full bg-[#5139ED] px-5 py-2.5 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 hover:bg-[#4127c9]">
-                    Proceed to Molecular Dynamics<ArrowRight className="h-4 w-4" />
+                  <Link data-testid="dock-to-report" to="/ai-scientific-report" className="inline-flex items-center gap-2 rounded-full bg-[#5139ED] px-5 py-2.5 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 hover:bg-[#4127c9]">
+                    Proceed to Report Generation<ArrowRight className="h-4 w-4" />
                   </Link>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Sticky bottom proceed bar — shows whenever we have docking results.
+            Skips the (v2.0, coming-soon) Molecular Dynamics step and jumps
+            straight to Report Generation, matching the workflow's report route. */}
+        {resultRows.length > 0 && (
+          <div data-testid="dock-proceed-bar" className="pointer-events-none fixed inset-x-0 bottom-6 z-30 flex justify-center px-4">
+            <div className="pointer-events-auto flex items-center gap-4 rounded-full border border-[#E7E7F3] bg-white/95 px-4 py-2 shadow-[0_18px_50px_-20px_rgba(15,23,42,0.35)] backdrop-blur-xl">
+              <span className="hidden items-center gap-2 pr-2 text-[12.5px] font-semibold text-[#111827] sm:inline-flex">
+                <span className="grid h-7 w-7 place-items-center rounded-full bg-gradient-to-br from-[#5139ED] to-[#8139ED] text-white">
+                  <Sparkles className="h-3.5 w-3.5" />
+                </span>
+                Docking complete · {resultRows.length} pose{resultRows.length === 1 ? "" : "s"} ready
+              </span>
+              <Link
+                data-testid="dock-proceed-report"
+                to="/ai-scientific-report"
+                className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#5139ED] via-[#395AED] to-[#8139ED] px-5 py-2 text-[13px] font-bold text-white shadow-[0_10px_28px_-10px_rgba(81,57,237,0.6)] transition-all hover:-translate-y-0.5"
+              >
+                Proceed to Report Generation
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
             </div>
           </div>
         )}
