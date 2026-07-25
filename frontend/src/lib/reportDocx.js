@@ -4,7 +4,9 @@ import {
   Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType,
   Table, TableRow, TableCell, WidthType, BorderStyle, Header, Footer,
   PageNumber, PageBreak, ShadingType, LevelFormat, TabStopType, TabStopPosition,
+  ImageRun,
 } from "docx";
+import { renderFigureToPng } from "./reportFigures";
 
 const BRAND_HEX = "5139ED";
 const MUTED_HEX = "64748B";
@@ -28,21 +30,36 @@ function heading(text, level, num) {
   });
 }
 
+// Native Word table with alternating row shading, bold header row, and
+// slightly heavier bottom border under the header — fully editable in Word.
 function docxTable(t) {
-  const width = { size: 100, type: WidthType.PERCENTAGE };
-  const border = { style: BorderStyle.SINGLE, size: 4, color: "E7E7F3" };
-  const borders = { top: border, bottom: border, left: border, right: border, insideHorizontal: border, insideVertical: border };
+  const width  = { size: 100, type: WidthType.PERCENTAGE };
+  const thin   = { style: BorderStyle.SINGLE, size: 4,  color: "E5E7EB" };
+  const strong = { style: BorderStyle.SINGLE, size: 12, color: BRAND_HEX };
+  const borders = { top: thin, bottom: thin, left: thin, right: thin, insideHorizontal: thin, insideVertical: thin };
   const head = new TableRow({
     tableHeader: true,
     children: t.columns.map((c) => new TableCell({
       shading: { type: ShadingType.CLEAR, fill: BRAND_HEX, color: "auto" },
+      borders: { ...borders, bottom: strong },
       children: [new Paragraph({ children: [new TextRun({ text: String(c), bold: true, color: "FFFFFF", size: 18 })] })],
     })),
   });
-  const rows = t.rows.map((row) => new TableRow({
-    children: row.map((cell) => new TableCell({
-      children: [new Paragraph({ children: [new TextRun({ text: String(cell), size: 18, color: "0B0B18" })] })],
-    })),
+  const rows = t.rows.map((row, i) => new TableRow({
+    children: row.map((cell, j) => {
+      const raw = cell == null ? "" : String(cell);
+      const isNumeric = /^-?[\d.,]+(e[+-]?\d+)?$/i.test(raw.replace(/[^\S ]/g, "").trim());
+      return new TableCell({
+        // Zebra stripes — subtle brand-tinted lavender on odd rows.
+        shading: i % 2 === 1
+          ? { type: ShadingType.CLEAR, fill: "F5F3FE", color: "auto" }
+          : undefined,
+        children: [new Paragraph({
+          alignment: isNumeric && j > 0 ? AlignmentType.RIGHT : AlignmentType.LEFT,
+          children: [new TextRun({ text: raw, size: 18, color: "0B0B18" })],
+        })],
+      });
+    }),
   }));
   return new Table({ rows: [head, ...rows], width, borders });
 }
@@ -145,6 +162,28 @@ export async function renderReportDocx(reportDoc) {
             children: [new TextRun({ text: sub.table.caption, italics: true, color: MUTED_HEX, size: 16 })],
           }));
         }
+      }
+      if (sub.figure?.spec) {
+        try {
+          const { dataUrl, widthPx, heightPx } = renderFigureToPng(sub.figure.spec);
+          // Strip data URL prefix → get raw base64.
+          const b64 = dataUrl.split(",")[1];
+          const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+          // Fit to ~14 cm content width (595 twips × ...). docx expects px.
+          const targetW = 560;
+          const targetH = (heightPx / widthPx) * targetW;
+          body.push(new Paragraph({
+            spacing: { before: 200, after: 60 },
+            children: [new ImageRun({ data: bytes, transformation: { width: targetW, height: targetH } })],
+          }));
+          body.push(new Paragraph({
+            spacing: { after: 200 },
+            children: [
+              new TextRun({ text: `Figure ${sub.figure.id.slice(1)}. `, bold: true, italics: true, color: BRAND_HEX, size: 16 }),
+              new TextRun({ text: `${sub.figure.title}${sub.figure.caption ? " — " + sub.figure.caption : ""}`, italics: true, color: MUTED_HEX, size: 16 }),
+            ],
+          }));
+        } catch (e) { /* skip malformed figure */ }
       }
       // AI Interpretation callout — italic paragraph with a bold prefix.
       if (sub.interpretation) {

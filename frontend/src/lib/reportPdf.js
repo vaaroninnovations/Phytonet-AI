@@ -2,6 +2,7 @@
 // Cover · TOC · numbered headings · figure/table numbering · page numbers.
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { renderFigureToPng } from "./reportFigures";
 
 const BRAND = [81, 57, 237];
 const INK = [11, 11, 24];
@@ -69,6 +70,26 @@ function drawParagraph(doc, cursor, text, meta) {
   cursor = ensureSpace(doc, cursor, need, meta);
   doc.text(lines, MARGIN, cursor);
   return cursor + need + 2;
+}
+
+function drawFigure(doc, cursor, figure, meta) {
+  try {
+    const { dataUrl, widthPx, heightPx } = renderFigureToPng(figure.spec);
+    // Fit width to content, preserve aspect ratio.
+    const targetW = CONTENT_W;
+    const targetH = (heightPx / widthPx) * targetW;
+    cursor = ensureSpace(doc, cursor, targetH + 14, meta);
+    doc.addImage(dataUrl, "PNG", MARGIN, cursor, targetW, targetH, undefined, "FAST");
+    cursor += targetH + 3;
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(8);
+    doc.setTextColor(...MUTED);
+    const cap = `Figure ${figure.id.slice(1)}. ${figure.title}${figure.caption ? " — " + figure.caption : ""}`;
+    const capLines = doc.splitTextToSize(cap, CONTENT_W);
+    doc.text(capLines, MARGIN, cursor);
+    cursor += capLines.length * 3.8 + 4;
+  } catch (e) { /* silently skip malformed figure */ }
+  return cursor;
 }
 
 function drawTable(doc, cursor, table, meta) {
@@ -206,6 +227,7 @@ export function renderReportPdf(reportDoc) {
         cursor = drawHeading(doc, cursor, subNum, sub.title, 2, meta);
         (sub.body || sub.paragraphs || []).forEach((p) => { cursor = drawParagraph(doc, cursor, p, meta); });
         if (sub.table) cursor = drawTable(doc, cursor, sub.table, meta);
+        if (sub.figure?.spec) cursor = drawFigure(doc, cursor, sub.figure, meta);
         // AI Interpretation callout — subtle violet inset paragraph.
         if (sub.interpretation) {
           cursor = ensureSpace(doc, cursor, 12, meta);

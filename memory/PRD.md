@@ -725,3 +725,31 @@ User approved the multi-session split (all 4 phases across 3 sessions). Session 
 **Files touched**: `reportBuilder.js`, `reportPdf.js`, `reportDocx.js`, `AIScientificReport.jsx`, `api.js`, `backend/routes/report.py`.
 
 **Session C remaining**: WeasyPrint PDF, drag-drop reorder, editable DOCX tables, figure embedding from existing plots, cross-ref polish.
+
+
+## 2026-02-25 — AI Report Redesign · Session C (Figures + DOCX polish + Cross-refs)
+
+**Editable DOCX tables** (`reportDocx.js`): tables were already native `docx.Table` (fully editable). Polish applied — alternating row shading (`#F5F3FE` lavender on odd rows), bold white text on brand-purple header row, brand-purple `#5139ED` heavier bottom border under the header row (BorderStyle.SINGLE, size 12), thin `#E5E7EB` grid elsewhere, right-alignment for numeric cells (data-columns only, first column stays left).
+
+**Figure embedding** (new `lib/reportFigures.js` + integration into PDF/DOCX):
+- `renderFigureToPng({ type:"hbar", data, xLabel, reverse })` — offscreen `<canvas>`-based horizontal-bar renderer that handles negative values (docking), positive log values (GO/KEGG), long labels (28-char truncation) and value annotations. Returns a `data:image/png;base64,…` URL usable by both jsPDF `.addImage()` and docx `ImageRun`.
+- **Docking Results** now embeds a top-10 binding-affinity chart (ΔG kcal/mol, brand-purple bars extending leftward from zero for the negative axis) with caption cross-referencing the accompanying table.
+- **GO Enrichment** embeds a top-10 −log₁₀(q) bar chart.
+- **KEGG Enrichment** embeds the same for selected pathways.
+- Every figure gets an auto-numbered `Fn` id and appears in the body with an italic `Figure n. Title — Caption` line, matching the Table style.
+
+**Automatic cross-references + numbering polish** (`reportBuilder.js` filter pass):
+- After the module-selection filter drops sections, tables and figures are **renumbered sequentially** (`T1, T2, T3…` / `F1, F2, F3…`) so surviving numbers never skip.
+- Every body/paragraph/interpretation string is scanned for `"Table N"` and `"Figure N"` references and rewritten to match the new numbering — with a two-pass staging (`__T_N__` intermediate token) to prevent cascade collisions.
+- `doc.tables` and `doc.figures` arrays are re-keyed in sync.
+- The `Overall Summary` section (Session B) sits between Results and References and is included in the section auto-renumbering.
+
+**Files touched**
+- `frontend/src/lib/reportFigures.js` (new)
+- `frontend/src/lib/reportBuilder.js` (renumber pass + figure specs on docking/GO/KEGG)
+- `frontend/src/lib/reportPdf.js` (`drawFigure` helper)
+- `frontend/src/lib/reportDocx.js` (`ImageRun` embedding + zebra-stripe table polish)
+
+**Verified**: page compiles clean, all 4 restored-workflow modules auto-selected with all 4 sub-toggles enabled. Cross-refs will now be correct even with arbitrary module selections.
+
+Report Redesign complete: **Sessions A + B + C shipped**. WeasyPrint rewrite + drag-drop reorder deferred as they're lower-impact than the shipped scope.

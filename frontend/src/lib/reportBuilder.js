@@ -438,12 +438,27 @@ export function buildReportDoc({ workflow, user, projectTitle, scientificName, r
       caption: `Enrichment adjusted P-values via Benjamini–Hochberg.${goTerms.length > 20 ? ` Showing top 20 of ${goTerms.length} enriched terms; full dataset available as downloadable CSV.` : ""}`,
     };
     doc.tables.push(tbl);
+    const topGo = goTerms.slice(0, 10);
+    const goFig = {
+      id: `F${nextFigure()}`,
+      title: "Top-10 enriched GO terms by −log₁₀(q).",
+      caption: "Bar length indicates statistical significance of the enrichment (Benjamini–Hochberg-adjusted).",
+      spec: {
+        type: "hbar", xLabel: "−log₁₀(q)",
+        data: topGo.map((g) => ({
+          label: (g.term_name || g.name || g.term_id || "—"),
+          value: -Math.log10(Math.max(g.adjusted_p_value || g.p_value || 1e-300, 1e-300)),
+        })),
+      },
+    };
+    doc.figures.push(goFig);
     resultsSubs.push({
       key: "r-go", title: "GO Enrichment Analysis",
       paragraphs: [
-        `${goTerms.length} GO terms were significantly enriched (q < 0.05) across BP, MF and CC namespaces. The top 20 terms are shown in Table ${tbl.id.slice(1)}.`,
+        `${goTerms.length} GO terms were significantly enriched (q < 0.05) across BP, MF and CC namespaces. The top 20 terms are shown in Table ${tbl.id.slice(1)} and the ten most-significant are illustrated in Figure ${goFig.id.slice(1)}.`,
       ],
       table: tbl,
+      figure: goFig,
     });
   }
 
@@ -461,12 +476,26 @@ export function buildReportDoc({ workflow, user, projectTitle, scientificName, r
       caption: "Pathways selected during Network Analysis.",
     };
     doc.tables.push(tbl);
+    const keggFig = {
+      id: `F${nextFigure()}`,
+      title: "Top KEGG pathways by −log₁₀(q).",
+      caption: "Selected pathways ranked by adjusted enrichment significance.",
+      spec: {
+        type: "hbar", xLabel: "−log₁₀(q)",
+        data: selectedKeggPathways.slice(0, 10).map((p) => ({
+          label: p.name || p.pathway_name || p.pathway_id || "—",
+          value: -Math.log10(Math.max(p.p_value || p.padj || 1e-300, 1e-300)),
+        })),
+      },
+    };
+    doc.figures.push(keggFig);
     resultsSubs.push({
       key: "r-kegg", title: "KEGG / Reactome Pathway Analysis",
       paragraphs: [
-        `${selectedKeggPathways.length} pathways were selected during the network-analysis step. The enrichment ranking is reported in Table ${tbl.id.slice(1)}.`,
+        `${selectedKeggPathways.length} pathways were selected during the network-analysis step. The enrichment ranking is reported in Table ${tbl.id.slice(1)} and visualised in Figure ${keggFig.id.slice(1)}.`,
       ],
       table: tbl,
+      figure: keggFig,
     });
   }
 
@@ -493,12 +522,27 @@ export function buildReportDoc({ workflow, user, projectTitle, scientificName, r
     };
     doc.tables.push(tbl);
     const meanAffinity = okResults.reduce((s, r) => s + r.best_affinity, 0) / (okResults.length || 1);
+    const dockSorted = okResults.slice().sort((a, b) => a.best_affinity - b.best_affinity);
+    const dockFig = {
+      id: `F${nextFigure()}`,
+      title: "Top-10 predicted binding affinities.",
+      caption: "Compound × target pairs ranked by AutoDock Vina ΔG (kcal/mol). More negative values indicate stronger predicted binding.",
+      spec: {
+        type: "hbar", reverse: true, xLabel: "ΔG (kcal/mol)",
+        data: dockSorted.slice(0, 10).map((r) => ({
+          label: `${r.ligand_name || "?"} · ${r.gene_symbol || r.receptor_uniprot || "?"}`,
+          value: r.best_affinity,
+        })),
+      },
+    };
+    doc.figures.push(dockFig);
     resultsSubs.push({
       key: "r-docking", title: "Molecular Docking",
       paragraphs: [
-        `${okResults.length} compound–target complexes were docked with AutoDock Vina. The mean predicted binding affinity across all pairs was ${fmt(meanAffinity, 2)} kcal/mol; the strongest binder was ${okResults.slice().sort((a,b)=>a.best_affinity-b.best_affinity)[0].ligand_name} × ${okResults.slice().sort((a,b)=>a.best_affinity-b.best_affinity)[0].gene_symbol} at ${fmt(okResults.slice().sort((a,b)=>a.best_affinity-b.best_affinity)[0].best_affinity, 2)} kcal/mol.`,
+        `${okResults.length} compound–target complexes were docked with AutoDock Vina. The mean predicted binding affinity across all pairs was ${fmt(meanAffinity, 2)} kcal/mol; the strongest binder was ${dockSorted[0].ligand_name} × ${dockSorted[0].gene_symbol || dockSorted[0].receptor_uniprot} at ${fmt(dockSorted[0].best_affinity, 2)} kcal/mol (see Figure ${dockFig.id.slice(1)} and Table ${tbl.id.slice(1)}).`,
       ],
       table: tbl,
+      figure: dockFig,
     });
   }
 
@@ -638,6 +682,57 @@ export function buildReportDoc({ workflow, user, projectTitle, scientificName, r
       // Renumber sections that came after.
       doc.sections.forEach((s, i) => { s.number = String(i + 1); });
     }
+
+    // ═════════ Renumber Tables & Figures + rewrite cross-refs ═════════
+    // After filtering, surviving table/figure IDs may have gaps (e.g. T1, T4,
+    // T6). Walk the surviving sections in order and reassign sequential IDs.
+    // Then rewrite every body-string reference like "Table 4" → "Table 3".
+    const tblMap = new Map();   // oldId → newId
+    const figMap = new Map();
+    let tCounter = 0, fCounter = 0;
+    for (const sec of doc.sections) {
+      for (const sub of (sec.subsections || [])) {
+        if (sub.table?.id && !tblMap.has(sub.table.id)) {
+          tCounter += 1;
+          tblMap.set(sub.table.id, `T${tCounter}`);
+        }
+        if (sub.figure?.id && !figMap.has(sub.figure.id)) {
+          fCounter += 1;
+          figMap.set(sub.figure.id, `F${fCounter}`);
+        }
+      }
+    }
+    const rewriteRefs = (text) => {
+      if (typeof text !== "string") return text;
+      let out = text;
+      // Body text mentions "Table N" (bare number). Reorder by scanning the
+      // old→new map. Guard against N→M cascades by staging replacements.
+      const tokens = [];
+      for (const [oldId, newId] of tblMap.entries()) {
+        const oldN = oldId.slice(1), newN = newId.slice(1);
+        if (oldN !== newN) tokens.push({ re: new RegExp(`\\bTable ${oldN}\\b`, "g"), sub: `__T_${newN}__` });
+      }
+      for (const [oldId, newId] of figMap.entries()) {
+        const oldN = oldId.slice(1), newN = newId.slice(1);
+        if (oldN !== newN) tokens.push({ re: new RegExp(`\\bFigure ${oldN}\\b`, "g"), sub: `__F_${newN}__` });
+      }
+      tokens.forEach((t) => { out = out.replace(t.re, t.sub); });
+      out = out.replace(/__T_(\d+)__/g, "Table $1").replace(/__F_(\d+)__/g, "Figure $1");
+      return out;
+    };
+    for (const sec of doc.sections) {
+      if (sec.paragraphs) sec.paragraphs = sec.paragraphs.map(rewriteRefs);
+      for (const sub of (sec.subsections || [])) {
+        if (sub.body) sub.body = sub.body.map(rewriteRefs);
+        if (sub.paragraphs) sub.paragraphs = sub.paragraphs.map(rewriteRefs);
+        if (sub.interpretation) sub.interpretation = rewriteRefs(sub.interpretation);
+        if (sub.table?.id) sub.table.id = tblMap.get(sub.table.id) || sub.table.id;
+        if (sub.figure?.id) sub.figure.id = figMap.get(sub.figure.id) || sub.figure.id;
+      }
+    }
+    // Also renumber the doc.tables / doc.figures arrays' ids to match.
+    doc.tables  = doc.tables.map((t)  => tblMap.has(t.id) ? { ...t, id: tblMap.get(t.id) } : t);
+    doc.figures = doc.figures.map((f) => figMap.has(f.id) ? { ...f, id: figMap.get(f.id) } : f);
   }
 
   return doc;
