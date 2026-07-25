@@ -673,3 +673,36 @@ Total: 3 files → 3 folders (17 new part files). Webpack picks folder `index.js
 - P2: Wire Razorpay/Stripe payment gateway for node recharge.
 - P2: Molecular Dynamics server-side execution (Celery/GROMACS).
 - P3: Further sub-splits if any main `index.jsx` becomes hard to navigate again.
+
+
+## 2026-02-25 — AI Report Redesign · Session A (Builder UI + selection contract)
+
+User approved the multi-session split (all 4 phases across 3 sessions). Session A ships:
+
+**Frontend — `pages/AIScientificReport.jsx` full rewrite**
+- Renamed to **"Report Builder"** — modular per-module selection
+- All 15 spec modules: Plant Database, Phytochemical Standardization, Compound Library, Drug-likeness, ADMET, Target Prediction, Disease Targets, Compound-Target Network, Network Analysis, PPI, Hub Genes, GO, KEGG, Molecular Docking, Molecular Dynamics
+- Data-availability detection: modules without data auto-greyed, checkbox disabled, cannot be selected — no fabrication path exists
+- Per-module 4-toggle: Methods · Tables · Figures · AI Interpretation (all default-on when included)
+- Auto Report ID `PN-YYYYMMDD-6charnanoid` (uppercase alphanum, ambiguous chars removed)
+- Bulk "Select all with data" / "Clear all"
+- Live preview outline that respects selection
+- Full "PhytoNet AI-Generated Analysis Report" disclaimer footer
+
+**Backend contract — `lib/reportBuilder.js`**
+- `buildReportDoc({ workflow, user, projectTitle, scientificName, reportId, include, includedIds })` — new params
+- Post-filter pass drops sections whose module isn't in `includedIds`, prunes unreferenced tables/figures, and honours per-module toggles for Methods/Tables/Figures/Interpretation
+- Backwards compatible — if `includedIds` is not supplied, behaves exactly like v1 (all-data-included)
+- `doc.meta.selection` and `doc.meta.includedModules` snapshot the choices for downstream PDF/DOCX renderers
+
+**Next (Session B)**
+- Per-module Methods templates parametrised from actual workflow config (databases, versions, thresholds)
+- Per-module Results generators: summary + top-N table + "full dataset as CSV" caveat
+- Figure integration reusing existing module plot code (ADMET radar, GO/KEGG bubble plots, PPI, docking-pose)
+- Claude Sonnet 4.5 per-module AI Interpretation via Emergent LLM key + Overall Summary
+
+**Next (Session C)**
+- Rewrite PDF pipeline to WeasyPrint (HTML→PDF fidelity)
+- Drag-and-drop section reorder
+- Editable DOCX tables
+- Automatic cross-refs, section/table/figure numbering polish

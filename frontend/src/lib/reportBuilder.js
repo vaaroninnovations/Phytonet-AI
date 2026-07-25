@@ -49,7 +49,7 @@ function fmt(n, digits = 2) {
  * @param {string} [params.scientificName]
  * @returns {ReportDoc}
  */
-export function buildReportDoc({ workflow, user, projectTitle, scientificName }) {
+export function buildReportDoc({ workflow, user, projectTitle, scientificName, reportId, include, includedIds }) {
   const {
     plantName, selectedDisease, selectedCompounds = [], allCompounds = [],
     compoundTargets = [], diseaseTargets = [], intersectingGenes = [],
@@ -57,8 +57,21 @@ export function buildReportDoc({ workflow, user, projectTitle, scientificName })
     dockingResults,
   } = workflow || {};
 
+  // Map builder module IDs → data-availability + section keys the legacy
+  // pipeline emits. If `includedIds` is not supplied, default to "include
+  // everything with data" (preserves the pre-redesign behaviour).
+  const inc = new Set(includedIds || []);
+  const anySpecified = !!includedIds && includedIds.length >= 0 && includedIds !== undefined && !!includedIds && Array.isArray(includedIds);
+  const wants = (id) => (anySpecified ? inc.has(id) : true);
+  // Toggle helpers — respected by section generators below where relevant.
+  const flag = (id, key) => {
+    if (!anySpecified) return true;
+    return !!(include && include[id] && include[id][key]);
+  };
+
   const doc = {
     meta: {
+      reportId: reportId || null,
       projectTitle: projectTitle || `Network Pharmacology of ${plantName || "an Indian Medicinal Plant"}${selectedDisease?.name ? ` in ${selectedDisease.name}` : ""}`,
       plantName: plantName || "—",
       scientificName: scientificName || "—",
@@ -67,11 +80,18 @@ export function buildReportDoc({ workflow, user, projectTitle, scientificName })
       userName: [user?.first_name, user?.last_name].filter(Boolean).join(" ") || user?.email || "—",
       userEmail: user?.email || "",
       brand: "PhytoNet AI · v1.0",
+      // Selection snapshot — downstream renderers (PDF/DOCX) may use these
+      // to omit Methods / Tables / Figures / AI-Interpretation blocks per
+      // module. Full server-side filter lands in Session B of the redesign.
+      selection: include || null,
+      includedModules: includedIds || null,
     },
     sections: [],
     references: [],
     figures: [],
     tables: [],
+    _wants: wants,   // internal — used by section builders below
+    _flag: flag,
   };
 
   const usedRefs = new Set();
@@ -439,6 +459,85 @@ export function buildReportDoc({ workflow, user, projectTitle, scientificName })
   // ═════════ Assign TOC numbers dynamically ═════════
   // (Already assigned inline above; numbering is stable because sections are
   //  built in a fixed order — Executive Summary → Methods → Results → Refs.)
+
+  // ═════════ Selection filter (Report Builder v2) ═════════
+  // Map internal subsection keys → module IDs from the Builder UI. Any module
+  // ID present in `includedIds` (non-empty selection) survives; the rest are
+  // dropped. Empty-data modules are dropped regardless of toggle state.
+  if (anySpecified) {
+    const SUB_TO_MOD = {
+      "m-plant": "plant-database",
+      "m-compounds": "compound-library",
+      "m-admet": "admet",
+      "m-target": "target-prediction",
+      "m-disease": "disease-targets",
+      "m-network": "network-analysis",
+      "m-ppi": "ppi",
+      "m-hub": "hub-genes",
+      "m-go": "go",
+      "m-kegg": "kegg",
+      "m-docking": "docking",
+      "m-md": "md",
+      "r-compounds": "compound-library",
+      "r-admet": "admet",
+      "r-druglikeness": "drug-likeness",
+      "r-targets": "target-prediction",
+      "r-disease": "disease-targets",
+      "r-ctnet": "ct-network",
+      "r-network": "network-analysis",
+      "r-ppi": "ppi",
+      "r-hub": "hub-genes",
+      "r-go": "go",
+      "r-kegg": "kegg",
+      "r-docking": "docking",
+      "r-md": "md",
+    };
+    const keep = (subKey) => {
+      const mod = SUB_TO_MOD[subKey];
+      return !mod || wants(mod);
+    };
+    const filtered = [];
+    for (const sec of doc.sections) {
+      if (sec.subsections) {
+        const kept = sec.subsections.filter((sub) => keep(sub.key));
+        if (kept.length) filtered.push({ ...sec, subsections: kept });
+      } else {
+        filtered.push(sec);
+      }
+    }
+    doc.sections = filtered;
+
+    // Prune tables/figures no longer referenced by any surviving subsection.
+    const referencedTableIds = new Set();
+    const referencedFigureIds = new Set();
+    for (const sec of doc.sections) {
+      (sec.subsections || []).forEach((sub) => {
+        if (sub.table?.id) referencedTableIds.add(sub.table.id);
+        if (sub.figure?.id) referencedFigureIds.add(sub.figure.id);
+      });
+    }
+    doc.tables  = doc.tables.filter((t)  => referencedTableIds.has(t.id));
+    doc.figures = doc.figures.filter((f) => referencedFigureIds.has(f.id));
+
+    // Also honour per-module Tables/Figures/Methods/Interpretation toggles.
+    doc.sections = doc.sections.map((sec) => {
+      if (!sec.subsections) return sec;
+      const cleaned = sec.subsections.map((sub) => {
+        const mod = SUB_TO_MOD[sub.key];
+        const s = { ...sub };
+        if (mod) {
+          if (sub.table && !flag(mod, "tables")) delete s.table;
+          if (sub.figure && !flag(mod, "figures")) delete s.figure;
+          // Methods for a module live inside sec.key === "methods"; drop the
+          // whole subsection if Methods are toggled off for that module.
+          if (sec.key === "methods" && !flag(mod, "methods")) return null;
+          if (sub.interpretation && !flag(mod, "interpretation")) delete s.interpretation;
+        }
+        return s;
+      }).filter(Boolean);
+      return { ...sec, subsections: cleaned };
+    }).filter((sec) => !sec.subsections || sec.subsections.length > 0);
+  }
 
   return doc;
 }
