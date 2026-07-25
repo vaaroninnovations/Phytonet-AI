@@ -706,3 +706,22 @@ User approved the multi-session split (all 4 phases across 3 sessions). Session 
 - Drag-and-drop section reorder
 - Editable DOCX tables
 - Automatic cross-refs, section/table/figure numbering polish
+
+
+## 2026-02-25 — AI Report Redesign · Session B (Methods + AI Interpretation)
+
+**Frontend `reportBuilder.js`**: Methods block expanded from 8 → 12 module templates covering all 15 spec modules (Plant DB, Phyto-Std, Compound Library, Drug-likeness, ADMET, Target Prediction, Disease Targets, CT-Network, Network Analysis, PPI, Hub, GO, KEGG, Docking, MD). 10 new bibliography entries (RDKit, QED, BindingDB, CytoHubba, Enrichr, Meeko, GROMACS, Amber99, ACPYPE). Truncated tables now show `"Showing top N of M; full dataset available as downloadable CSV"`.
+
+**AI Interpretation pipeline**: `buildReportDoc` accepts `aiInterpret={per_module, overall}`. The filter pass injects Claude Sonnet 4.5 text into each Results subsection under "**AI Interpretation.**" (italic) and splices an "Overall Summary" section after Results with auto-renumbering. Fallback safety: strings starting with `"No results generated"` or `"Overall summary unavailable"` are silently dropped.
+
+**Frontend `AIScientificReport.jsx`**: PDF/DOCX generation first calls `POST /api/report/interpret` for every module with the AI toggle on. Overall Summary only requested when ≥2 modules opt in.
+
+**PDF/DOCX renderers**: Both now render `sub.interpretation` as an italic paragraph with brand-purple `AI Interpretation.` label prefix.
+
+**Backend `routes/report.py`**: New `POST /api/report/interpret` — Claude Sonnet 4.5 (`claude-sonnet-4-5-20250929`) via `emergentintegrations` + `EMERGENT_LLM_KEY`. Runs per-module in parallel with `Semaphore(4)`. Hard no-fabrication guard: modules with empty data return `"No results generated for this analysis."` WITHOUT calling the LLM. `_fallback_slices()` condenses workflow into per-module top-20 blobs so prompts stay small.
+
+**End-to-end verified**: Withania somnifera + Alzheimer disease payload → 3 detailed per-module interpretations + 1 Overall Summary from `anthropic/claude-sonnet-4-5-20250929`.
+
+**Files touched**: `reportBuilder.js`, `reportPdf.js`, `reportDocx.js`, `AIScientificReport.jsx`, `api.js`, `backend/routes/report.py`.
+
+**Session C remaining**: WeasyPrint PDF, drag-drop reorder, editable DOCX tables, figure embedding from existing plots, cross-ref polish.

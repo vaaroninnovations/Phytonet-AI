@@ -146,6 +146,16 @@ export async function renderReportDocx(reportDoc) {
           }));
         }
       }
+      // AI Interpretation callout — italic paragraph with a bold prefix.
+      if (sub.interpretation) {
+        body.push(new Paragraph({
+          spacing: { before: 120, after: 180 },
+          children: [
+            new TextRun({ text: "AI Interpretation. ", bold: true, color: BRAND_HEX }),
+            new TextRun({ text: sub.interpretation, italics: true, color: "374151" }),
+          ],
+        }));
+      }
     });
     if (sec.refs) {
       sec.refs.forEach((r) => {

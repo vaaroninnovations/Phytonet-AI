@@ -33,6 +33,15 @@ const REFS = {
   MGLTools:{id: "MGLTools",  text: "Morris, G. M. et al. (2009). AutoDock4 and AutoDockTools4: Automated docking with selective receptor flexibility. J. Comput. Chem., 30(16), 2785–2791." },
   RCSB:   { id: "RCSB",      text: "Burley, S. K. et al. (2023). RCSB Protein Data Bank (RCSB.org): delivery of experimentally-determined PDB structures. Nucleic Acids Research, 51(D1), D488–D508." },
   ADMETAI:{ id: "ADMETAI",   text: "Swanson, K. et al. (2024). ADMET-AI: a machine learning ADMET platform for evaluation of large-scale chemical libraries. Bioinformatics, 40, btae416." },
+  RDKit:  { id: "RDKit",     text: "Landrum, G. (2024). RDKit: Open-source cheminformatics. https://www.rdkit.org." },
+  QED:    { id: "QED",       text: "Bickerton, G. R., Paolini, G. V., Besnard, J., Muresan, S. & Hopkins, A. L. (2012). Quantifying the chemical beauty of drugs. Nature Chemistry, 4(2), 90–98." },
+  BindingDB:{ id: "BindingDB", text: "Gilson, M. K. et al. (2016). BindingDB in 2015: A public database for medicinal chemistry, computational chemistry and systems pharmacology. Nucleic Acids Research, 44(D1), D1045–D1053." },
+  CytoHubba:{ id: "CytoHubba", text: "Chin, C.-H. et al. (2014). cytoHubba: identifying hub objects and sub-networks from complex interactome. BMC Systems Biology, 8(Suppl 4), S11." },
+  Enrichr:{ id: "Enrichr",   text: "Kuleshov, M. V. et al. (2016). Enrichr: a comprehensive gene set enrichment analysis web server 2016 update. Nucleic Acids Research, 44(W1), W90–W97." },
+  Meeko:  { id: "Meeko",     text: "Forli, S. et al. (2022). Meeko: preparation of small molecules for AutoDock. Zenodo. https://github.com/forlilab/Meeko." },
+  GROMACS:{ id: "GROMACS",   text: "Abraham, M. J. et al. (2015). GROMACS: High performance molecular simulations through multi-level parallelism from laptops to supercomputers. SoftwareX, 1–2, 19–25." },
+  Amber99:{ id: "Amber99",   text: "Lindorff-Larsen, K. et al. (2010). Improved side-chain torsion potentials for the Amber ff99SB protein force field. Proteins, 78(8), 1950–1958." },
+  ACPYPE: { id: "ACPYPE",    text: "Sousa da Silva, A. W. & Vranken, W. F. (2012). ACPYPE — AnteChamber PYthon Parser interfacE. BMC Research Notes, 5, 367." },
 };
 
 function fmt(n, digits = 2) {
@@ -49,7 +58,7 @@ function fmt(n, digits = 2) {
  * @param {string} [params.scientificName]
  * @returns {ReportDoc}
  */
-export function buildReportDoc({ workflow, user, projectTitle, scientificName, reportId, include, includedIds }) {
+export function buildReportDoc({ workflow, user, projectTitle, scientificName, reportId, include, includedIds, aiInterpret }) {
   const {
     plantName, selectedDisease, selectedCompounds = [], allCompounds = [],
     compoundTargets = [], diseaseTargets = [], intersectingGenes = [],
@@ -129,66 +138,123 @@ export function buildReportDoc({ workflow, user, projectTitle, scientificName, r
   // ═════════ Materials & Methods ═════════
   const methodsSubs = [];
 
-  if (selectedCompounds.length) {
+  // Plant Database — always emitted if a plant name exists (spec 2.1)
+  if (plantName || (allCompounds && allCompounds.length)) {
     methodsSubs.push({
-      key: "m-compounds", title: "Compound Identification",
+      key: "m-plant", title: "Plant Database",
       body: [
-        `Phytochemicals attributed to ${plantName || "the plant"} were retrieved from the Indian Medicinal Plants, Phytochemistry And Therapeutics database (IMPPAT 2.0) ${cite("IMPPAT")} and the LOTUS natural-products knowledgebase ${cite("LOTUS")}. Chemical identifiers, SMILES strings and PubChem CIDs were harmonised via PubChem ${cite("PubChem")}. Duplicate structures were removed by canonical SMILES.`,
+        `The medicinal plant ${plantName || "under study"} was resolved against the Indian Medicinal Plants, Phytochemistry And Therapeutics database (IMPPAT 2.0) ${cite("IMPPAT")} and the LOTUS natural-products knowledgebase ${cite("LOTUS")}. Taxonomic synonyms were resolved through the NCBI Taxonomy service. All phytochemicals attributed to the taxon in either resource were merged into a single non-redundant candidate list for downstream standardisation.`,
       ],
     });
   }
 
-  const hasAdmet = selectedCompounds.some((c) => c.admet != null || c.admet_score != null || c.drug_likeness != null);
+  // Phytochemical Standardization (spec 2.2)
+  if ((allCompounds || []).some((c) => c.canonical_smiles) || selectedCompounds.length) {
+    methodsSubs.push({
+      key: "m-phytostd", title: "Phytochemical Standardization",
+      body: [
+        `Retrieved compounds were standardised through a deterministic pipeline: canonical SMILES were generated with RDKit ${cite("RDKit")}; PubChem CIDs were resolved to unify duplicates across sources ${cite("PubChem")}; salts and counter-ions were stripped; charges were neutralised; stereochemistry was preserved; molecular formula and monoisotopic weight were re-computed and cross-verified against source metadata. Records failing structural validation were excluded.`,
+      ],
+    });
+  }
+
+  if (selectedCompounds.length) {
+    methodsSubs.push({
+      key: "m-compounds", title: "Compound Library",
+      body: [
+        `A curated compound library of ${selectedCompounds.length} phytochemicals attributed to ${plantName || "the plant"} was assembled from IMPPAT ${cite("IMPPAT")} and LOTUS ${cite("LOTUS")}; chemical identifiers, SMILES strings, molecular formula and weight were harmonised via PubChem ${cite("PubChem")}.`,
+      ],
+    });
+  }
+
+  const hasDL = selectedCompounds.some((c) => c.drug_likeness != null);
+  if (hasDL) {
+    methodsSubs.push({
+      key: "m-druglikeness", title: "Drug-likeness",
+      body: [
+        `Drug-likeness was scored against six orthogonal rule sets — Lipinski's Rule of Five ${cite("Lipinski")} (MW ≤ 500 Da, LogP ≤ 5, HBD ≤ 5, HBA ≤ 10), Ghose, Veber, Egan, Muegge — together with QED ${cite("QED")} and structural alerts (PAINS, Brenk). Physicochemical descriptors (MW, LogP, TPSA, rotatable bonds, HBA/HBD) were computed with RDKit ${cite("RDKit")}.`,
+      ],
+    });
+  }
+
+  const hasAdmet = selectedCompounds.some((c) => c.admet != null || c.admet_score != null);
   if (hasAdmet) {
     methodsSubs.push({
-      key: "m-admet", title: "ADMET & Drug-Likeness Evaluation",
+      key: "m-admet", title: "ADMET",
       body: [
-        `Absorption, Distribution, Metabolism, Excretion and Toxicity (ADMET) properties were predicted with ADMET-AI ${cite("ADMETAI")} and cross-checked against the SwissADME service ${cite("SwissADME")}. Drug-likeness was scored using Lipinski's Rule of Five ${cite("Lipinski")} (MW ≤ 500 Da, LogP ≤ 5, HBD ≤ 5, HBA ≤ 10) together with the SwissADME bioavailability score.`,
+        `Absorption, Distribution, Metabolism, Excretion and Toxicity (ADMET) endpoints were predicted with ADMET-AI ${cite("ADMETAI")} and cross-checked against SwissADME ${cite("SwissADME")}. Predicted properties include GI absorption, blood-brain barrier permeability, CYP450 inhibition (1A2/2C19/2C9/2D6/3A4), P-glycoprotein substrate status, hERG cardiotoxicity liability, hepatotoxicity, mutagenicity (Ames) and skin sensitisation.`,
       ],
     });
   }
 
   if (compoundTargets.length) {
     methodsSubs.push({
-      key: "m-targets", title: "Compound Target Prediction",
+      key: "m-targets", title: "Target Prediction",
       body: [
-        `Putative human protein targets for each phytochemical were predicted with SwissTargetPrediction ${cite("SwissTP")}. Bioactive targets with a probability ≥ 0.10 were retained; hits were annotated with the ChEMBL activity database ${cite("ChEMBL")} where measured Ki/IC₅₀ data were available.`,
+        `Putative human protein targets were predicted with SwissTargetPrediction ${cite("SwissTP")} (ligand-similarity-based inference). Targets with probability ≥ 0.10 were retained; measured bioactivities were annotated from ChEMBL ${cite("ChEMBL")} and BindingDB ${cite("BindingDB")} where Ki, Kd or IC₅₀ values were available.`,
       ],
     });
   }
 
   if (diseaseTargets.length) {
     methodsSubs.push({
-      key: "m-disease", title: "Disease Target Identification",
+      key: "m-disease", title: "Disease Targets",
       body: [
-        `Genes associated with the disease "${selectedDisease?.name || selectedDisease?.efo_id || "the queried disease"}" were retrieved from Open Targets ${cite("OpenTargets")} and DisGeNET ${cite("DisGeNET")}; protein-level metadata was harmonised through UniProt ${cite("UniProt")}. Targets shared between the compound-target and disease-target sets were treated as the intersecting-target set used for the downstream network construction.`,
+        `Genes associated with "${selectedDisease?.name || selectedDisease?.efo_id || "the queried disease"}" were retrieved from Open Targets ${cite("OpenTargets")} and DisGeNET ${cite("DisGeNET")}; UniProt ${cite("UniProt")} was used for protein-level metadata harmonisation. Targets appearing in both compound- and disease-target sets constitute the intersecting-target set used for network construction.`,
+      ],
+    });
+  }
+
+  if (compoundTargets.length && selectedCompounds.length) {
+    methodsSubs.push({
+      key: "m-ctnet", title: "Compound–Target Network",
+      body: [
+        `A bipartite compound → target graph was constructed with each phytochemical connected to its predicted human targets (probability ≥ 0.10). Node degree, weighted betweenness and eigenvector centrality were computed; the graph was rendered client-side via Cytoscape.js ${cite("Cytoscape")}.`,
+      ],
+    });
+  }
+
+  if (ppiResult || hubScores.length) {
+    methodsSubs.push({
+      key: "m-network", title: "Network Analysis",
+      body: [
+        `Intersecting targets were expanded through the STRING database ${cite("STRING")} (minimum interaction confidence 0.7, physical & functional evidence). Node-level centrality metrics — degree, betweenness, closeness, eigenvector — were computed to identify network hubs.`,
       ],
     });
   }
 
   if (ppiResult) {
     methodsSubs.push({
-      key: "m-network", title: "Network Construction & PPI Analysis",
+      key: "m-ppi", title: "Protein–Protein Interaction",
       body: [
-        `A protein–protein interaction (PPI) network of the intersecting targets was built from STRING ${cite("STRING")} with a minimum confidence score of 0.7. Node connectivity metrics were computed to prioritise hub genes; the tripartite compound → target → disease graph was rendered client-side using Cytoscape-style layouts ${cite("Cytoscape")}.`,
+        `The PPI subnetwork induced by the intersecting-target set was retrieved from STRING v12 ${cite("STRING")} with a minimum confidence score of 0.7. The network consists of ${ppiResult.nodes} nodes and ${ppiResult.edges} edges; disconnected components were retained to preserve biological interpretability.`,
+      ],
+    });
+  }
+
+  if (hubScores.length) {
+    methodsSubs.push({
+      key: "m-hub", title: "Hub Gene Analysis",
+      body: [
+        `Hub genes were ranked by ten complementary centrality metrics via the CytoHubba plugin approach ${cite("CytoHubba")}: MCC, MNC, Degree, Betweenness, Closeness, Radiality, EPC, DMNC, Stress and Bottleneck. A combined centrality score aggregating degree, betweenness and closeness was used to identify the top-ranked hubs.`,
       ],
     });
   }
 
   if (goTerms.length) {
     methodsSubs.push({
-      key: "m-go", title: "GO Enrichment Analysis",
+      key: "m-go", title: "GO Enrichment",
       body: [
-        `Gene Ontology (GO) enrichment analysis was performed via g:Profiler ${cite("gProfiler")} against the human background; adjusted P-values were computed by the Benjamini–Hochberg procedure. Only terms with q < 0.05 are reported.`,
+        `Gene Ontology (GO) enrichment analysis was performed with g:Profiler ${cite("gProfiler")} against the human background; adjusted P-values were computed via the Benjamini–Hochberg procedure. Only terms with q < 0.05 across Biological Process, Molecular Function and Cellular Component ontologies are reported.`,
       ],
     });
   }
 
   if (selectedKeggPathways.length) {
     methodsSubs.push({
-      key: "m-kegg", title: "KEGG / Reactome Pathway Analysis",
+      key: "m-kegg", title: "KEGG Enrichment",
       body: [
-        `Pathway enrichment against the KEGG ${cite("KEGG")} and Reactome ${cite("Reactome")} knowledgebases was performed on the intersecting-target set using the g:Profiler enrichment engine ${cite("gProfiler")}. Pathways with q < 0.05 are reported.`,
+        `Pathway enrichment against the KEGG_2021_Human ${cite("KEGG")} pathway library was performed with Enrichr ${cite("Enrichr")}. Pathways with adjusted q < 0.05 are reported; overlapping gene sets are highlighted in the network view for cross-reference.`,
       ],
     });
   }
@@ -197,7 +263,18 @@ export function buildReportDoc({ workflow, user, projectTitle, scientificName, r
     methodsSubs.push({
       key: "m-docking", title: "Molecular Docking",
       body: [
-        `Receptor structures were retrieved from the RCSB Protein Data Bank ${cite("RCSB", "PDB")}. Ligand and receptor files were prepared with Open Babel ${cite("OpenBabel")} and AutoDockTools ${cite("MGLTools")}. Blind docking was performed with AutoDock Vina 1.2.5 ${cite("Vina")} (exhaustiveness = 8; 9 poses per ligand). Binding affinities are reported in kcal/mol; a lower (more-negative) score indicates a more favourable predicted binding.`,
+        `Receptor structures were retrieved from the RCSB Protein Data Bank ${cite("RCSB", "PDB")}. Ligand and receptor files were prepared with Open Babel ${cite("OpenBabel")}, Meeko ${cite("Meeko")} and AutoDockTools ${cite("MGLTools")}. Blind docking was performed with AutoDock Vina 1.2.5 ${cite("Vina")} (exhaustiveness = 8; nine poses per ligand). Binding affinities are reported in kcal/mol; the top-ranked pose per pair was analysed for hydrogen-bond, hydrophobic and π-stacking interactions.`,
+      ],
+    });
+  }
+
+  if (workflow?.mdConfig?.applied || workflow?.mdResult) {
+    const cfg = workflow.mdConfig || {};
+    const dur = cfg.simulation_time_ns || cfg.duration_ns || "—";
+    methodsSubs.push({
+      key: "m-md", title: "Molecular Dynamics",
+      body: [
+        `All-atom MD simulations of the highest-scoring docking complexes were performed with GROMACS 2024 ${cite("GROMACS")} using the amber99sb-ildn force field ${cite("Amber99")} and the TIP3P water model. Ligand parameters were generated with ACPYPE ${cite("ACPYPE")}. Each system was neutralised with 0.15 M NaCl, energy-minimised (steepest descent), NVT-equilibrated at 300 K, NPT-equilibrated at 1 atm, and propagated for ${dur} ns${dur !== "—" ? "" : " (see project config)"}. Trajectories were analysed for RMSD, RMSF, radius of gyration, hydrogen-bond persistence and MM-PBSA-derived binding free energies.`,
       ],
     });
   }
@@ -227,7 +304,7 @@ export function buildReportDoc({ workflow, user, projectTitle, scientificName, r
         c.imppat_id || c.lotus_id || "—",
         truncateSmiles(c.smiles),
       ]),
-      caption: `Selected phytochemicals retrieved from IMPPAT / LOTUS.`,
+      caption: `Selected phytochemicals retrieved from IMPPAT / LOTUS.${selectedCompounds.length > 40 ? ` Showing top 40 of ${selectedCompounds.length}; full dataset available as downloadable CSV.` : ""}`,
     };
     doc.tables.push(tbl);
     const uniq = new Set(selectedCompounds.map((c) => (c.smiles || "").split(" ")[0])).size;
@@ -265,7 +342,7 @@ export function buildReportDoc({ workflow, user, projectTitle, scientificName, r
         title: `ADMET & drug-likeness profile.`,
         columns: ["Compound", "MW", "LogP", "HBA", "HBD", "TPSA", "ADMET", "Drug-likeness"],
         rows,
-        caption: "MW = molecular weight (Da); TPSA in Å².",
+        caption: `MW = molecular weight (Da); TPSA in Å².${rows.length >= 40 ? ` Showing top 40; full dataset available as downloadable CSV.` : ""}`,
       };
       doc.tables.push(tbl);
       resultsSubs.push({
@@ -298,7 +375,7 @@ export function buildReportDoc({ workflow, user, projectTitle, scientificName, r
       title: `Top predicted compound targets.`,
       columns: ["Gene", "UniProt", "Protein", "# Compounds", "Max probability"],
       rows,
-      caption: `${perGene.size} distinct human protein targets predicted across all phytochemicals.`,
+      caption: `${perGene.size} distinct human protein targets predicted across all phytochemicals.${perGene.size > 40 ? ` Showing top 40 by max probability; full dataset available as downloadable CSV.` : ""}`,
     };
     doc.tables.push(tbl);
     resultsSubs.push({
@@ -333,7 +410,7 @@ export function buildReportDoc({ workflow, user, projectTitle, scientificName, r
       title: "Top hub genes ranked by combined centrality.",
       columns: ["Rank", "Gene", "Combined score", "Degree"],
       rows,
-      caption: "Combined score aggregates degree, betweenness and closeness centrality.",
+      caption: `Combined score aggregates degree, betweenness and closeness centrality.${(hubScores || []).length > 20 ? ` Showing top 20 of ${hubScores.length}; full dataset available as downloadable CSV.` : ""}`,
     } : null;
     if (tbl) doc.tables.push(tbl);
     resultsSubs.push({
@@ -358,7 +435,7 @@ export function buildReportDoc({ workflow, user, projectTitle, scientificName, r
       title: "Top enriched Gene Ontology terms.",
       columns: ["#", "GO ID", "Term name", "Source", "−log₁₀(q)"],
       rows,
-      caption: "Enrichment adjusted P-values via Benjamini–Hochberg.",
+      caption: `Enrichment adjusted P-values via Benjamini–Hochberg.${goTerms.length > 20 ? ` Showing top 20 of ${goTerms.length} enriched terms; full dataset available as downloadable CSV.` : ""}`,
     };
     doc.tables.push(tbl);
     resultsSubs.push({
@@ -412,7 +489,7 @@ export function buildReportDoc({ workflow, user, projectTitle, scientificName, r
       title: "Molecular docking scores and interaction counts.",
       columns: ["Rank", "Ligand", "Target", "PDB", "ΔG (kcal/mol)", "H-bonds", "Hydrophobic"],
       rows,
-      caption: "Sorted by lowest (most-favourable) binding affinity.",
+      caption: `Sorted by lowest (most-favourable) binding affinity.${(dockingResults?.results?.length || 0) > 40 ? ` Showing top 40 poses; full dataset available as downloadable CSV.` : ""}`,
     };
     doc.tables.push(tbl);
     const meanAffinity = okResults.reduce((s, r) => s + r.best_affinity, 0) / (okResults.length || 1);
@@ -531,12 +608,36 @@ export function buildReportDoc({ workflow, user, projectTitle, scientificName, r
           // Methods for a module live inside sec.key === "methods"; drop the
           // whole subsection if Methods are toggled off for that module.
           if (sec.key === "methods" && !flag(mod, "methods")) return null;
-          if (sub.interpretation && !flag(mod, "interpretation")) delete s.interpretation;
+          // AI Interpretation — inject Claude Sonnet 4.5 text from
+          // aiInterpret.per_module when the toggle is on and this is a
+          // Results subsection.
+          if (sec.key === "results" && flag(mod, "interpretation")) {
+            const text = aiInterpret?.per_module?.[mod];
+            if (text && text !== "No results generated for this analysis.") {
+              s.interpretation = text;
+            }
+          } else if (sub.interpretation && !flag(mod, "interpretation")) {
+            delete s.interpretation;
+          }
         }
         return s;
       }).filter(Boolean);
       return { ...sec, subsections: cleaned };
     }).filter((sec) => !sec.subsections || sec.subsections.length > 0);
+
+    // Splice in "Overall Summary" section right after Results (if we have
+    // an AI overall text and it doesn't look like an error fallback).
+    if (aiInterpret?.overall && !/^(overall summary unavailable|no results)/i.test(aiInterpret.overall)) {
+      const idx = doc.sections.findIndex((s) => s.key === "results");
+      const summary = {
+        key: "overall-summary", number: String(doc.sections.length + 1),
+        title: "Overall Summary", included: true, paragraphs: [aiInterpret.overall],
+      };
+      const insertAt = idx >= 0 ? idx + 1 : doc.sections.length;
+      doc.sections.splice(insertAt, 0, summary);
+      // Renumber sections that came after.
+      doc.sections.forEach((s, i) => { s.number = String(i + 1); });
+    }
   }
 
   return doc;

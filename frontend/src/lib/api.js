@@ -164,6 +164,12 @@ export const promoteAutosave = (payload) =>
 export const listMDEngines = () =>
   api.get("/md/engines").then((r) => r.data);
 
+// ─────────────────────────── AI Report Interpretation (Session B) ────
+// POST /api/report/interpret — Claude Sonnet 4.5 per-module + optional overall summary.
+export const reportInterpret = (payload) =>
+  api.post("/report/interpret", payload, { timeout: 120000 }).then((r) => r.data);
+
+
 // ─────────────────────────── Public verify-email ──────────────────
 export const verifyEmailToken = (token) =>
   api.post("/auth/verify-email", { token }).then((r) => r.data);

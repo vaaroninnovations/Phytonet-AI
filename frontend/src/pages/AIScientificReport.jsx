@@ -16,6 +16,7 @@ import {
 import { buildReportDoc } from "@/lib/reportBuilder";
 import { renderReportPdf } from "@/lib/reportPdf";
 import { renderReportDocx } from "@/lib/reportDocx";
+import { reportInterpret } from "@/lib/api";
 
 /* ─── Module catalogue — all 15 modules from the redesign spec ─── */
 const MODULES = [
@@ -63,6 +64,9 @@ export default function AIScientificReport() {
   const [projectTitle, setProjectTitle] = useState("");
   const [scientificName, setScientificName] = useState("");
   const [reportId] = useState(() => generateReportId());
+  // AI interpretation cache — populated on first PDF/DOCX generation with
+  // any Interpretation toggle on. Keyed by module id + "overall".
+  const [aiInterpret, setAiInterpret] = useState({ per_module: {}, overall: null });
 
   const workflow = useMemo(() => ({
     plantName, selectedDisease, selectedCompounds, compoundTargets, diseaseTargets,
@@ -102,7 +106,43 @@ export default function AIScientificReport() {
     reportId,
     include: selection,   // new selective-generation contract
     includedIds,
-  }), [workflow, user, projectTitle, scientificName, reportId, selection, includedIds]);
+    aiInterpret,          // {per_module, overall} — rendered by PDF/DOCX pipelines
+  }), [workflow, user, projectTitle, scientificName, reportId, selection, includedIds, aiInterpret]);
+
+  // Fetches Claude Sonnet 4.5 interpretations for every selected module that
+  // has the "AI Interpretation" toggle on. Cached in state — subsequent
+  // downloads reuse it. Silent no-op if no module requests interpretation.
+  const fetchInterpretations = async () => {
+    const modules = includedIds.filter((id) => selection[id]?.interpretation);
+    if (modules.length === 0) return { per_module: {}, overall: null };
+    try {
+      const res = await reportInterpret({
+        workflow: {
+          plant_name: plantName,
+          disease_name: selectedDisease?.name || selectedDisease?.efo_id,
+          selected_compounds: selectedCompounds || [],
+          compound_targets: compoundTargets || [],
+          disease_targets: diseaseTargets || [],
+          intersecting_genes: intersectingGenes || [],
+          hub_ranking: hubScores || [],
+          ppi_result: ppiResult || null,
+          go_terms: goTerms || [],
+          kegg_pathways: selectedKeggPathways || [],
+          docking_results: dockingResults || null,
+          md_config: mdConfig || null,
+        },
+        modules,
+        plant_name: plantName,
+        disease_name: selectedDisease?.name || null,
+        include_overall: modules.length >= 2,   // "Overall" only makes sense with ≥2 modules
+      });
+      setAiInterpret(res);
+      return res;
+    } catch (e) {
+      toast.error("AI interpretation failed — proceeding without it.");
+      return { per_module: {}, overall: null };
+    }
+  };
 
   const toggle = (id, key) => setSelection((s) => ({ ...s, [id]: { ...s[id], [key]: !s[id]?.[key] } }));
   const setAll = (val) => setSelection((s) => {
@@ -114,7 +154,14 @@ export default function AIScientificReport() {
   const genPdf = () => requireAuth(async () => {
     setBusy("pdf");
     try {
-      const { blob, filename } = renderReportPdf(reportDoc);
+      const ai = await fetchInterpretations();
+      const docWithAI = buildReportDoc({
+        workflow, user,
+        projectTitle: projectTitle || undefined,
+        scientificName: scientificName || undefined,
+        reportId, include: selection, includedIds, aiInterpret: ai,
+      });
+      const { blob, filename } = renderReportPdf(docWithAI);
       saveAs(blob, filename);
       toast.success("PDF report generated");
     } catch (e) { toast.error("PDF generation failed: " + (e.message || e)); }
@@ -123,7 +170,14 @@ export default function AIScientificReport() {
   const genDocx = () => requireAuth(async () => {
     setBusy("docx");
     try {
-      const { blob, filename } = await renderReportDocx(reportDoc);
+      const ai = await fetchInterpretations();
+      const docWithAI = buildReportDoc({
+        workflow, user,
+        projectTitle: projectTitle || undefined,
+        scientificName: scientificName || undefined,
+        reportId, include: selection, includedIds, aiInterpret: ai,
+      });
+      const { blob, filename } = await renderReportDocx(docWithAI);
       saveAs(blob, filename);
       toast.success("DOCX report generated");
     } catch (e) { toast.error("DOCX generation failed: " + (e.message || e)); }

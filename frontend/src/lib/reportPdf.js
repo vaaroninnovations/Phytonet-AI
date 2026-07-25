@@ -206,6 +206,19 @@ export function renderReportPdf(reportDoc) {
         cursor = drawHeading(doc, cursor, subNum, sub.title, 2, meta);
         (sub.body || sub.paragraphs || []).forEach((p) => { cursor = drawParagraph(doc, cursor, p, meta); });
         if (sub.table) cursor = drawTable(doc, cursor, sub.table, meta);
+        // AI Interpretation callout — subtle violet inset paragraph.
+        if (sub.interpretation) {
+          cursor = ensureSpace(doc, cursor, 12, meta);
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(9);
+          doc.setTextColor(81, 57, 237);   // brand purple
+          doc.text("AI Interpretation.", MARGIN, cursor);
+          cursor += 5;
+          doc.setFont("helvetica", "italic");
+          doc.setFontSize(10);
+          doc.setTextColor(...INK);
+          cursor = drawParagraph(doc, cursor, sub.interpretation, meta);
+        }
       });
     }
 
