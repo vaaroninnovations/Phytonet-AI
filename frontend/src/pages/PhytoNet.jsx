@@ -65,7 +65,7 @@ const RESEARCH_MODULES = [
     title: "Molecular Docking",
     desc: "AutoDock Vina docking with auto receptor prep from RCSB PDB, batch ligands, interaction analysis and 3D visualisation.",
     cta: "Run Docking",
-    to: "/molecular-docking",
+    to: "/dock",
     icon: Microscope,
     tint: "#DB2777",
     accent: "from-[#DB2777]/10 to-[#DB2777]/4",

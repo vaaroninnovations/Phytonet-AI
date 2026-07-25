@@ -69,6 +69,7 @@ function App() {
                       <Route path="/settings" element={<Settings />} />
                       <Route path="/network-analysis" element={<NetworkAnalysis />} />
                       <Route path="/molecular-docking" element={<MolecularDocking />} />
+                      <Route path="/dock" element={<MolecularDocking />} />
                       <Route path="/molecular-dynamics" element={<MolecularDynamics />} />
                       <Route path="/scientific-report" element={<AIScientificReport />} />
                       <Route path="/ai-scientific-report" element={<AIScientificReport />} />

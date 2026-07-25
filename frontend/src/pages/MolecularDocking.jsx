@@ -668,10 +668,10 @@ export default function MolecularDocking() {
           </div>
         )}
 
-        {/* Sticky bottom proceed bar — shows whenever we have docking results.
-            Skips the (v2.0, coming-soon) Molecular Dynamics step and jumps
-            straight to Report Generation, matching the workflow's report route. */}
-        {resultRows.length > 0 && (
+        {/* Sticky bottom proceed bar — WORKFLOW ONLY. Standalone `/dock` users
+            (from homepage / PhytoNet modules) don't see it. Skips the v2.0
+            Molecular Dynamics step and jumps straight to Report Generation. */}
+        {!standalone && resultRows.length > 0 && (
           <div data-testid="dock-proceed-bar" className="pointer-events-none fixed inset-x-0 bottom-6 z-30 flex justify-center px-4">
             <div className="pointer-events-auto flex items-center gap-4 rounded-full border border-[#E7E7F3] bg-white/95 px-4 py-2 shadow-[0_18px_50px_-20px_rgba(15,23,42,0.35)] backdrop-blur-xl">
               <span className="hidden items-center gap-2 pr-2 text-[12.5px] font-semibold text-[#111827] sm:inline-flex">
