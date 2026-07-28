@@ -800,3 +800,35 @@ Complete Platform Administration Backbone shipped per user's spec:
 - P2: Molecular Dynamics server-side execution (Celery/GROMACS scaffolding present).
 - P3: Test-suite hygiene — refactor `test_admin_super.py` to eliminate parallel-worker state races on admin's 2FA state (add xdist_group markers, or use per-worker synthetic admin accounts).
 - P3: Wire admin's `platform_settings` back to runtime behaviour (e.g., feature_flags.maintenance_mode should actually enable maintenance page; branding.app_name should render in SiteHeader).
+
+
+## 2026-07-28 — Admin User Management ✅
+
+Extended the admin Users page from read-only to full user lifecycle management. Every mutation is protected against touching the super admin, and every action writes an `admin.user_*` audit entry.
+
+**Backend** (`/app/backend/routes/admin.py` — 6 new endpoints):
+- `GET /api/admin/users/{id}` — full user detail + last 20 node ledger rows + project count
+- `PATCH /api/admin/users/{id}` — edit first/last name, username, role, institution, department, country, designation, email_verified
+- `POST /api/admin/users/{id}/suspend` — sets `is_suspended: true` + reason; user login endpoint now returns 403 with the reason
+- `POST /api/admin/users/{id}/unsuspend` — clears the flag
+- `POST /api/admin/users/{id}/reset-password` — admin force-sets a new password (min 8 chars); user must be notified out-of-band
+- `POST /api/admin/users/{id}/nodes/adjust` — grant/deduct nodes (`delta` between -100k and +100k); balance can never go below 0; ledger entry with `module: "admin_adjustment"` + admin email in meta
+- `DELETE /api/admin/users/{id}` — hard delete + cascade cleanup (projects, versions, node_transactions, tokens)
+- List endpoint now supports `?verified=true|false` and `?suspended=true|false` filters
+
+**User login gate** (`/app/backend/auth_service.py`): suspended users receive 403 with their configured suspension reason at `/api/auth/login`.
+
+**Super-admin protection**: every mutation endpoint calls `_protect_super_admin(u)` which returns 403 if the target user has `is_super_admin=True` or matches `SUPER_ADMIN_EMAIL`. Verified via curl.
+
+**Frontend**:
+- `pages/admin/UserDetailModal.jsx` (new, ~400 L) — modal with: profile overview grid, editable form (8 fields + verified checkbox), 4 action buttons (Suspend/Reactivate, Reset password, Adjust nodes, Delete user), suspended-banner, and recent-node-activity table with credit/debit color coding.
+- `pages/admin/AdminUsers.jsx` — added verified + suspended filter dropdowns, click-row-to-open behaviour, status column now shows suspended/verified/unverified pills, super admin marked with amber shield icon.
+
+**Testing**: full end-to-end verified via curl for all 6 endpoints (200s on happy path, 403 for super-admin protection). Frontend flow verified via Playwright (list render, modal open, edit save, adjust +25 nodes, suspend, unsuspend all successful).
+
+**MOCKED**: password reset does NOT auto-email the user — admin must communicate the new password out-of-band (UI includes a note). Full user notification email can be wired later.
+
+**Next Action Items**
+- P2: Continue MD Execution work per user's earlier question (still pending decision on option a/b/c/d/e).
+- P3: Optional — send a notification email when admin resets a user's password (once SMTP is production-configured on Hostinger).
+- P3: Cross-user audit-log filtering (search audit log by target user).

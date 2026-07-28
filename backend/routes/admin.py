@@ -79,6 +79,31 @@ class UpdateSettingPayload(BaseModel):
     value: dict
 
 
+class UserPatch(BaseModel):
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    username: Optional[str] = None
+    role: Optional[str] = None
+    institution: Optional[str] = None
+    department: Optional[str] = None
+    country: Optional[str] = None
+    designation: Optional[str] = None
+    email_verified: Optional[bool] = None
+
+
+class SuspendPayload(BaseModel):
+    reason: Optional[str] = Field(None, max_length=280)
+
+
+class AdminResetPasswordPayload(BaseModel):
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class NodeAdjustPayload(BaseModel):
+    delta: int = Field(..., ge=-100_000, le=100_000)
+    reason: Optional[str] = Field(None, max_length=280)
+
+
 # ───────────────────────── router factory ─────────────────────────
 def build_router(db, frontend_url: str = ""):
     router = APIRouter(prefix="/admin", tags=["admin"])
@@ -452,6 +477,9 @@ def build_router(db, frontend_url: str = ""):
     async def list_users(
         admin=Depends(require_admin),
         q: Optional[str] = None,
+        role: Optional[str] = None,
+        verified: Optional[str] = None,     # "true" | "false"
+        suspended: Optional[str] = None,    # "true" | "false"
         limit: int = 50,
         offset: int = 0,
     ):
@@ -463,6 +491,12 @@ def build_router(db, frontend_url: str = ""):
                 {"first_name": {"$regex": q, "$options": "i"}},
                 {"last_name": {"$regex": q, "$options": "i"}},
             ]
+        if role:
+            query["role"] = role
+        if verified in ("true", "false"):
+            query["email_verified"] = (verified == "true")
+        if suspended in ("true", "false"):
+            query["is_suspended"] = (suspended == "true") if suspended == "true" else {"$ne": True}
         cursor = db["users"].find(query, {"password_hash": 0, "totp_secret": 0}).sort("created_at", -1).skip(offset).limit(limit)
         rows = []
         async for u in cursor:
@@ -473,6 +507,7 @@ def build_router(db, frontend_url: str = ""):
                 "last_name": u.get("last_name"),
                 "role": u.get("role"),
                 "is_super_admin": bool(u.get("is_super_admin")),
+                "is_suspended": bool(u.get("is_suspended")),
                 "email_verified": bool(u.get("email_verified")),
                 "nodes_balance": u.get("nodes_balance", 0),
                 "created_at": (u.get("created_at").isoformat() if u.get("created_at") else None),
@@ -480,5 +515,194 @@ def build_router(db, frontend_url: str = ""):
             })
         total = await db["users"].count_documents(query)
         return {"rows": rows, "total": total, "limit": limit, "offset": offset}
+
+    # ═════════════════ USER MANAGEMENT ═════════════════
+    # All mutation endpoints refuse to touch the super admin. Every action is
+    # audit-logged with action='admin.user_*'.
+
+    def _protect_super_admin(u: dict):
+        if u.get("is_super_admin") or (u.get("email") or "").lower() == adm.super_admin_email():
+            raise HTTPException(status_code=403, detail="Cannot modify the super admin account")
+
+    async def _fetch_user_or_404(user_id: str) -> dict:
+        try:
+            oid = ObjectId(user_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid user id")
+        u = await db["users"].find_one({"_id": oid})
+        if not u:
+            raise HTTPException(status_code=404, detail="User not found")
+        return u
+
+    def _serialize_user(u: dict) -> dict:
+        return {
+            "id": str(u["_id"]),
+            "email": u.get("email"),
+            "first_name": u.get("first_name"),
+            "last_name": u.get("last_name"),
+            "username": u.get("username"),
+            "role": u.get("role"),
+            "account_type": u.get("account_type"),
+            "is_super_admin": bool(u.get("is_super_admin")),
+            "is_suspended": bool(u.get("is_suspended")),
+            "email_verified": bool(u.get("email_verified")),
+            "institution": u.get("institution"),
+            "department": u.get("department"),
+            "country": u.get("country"),
+            "designation": u.get("designation"),
+            "orcid_id": u.get("orcid_id") or u.get("orcid"),
+            "website": u.get("website"),
+            "research_area": u.get("research_area"),
+            "purpose_of_use": u.get("purpose_of_use", []),
+            "nodes_balance": u.get("nodes_balance", 0),
+            "nodes_lifetime_used": u.get("nodes_lifetime_used", 0),
+            "nodes_lifetime_purchased": u.get("nodes_lifetime_purchased", 0),
+            "created_at": (u.get("created_at").isoformat() if u.get("created_at") else None),
+            "last_login_at": (u.get("last_login_at").isoformat() if u.get("last_login_at") else None),
+            "suspended_at": (u.get("suspended_at").isoformat() if u.get("suspended_at") else None),
+            "suspended_reason": u.get("suspended_reason"),
+        }
+
+    @router.get("/users/{user_id}")
+    async def get_user(user_id: str, admin=Depends(require_admin)):
+        u = await _fetch_user_or_404(user_id)
+        # Include recent node ledger for this user (last 20)
+        history = []
+        async for r in db["node_transactions"].find({"user_id": user_id}).sort("at", -1).limit(20):
+            history.append({
+                "id": str(r["_id"]),
+                "direction": r.get("direction"),
+                "amount": r.get("amount", 0),
+                "balance_after": r.get("balance_after", 0),
+                "module": r.get("module"),
+                "reason": r.get("reason"),
+                "at": (r.get("at") or datetime.now(timezone.utc)).isoformat(),
+            })
+        projects_count = await db["projects"].count_documents({"user_id": user_id})
+        return {"user": _serialize_user(u),
+                "node_history": history,
+                "projects_count": projects_count}
+
+    @router.patch("/users/{user_id}")
+    async def update_user(user_id: str, payload: UserPatch, request: Request,
+                          admin=Depends(require_admin)):
+        u = await _fetch_user_or_404(user_id)
+        _protect_super_admin(u)
+        update = {k: v for k, v in payload.model_dump(exclude_none=True).items()}
+        if not update:
+            raise HTTPException(status_code=400, detail="No fields provided")
+        update["updated_at"] = datetime.now(timezone.utc)
+        await db["users"].update_one({"_id": u["_id"]}, {"$set": update})
+        fresh = await db["users"].find_one({"_id": u["_id"]})
+        await adm.record_audit(db, actor_email=admin["email"],
+                               action="admin.user_updated", target=u.get("email"),
+                               details={"user_id": user_id,
+                                        "changed_fields": sorted(update.keys())},
+                               request=request)
+        return {"user": _serialize_user(fresh)}
+
+    @router.post("/users/{user_id}/suspend")
+    async def suspend_user(user_id: str, payload: SuspendPayload, request: Request,
+                           admin=Depends(require_admin)):
+        u = await _fetch_user_or_404(user_id)
+        _protect_super_admin(u)
+        await db["users"].update_one(
+            {"_id": u["_id"]},
+            {"$set": {"is_suspended": True,
+                      "suspended_at": datetime.now(timezone.utc),
+                      "suspended_reason": payload.reason or "Suspended by admin"}},
+        )
+        await adm.record_audit(db, actor_email=admin["email"],
+                               action="admin.user_suspended", target=u.get("email"),
+                               details={"user_id": user_id, "reason": payload.reason},
+                               request=request)
+        return {"ok": True}
+
+    @router.post("/users/{user_id}/unsuspend")
+    async def unsuspend_user(user_id: str, request: Request,
+                             admin=Depends(require_admin)):
+        u = await _fetch_user_or_404(user_id)
+        _protect_super_admin(u)
+        await db["users"].update_one(
+            {"_id": u["_id"]},
+            {"$unset": {"is_suspended": "", "suspended_at": "", "suspended_reason": ""}},
+        )
+        await adm.record_audit(db, actor_email=admin["email"],
+                               action="admin.user_unsuspended", target=u.get("email"),
+                               details={"user_id": user_id}, request=request)
+        return {"ok": True}
+
+    @router.post("/users/{user_id}/reset-password")
+    async def admin_reset_user_password(user_id: str,
+                                        payload: AdminResetPasswordPayload,
+                                        request: Request,
+                                        admin=Depends(require_admin)):
+        u = await _fetch_user_or_404(user_id)
+        _protect_super_admin(u)
+        await db["users"].update_one(
+            {"_id": u["_id"]},
+            {"$set": {"password_hash": adm.hash_password(payload.new_password)}},
+        )
+        await adm.record_audit(db, actor_email=admin["email"],
+                               action="admin.user_password_reset",
+                               target=u.get("email"),
+                               details={"user_id": user_id}, request=request)
+        return {"ok": True}
+
+    @router.post("/users/{user_id}/nodes/adjust")
+    async def adjust_user_nodes(user_id: str, payload: NodeAdjustPayload,
+                                request: Request, admin=Depends(require_admin)):
+        u = await _fetch_user_or_404(user_id)
+        if payload.delta == 0:
+            raise HTTPException(status_code=400, detail="Delta must be non-zero")
+        current = u.get("nodes_balance", 0)
+        new_balance = max(0, current + payload.delta)
+        applied_delta = new_balance - current  # never allow negative balance
+        await db["users"].update_one(
+            {"_id": u["_id"]},
+            {"$set": {"nodes_balance": new_balance}},
+        )
+        # Ledger entry
+        direction = "credit" if applied_delta > 0 else "debit"
+        await db["node_transactions"].insert_one({
+            "user_id": user_id,
+            "direction": direction,
+            "amount": abs(applied_delta),
+            "balance_after": new_balance,
+            "module": "admin_adjustment",
+            "workflow": None,
+            "job_id": None,
+            "reason": payload.reason or f"Admin manual {direction}",
+            "meta": {"admin_email": admin["email"]},
+            "at": datetime.now(timezone.utc),
+        })
+        await adm.record_audit(db, actor_email=admin["email"],
+                               action="admin.user_nodes_adjusted",
+                               target=u.get("email"),
+                               details={"user_id": user_id,
+                                        "delta": applied_delta,
+                                        "new_balance": new_balance,
+                                        "reason": payload.reason},
+                               request=request)
+        return {"ok": True, "new_balance": new_balance, "applied_delta": applied_delta}
+
+    @router.delete("/users/{user_id}")
+    async def delete_user(user_id: str, request: Request,
+                          admin=Depends(require_admin)):
+        u = await _fetch_user_or_404(user_id)
+        _protect_super_admin(u)
+        # Cascade cleanup: user's projects, autosave, tokens
+        await db["projects"].delete_many({"user_id": user_id})
+        await db["project_versions"].delete_many({"user_id": user_id})
+        await db["node_transactions"].delete_many({"user_id": user_id})
+        await db["email_verification_tokens"].delete_many({"user_id": user_id})
+        await db["password_reset_tokens"].delete_many({"user_id": user_id})
+        await db["users"].delete_one({"_id": u["_id"]})
+        await adm.record_audit(db, actor_email=admin["email"],
+                               action="admin.user_deleted", target=u.get("email"),
+                               details={"user_id": user_id,
+                                        "user_email": u.get("email")},
+                               request=request)
+        return {"ok": True}
 
     return router

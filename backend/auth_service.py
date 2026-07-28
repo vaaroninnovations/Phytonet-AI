@@ -325,6 +325,12 @@ def build_router(db, frontend_url: str = ""):
         if not u or not verify_password(payload.password, u["password_hash"]):
             await _record_login_attempt(db, key, False)
             raise HTTPException(status_code=401, detail="Invalid email or password.")
+        if u.get("is_suspended"):
+            await _record_login_attempt(db, key, False)
+            raise HTTPException(
+                status_code=403,
+                detail=u.get("suspended_reason") or "This account has been suspended.",
+            )
         await _record_login_attempt(db, key, True)
         uid = str(u["_id"])
         access = create_access_token(uid, u["email"])

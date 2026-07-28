@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { adminApi } from "@/context/AdminAuthContext";
-import { Search, Loader2, ChevronLeft, ChevronRight, ShieldCheck, CheckCircle2, XCircle } from "lucide-react";
+import { Search, Loader2, ChevronLeft, ChevronRight, ShieldCheck, CheckCircle2, XCircle, Ban } from "lucide-react";
+import UserDetailModal from "./UserDetailModal";
 
 export default function AdminUsers() {
   const [rows, setRows] = useState([]);
@@ -8,28 +9,33 @@ export default function AdminUsers() {
   const [limit] = useState(50);
   const [offset, setOffset] = useState(0);
   const [q, setQ] = useState("");
+  const [verified, setVerified] = useState("");
+  const [suspended, setSuspended] = useState("");
   const [loading, setLoading] = useState(false);
+  const [selectedId, setSelectedId] = useState(null);
 
   const load = async () => {
     setLoading(true);
     try {
       const params = { limit, offset };
       if (q) params.q = q;
+      if (verified) params.verified = verified;
+      if (suspended) params.suspended = suspended;
       const { data } = await adminApi.get("/users", { params });
       setRows(data.rows); setTotal(data.total);
     } finally { setLoading(false); }
   };
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [offset]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [offset, verified, suspended]);
 
   return (
     <div className="space-y-6" data-testid="admin-users">
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
-        <p className="text-sm text-slate-400 mt-1">{total} total accounts (read-only view).</p>
+        <p className="text-sm text-slate-400 mt-1">{total} total accounts — click a row to manage.</p>
       </header>
 
-      <div className="flex gap-3">
+      <div className="flex flex-col md:flex-row gap-3">
         <div className="flex-1 relative">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
           <input
@@ -40,6 +46,24 @@ export default function AdminUsers() {
             className="w-full pl-10 pr-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-sm"
           />
         </div>
+        <select
+          data-testid="users-verified-filter"
+          value={verified} onChange={(e) => { setVerified(e.target.value); setOffset(0); }}
+          className="py-2 px-3 rounded-lg bg-slate-900 border border-slate-800 text-sm"
+        >
+          <option value="">All (verified?)</option>
+          <option value="true">Verified only</option>
+          <option value="false">Unverified only</option>
+        </select>
+        <select
+          data-testid="users-suspended-filter"
+          value={suspended} onChange={(e) => { setSuspended(e.target.value); setOffset(0); }}
+          className="py-2 px-3 rounded-lg bg-slate-900 border border-slate-800 text-sm"
+        >
+          <option value="">All (suspended?)</option>
+          <option value="true">Suspended only</option>
+          <option value="false">Active only</option>
+        </select>
         <button
           data-testid="users-search-btn"
           onClick={() => { setOffset(0); load(); }}
@@ -56,7 +80,7 @@ export default function AdminUsers() {
               <th className="text-left px-4 py-3">Email</th>
               <th className="text-left px-4 py-3">Name</th>
               <th className="text-left px-4 py-3">Role</th>
-              <th className="text-left px-4 py-3">Verified</th>
+              <th className="text-left px-4 py-3">Status</th>
               <th className="text-right px-4 py-3">Nodes</th>
               <th className="text-left px-4 py-3">Created</th>
               <th className="text-left px-4 py-3">Last login</th>
@@ -72,7 +96,10 @@ export default function AdminUsers() {
               <tr><td colSpan="7" className="px-4 py-10 text-center text-slate-500">No users.</td></tr>
             )}
             {!loading && rows.map((u) => (
-              <tr key={u.id} className="border-t border-slate-800 hover:bg-slate-800/40">
+              <tr key={u.id}
+                  data-testid={`user-row-${u.id}`}
+                  onClick={() => setSelectedId(u.id)}
+                  className="border-t border-slate-800 hover:bg-slate-800/40 cursor-pointer">
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     {u.is_super_admin && <ShieldCheck size={14} className="text-amber-400" />}
@@ -82,9 +109,19 @@ export default function AdminUsers() {
                 <td className="px-4 py-3 text-slate-300">{[u.first_name, u.last_name].filter(Boolean).join(" ") || "—"}</td>
                 <td className="px-4 py-3 text-slate-400 text-xs">{u.role || "user"}</td>
                 <td className="px-4 py-3">
-                  {u.email_verified
-                    ? <CheckCircle2 size={16} className="text-emerald-400" />
-                    : <XCircle size={16} className="text-slate-600" />}
+                  {u.is_suspended ? (
+                    <span className="inline-flex items-center gap-1 text-xs text-red-300">
+                      <Ban size={12}/> suspended
+                    </span>
+                  ) : u.email_verified ? (
+                    <span className="inline-flex items-center gap-1 text-xs text-emerald-300">
+                      <CheckCircle2 size={12}/> verified
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-xs text-slate-500">
+                      <XCircle size={12}/> unverified
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums text-amber-300">{u.nodes_balance ?? 0}</td>
                 <td className="px-4 py-3 text-xs text-slate-500">
@@ -119,6 +156,14 @@ export default function AdminUsers() {
           </button>
         </div>
       </div>
+
+      {selectedId && (
+        <UserDetailModal
+          userId={selectedId}
+          onClose={() => setSelectedId(null)}
+          onChanged={load}
+        />
+      )}
     </div>
   );
 }
