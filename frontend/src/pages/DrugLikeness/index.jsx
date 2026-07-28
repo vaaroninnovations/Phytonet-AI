@@ -36,6 +36,7 @@ import {
   readPath,
 } from "@/lib/admetParams";
 import { useSortable, SortableTh } from "@/lib/useSortable";
+import { Activity, ShieldAlert, Pill } from "lucide-react";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -59,6 +60,7 @@ import {
 import { HelpTip } from "./parts/HelpTip";
 import { ScoringConfigPanel } from "./parts/ScoringConfigPanel";
 import { FilterCard, DrugLikenessFilterCard, CriteriaCard } from "./parts/FilterCards";
+import SectionGroup from "./parts/SectionGroup";
 import { ResultsTable } from "./parts/tableComponents";
 import { ExportBtn } from "./parts/ExportBtn";
 import { AutoAnalysisCard } from "./parts/AutoAnalysisCard";
@@ -545,72 +547,99 @@ export default function DrugLikeness() {
           )}
 
           {/* SECTION 1 — ADME */}
-          <FilterCard
-            title="ADME Analysis Filters"
-            testid="adme-filters"
-            params={ADME_PARAMS}
-            filters={filters}
-            setFilters={setFilters}
-            categoryOrder={["Absorption", "Distribution", "Metabolism", "Excretion"]}
+          <SectionGroup
+            title="ADME Analysis"
+            subtitle="Absorption · Distribution · Metabolism · Excretion"
+            testid="adme-section"
             hueKey="adme"
-          />
-          <ResultsTable
-            title="ADME Results"
-            testid="adme-results"
-            params={ADME_PARAMS}
-            rows={scoredRows}
-            filters={filters}
-            finalSel={finalSel}
-            toggleRow={toggleRow}
-            setManyFinal={setManyFinal}
-            expanded={expanded}
-            setExpanded={setExpanded}
-            scoringEnabled={scoringEnabled}
-            status={status}
-          />
+            icon={Activity}
+            meta={`${status?.done ?? 0} / ${status?.total ?? 0} scored`}
+          >
+            <FilterCard
+              title="ADME Analysis Filters"
+              testid="adme-filters"
+              params={ADME_PARAMS}
+              filters={filters}
+              setFilters={setFilters}
+              categoryOrder={["Absorption", "Distribution", "Metabolism", "Excretion"]}
+              hueKey="adme"
+              bare
+            />
+            <ResultsTable
+              title="ADME Results"
+              testid="adme-results"
+              params={ADME_PARAMS}
+              rows={scoredRows}
+              filters={filters}
+              finalSel={finalSel}
+              toggleRow={toggleRow}
+              setManyFinal={setManyFinal}
+              expanded={expanded}
+              setExpanded={setExpanded}
+              scoringEnabled={scoringEnabled}
+              status={status}
+            />
+          </SectionGroup>
 
           {/* SECTION 2 — Toxicity */}
-          <FilterCard
-            title="Toxicity Analysis Filters"
-            testid="tox-filters"
-            params={TOX_PARAMS}
-            filters={filters}
-            setFilters={setFilters}
-            flatLayout={true}
+          <SectionGroup
+            title="Toxicity Analysis"
+            subtitle="Safety-critical endpoints incl. hERG, DILI, carcinogenicity"
+            testid="tox-section"
             hueKey="toxicity"
-          />
-          <ResultsTable
-            title="Toxicity Results"
-            testid="tox-results"
-            params={TOX_PARAMS}
-            rows={scoredRows}
-            filters={filters}
-            finalSel={finalSel}
-            toggleRow={toggleRow}
-            setManyFinal={setManyFinal}
-            expanded={expanded}
-            setExpanded={setExpanded}
-            scoringEnabled={scoringEnabled}
-            status={status}
-          />
+            icon={ShieldAlert}
+          >
+            <FilterCard
+              title="Toxicity Analysis Filters"
+              testid="tox-filters"
+              params={TOX_PARAMS}
+              filters={filters}
+              setFilters={setFilters}
+              flatLayout={true}
+              hueKey="toxicity"
+              bare
+            />
+            <ResultsTable
+              title="Toxicity Results"
+              testid="tox-results"
+              params={TOX_PARAMS}
+              rows={scoredRows}
+              filters={filters}
+              finalSel={finalSel}
+              toggleRow={toggleRow}
+              setManyFinal={setManyFinal}
+              expanded={expanded}
+              setExpanded={setExpanded}
+              scoringEnabled={scoringEnabled}
+              status={status}
+            />
+          </SectionGroup>
 
           {/* SECTION 3 — Drug-Likeness */}
-          <DrugLikenessFilterCard filters={filters} setFilters={setFilters} />
-          <CriteriaCard />
-          <ResultsTable
-            title="Drug-Likeness Results"
-            testid="dl-results"
-            params={[...DL_RULES, ...DL_NUMERIC]}
-            rows={scoredRows}
-            filters={filters}
-            finalSel={finalSel}
-            toggleRow={toggleRow}
-            setManyFinal={setManyFinal}
-            expanded={expanded}
-            setExpanded={setExpanded}
-            scoringEnabled={scoringEnabled}
-            status={status}
-          />
+          <SectionGroup
+            title="Drug-Likeness Assessment"
+            subtitle="Rule-based screening + numeric physicochemical filters"
+            testid="dl-section"
+            hueKey="druglikeness"
+            icon={Pill}
+          >
+            <DrugLikenessFilterCard filters={filters} setFilters={setFilters} bare />
+            <CriteriaCard />
+            <ResultsTable
+              title="Drug-Likeness Results"
+              testid="dl-results"
+              params={[...DL_RULES, ...DL_NUMERIC]}
+              rows={scoredRows}
+              filters={filters}
+              finalSel={finalSel}
+              toggleRow={toggleRow}
+              setManyFinal={setManyFinal}
+              expanded={expanded}
+              setExpanded={setExpanded}
+              scoringEnabled={scoringEnabled}
+              status={status}
+            />
+          </SectionGroup>
         </main>
 
         {!standalone && rows.length > 0 && (

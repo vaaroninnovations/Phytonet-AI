@@ -133,8 +133,12 @@ function groupByCategory(params, order) {
 /**
  * Shared collapsible + hued FilterCard used for ADME (grouped) and Toxicity
  * (flat) sections.
+ *
+ * When `bare={true}`, the outer CardShell chrome (border/background/chevron)
+ * is omitted so the FilterCard can be nested inside a SectionGroup that
+ * already provides its own container.
  */
-function FilterCard({ title, testid, params, filters, setFilters, categoryOrder, flatLayout, hueKey = "adme" }) {
+function FilterCard({ title, testid, params, filters, setFilters, categoryOrder, flatLayout, hueKey = "adme", bare = false }) {
   const controllable = params.filter((p) => p.kind !== "computed");
   const inner = flatLayout ? (
     <div>
@@ -159,6 +163,9 @@ function FilterCard({ title, testid, params, filters, setFilters, categoryOrder,
       ))}
     </div>
   );
+  if (bare) {
+    return <div data-testid={testid}>{inner}</div>;
+  }
   return (
     <CardShell title={title} testid={testid} hueKey={hueKey}>
       {inner}
@@ -273,10 +280,10 @@ function FilterControl({ param, filters, setFilters }) {
 
 // ───────────────── Drug-Likeness dedicated filter card ───────────────────
 
-function DrugLikenessFilterCard({ filters, setFilters }) {
+function DrugLikenessFilterCard({ filters, setFilters, bare = false }) {
   const hueKey = "druglikeness";
-  return (
-    <CardShell title="Drug-Likeness Assessment Filters" testid="dl-filters" hueKey={hueKey}>
+  const inner = (
+    <>
       <div>
         <SubGroupHeader label="Rules" hueKey={hueKey} />
         <div className="flex flex-wrap items-center gap-2">
@@ -293,6 +300,12 @@ function DrugLikenessFilterCard({ filters, setFilters }) {
           ))}
         </div>
       </div>
+    </>
+  );
+  if (bare) return <div data-testid="dl-filters">{inner}</div>;
+  return (
+    <CardShell title="Drug-Likeness Assessment Filters" testid="dl-filters" hueKey={hueKey}>
+      {inner}
     </CardShell>
   );
 }
