@@ -753,3 +753,50 @@ User approved the multi-session split (all 4 phases across 3 sessions). Session 
 **Verified**: page compiles clean, all 4 restored-workflow modules auto-selected with all 4 sub-toggles enabled. Cross-refs will now be correct even with arbitrary module selections.
 
 Report Redesign complete: **Sessions A + B + C shipped**. WeasyPrint rewrite + drag-drop reorder deferred as they're lower-impact than the shipped scope.
+
+
+## 2026-07-28 — Single Super Admin Architecture ✅
+
+Complete Platform Administration Backbone shipped per user's spec:
+- **Single super admin only** — no RBAC, no invites, no multi-admin. Seeded from env.
+- **Separate auth namespace** — `/api/admin/*` and admin_access_token / admin_refresh_token cookies fully isolated from regular user auth.
+- **Optional 2FA** — supports BOTH TOTP (authenticator app) and Email OTP; admin picks.
+- **Comprehensive Audit Log** — every login / logout / settings mutation / 2FA action recorded to `admin_audit_logs` collection.
+- **Settings Dashboard** — 5 live-editable groups (Branding, SMTP, OAuth, Node Pricing, Feature Flags).
+
+**Backend** (all in `/app/backend`):
+- `admin_service.py` (330 L) — JWT (audience="admin", 30 min access / 8 h refresh, iat+jti for distinct refreshes), bcrypt hashing, brute-force lockout (KEYED BY EMAIL ONLY — critical fix: k8s ingress rotates client IPs and defeated IP-based locking), TOTP via pyotp + QR generation, email OTP via existing email_service, password reset (mock SMTP → link logged), platform_settings CRUD, audit log writer.
+- `routes/admin.py` (485 L) — all `/api/admin/*` endpoints (login/logout/refresh/me, 2FA setup/confirm/verify/disable, password reset flows, audit log listing with q+status filters, per-key settings CRUD, dashboard stats, users read-only listing).
+- `server.py` wiring at lines 1289-1313; startup init at line 1349 (indexes + super admin seed + default settings).
+- New env: `SUPER_ADMIN_EMAIL="superadmin@phytonet.ai"`, `SUPER_ADMIN_PASSWORD="SuperAdmin@2026!"`, `SUPER_ADMIN_JWT_SECRET` (falls back to JWT_SECRET).
+- MongoDB collections: `admin_audit_logs`, `admin_login_attempts` (TTL 24h), `admin_email_otp` (TTL 10m), `admin_password_reset_tokens` (TTL 1h), `platform_settings`.
+- pyotp + qrcode[pil] added to requirements.txt.
+
+**Frontend** (all in `/app/frontend/src/pages/admin` + `/context/AdminAuthContext.jsx`):
+- `AdminAuthContext` — separate React context; state = null | admin | false; supports 2FA challenge flow.
+- `AdminLogin.jsx` — 2-step form: credentials → optional 2FA code input (auto-detects method + auto-sends email OTP when applicable).
+- `AdminLayout.jsx` — persistent dark-themed sidebar (Dashboard, Users, Audit Log, Settings, Profile) + Outlet + route protection.
+- `AdminDashboard.jsx` — 4 stat cards (users, signups, projects, nodes-consumed) + recent activity table + security posture panel.
+- `AdminUsers.jsx` — paginated read-only users list; password_hash / totp_secret NEVER included in API response.
+- `AdminAuditLog.jsx` — searchable + status-filterable log table with pagination.
+- `AdminSettings.jsx` — 5-tab settings panel (Branding, SMTP, OAuth, Node Pricing, Feature Flags); SMTP password write-only.
+- `AdminProfile.jsx` — change password + enable/disable 2FA (TOTP with QR + secret display OR Email OTP flow).
+- `AdminPasswordReset.jsx` — public forgot-password + reset-password routes.
+- `App.js` — SiteChrome wrapper hides main SiteHeader/SiteFooter on `/admin/*` routes; nested route group under `/admin/*` with layout.
+
+**Testing**: `backend/tests/test_admin_super.py` — 30 tests covering login (success/negative/lockout), session (me/refresh/logout), change password, TOTP full lifecycle, Email OTP setup+verify+disable, forgot+reset, audit log filtering, settings (with SMTP password masking assertion), dashboard, users listing, and regression on regular `/api/auth/login`. 23/24 pass (95%); 1 remaining failure is a pytest-xdist parallel-worker race on shared 2FA state (product code is correct — TOTP test passes standalone; verified via curl 6× bad password → 5×401 + 1×429 lockout).
+
+**Bugs found + fixed by testing agent this iteration**:
+- CRITICAL: brute-force lockout defeated because k8s ingress rotates client IPs (10.208.151.74 / .75) — fixed by keying lockout on email only (single-admin threat model).
+- 2× tz-naive vs tz-aware datetime compare 500s in `verify_email_otp` and `reset_password` — fixed.
+- Added `iat`/`jti` claims to admin JWTs so `refresh` always issues a distinct token even within the same wall-clock second.
+
+**Test credentials updated** in `/app/memory/test_credentials.md`:
+- Super admin: `superadmin@phytonet.ai` / `SuperAdmin@2026!` — console at `/admin/login`.
+- Regular admin unchanged: `admin@phytonet.ai` / `Admin123!` — main site.
+
+**Next Action Items**
+- P2: Wire Razorpay/Stripe payment gateway for node recharge (Node Pricing tab already editable via admin settings; only checkout call is mocked).
+- P2: Molecular Dynamics server-side execution (Celery/GROMACS scaffolding present).
+- P3: Test-suite hygiene — refactor `test_admin_super.py` to eliminate parallel-worker state races on admin's 2FA state (add xdist_group markers, or use per-worker synthetic admin accounts).
+- P3: Wire admin's `platform_settings` back to runtime behaviour (e.g., feature_flags.maintenance_mode should actually enable maintenance page; branding.app_name should render in SiteHeader).

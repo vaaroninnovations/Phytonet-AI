@@ -80,17 +80,23 @@ def verify_password(pw: str, hashed: str) -> bool:
 
 # ───────────────────────── JWT ──────────────────────────────────────
 def create_access_token(admin_id: str, email: str) -> str:
+    now = datetime.now(timezone.utc)
     payload = {
         "sub": admin_id, "email": email, "type": "access", "aud": "admin",
-        "exp": datetime.now(timezone.utc) + ADMIN_ACCESS_TTL,
+        "iat": now,
+        "jti": secrets.token_urlsafe(8),
+        "exp": now + ADMIN_ACCESS_TTL,
     }
     return jwt.encode(payload, _secret(), algorithm=JWT_ALGORITHM)
 
 
 def create_refresh_token(admin_id: str) -> str:
+    now = datetime.now(timezone.utc)
     payload = {
         "sub": admin_id, "type": "refresh", "aud": "admin",
-        "exp": datetime.now(timezone.utc) + ADMIN_REFRESH_TTL,
+        "iat": now,
+        "jti": secrets.token_urlsafe(8),
+        "exp": now + ADMIN_REFRESH_TTL,
     }
     return jwt.encode(payload, _secret(), algorithm=JWT_ALGORITHM)
 

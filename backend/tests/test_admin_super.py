@@ -30,6 +30,31 @@ USER_ADMIN_PASSWORD = "Admin123!"
 API = f"{BASE_URL}/api"
 
 
+@pytest.fixture(autouse=True)
+def _purge_admin_lockouts():
+    """Clear admin_login_attempts before each test.
+
+    Now that lockout is keyed by email only (single-admin threat model), any
+    prior test's failed attempts against ADMIN_EMAIL will otherwise lock out
+    subsequent tests that need to log the admin in.
+    """
+    try:
+        from pymongo import MongoClient
+        m = MongoClient(_env("MONGO_URL", "mongodb://localhost:27017"))
+        db = m[_env("DB_NAME", "test_database")]
+        # Skip synthetic lockout-test entries so parallel workers can't
+        # accidentally reset a running lockout test's counter.
+        db["admin_login_attempts"].delete_many(
+            {"identifier": {"$not": {"$regex": "^lockout-"}}}
+        )
+        # NOTE: do NOT wipe 2FA state here — mid-flight TOTP/EmailOTP tests
+        # would be broken by parallel workers running this fixture. 2FA
+        # tests are responsible for their own cleanup (disable at end).
+    except Exception:
+        pass
+    yield
+
+
 # ─────────────────────── helpers ───────────────────────
 def _reset_admin_state():
     """Ensure admin's 2FA is disabled and password is default before tests."""
@@ -96,9 +121,17 @@ class TestAdminLogin:
         assert r.status_code == 401
 
     def test_lockout_after_5_failures(self):
-        # Use a unique email to not lock out real admin from other tests
-        bad_email = ADMIN_EMAIL  # locking on real admin is fine — IP+email pair
-        # Trigger 5 failures then expect 429
+        # Use a synthetic email so this test cannot be raced by parallel
+        # workers logging the real admin in (which would purge attempts).
+        # Also purge our own key just before starting.
+        bad_email = f"lockout-{int(time.time())}-{os.getpid()}@example.com"
+        try:
+            from pymongo import MongoClient
+            m = MongoClient(_env("MONGO_URL", "mongodb://localhost:27017"))
+            db = m[_env("DB_NAME", "test_database")]
+            db["admin_login_attempts"].delete_many({"identifier": bad_email})
+        except Exception:
+            pass
         codes = []
         for _ in range(6):
             r = requests.post(f"{API}/admin/auth/login",
@@ -155,6 +188,7 @@ class TestRegularUserAuthCoexists:
 
 
 # ─────────────────────── CHANGE PASSWORD ───────────────────────
+@pytest.mark.xdist_group("admin_mutations")
 class TestChangePassword:
     def test_change_password_wrong_current(self, admin_session):
         r = admin_session.post(f"{API}/admin/auth/change-password",
@@ -182,6 +216,7 @@ class TestChangePassword:
 
 
 # ─────────────────────── 2FA: TOTP ───────────────────────
+@pytest.mark.xdist_group("admin_mutations")
 class TestTOTP:
     def test_totp_full_lifecycle(self, admin_session):
         # setup
@@ -233,6 +268,7 @@ class TestTOTP:
 
 
 # ─────────────────────── 2FA: Email OTP ───────────────────────
+@pytest.mark.xdist_group("admin_mutations")
 class TestEmailOTP:
     def test_email_otp_setup_and_disable(self, admin_session):
         # Fetch OTP from Mongo (mocked SMTP)

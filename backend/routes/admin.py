@@ -88,8 +88,10 @@ def build_router(db, frontend_url: str = ""):
 
     @router.post("/auth/login")
     async def login(payload: LoginPayload, request: Request, response: Response):
-        ip = request.client.host if request.client else "unknown"
-        key = f"{ip}:{payload.email}"
+        # Single-admin threat model → key lockout on email only. Behind a
+        # load balancer request.client.host is the ingress-pod IP (rotates),
+        # so IP-based keys never accumulate enough failures to trip the limit.
+        key = payload.email
         await adm.check_lockout(db, key)
         admin = await db["users"].find_one({"email": payload.email})
         if (not admin
