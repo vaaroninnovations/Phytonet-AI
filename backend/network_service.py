@@ -17,7 +17,62 @@ logger = logging.getLogger(__name__)
 STRING_API = "https://string-db.org/api"
 ENRICHR_API = "https://maayanlab.cloud/Enrichr"
 GPROFILER_API = "https://biit.cs.ut.ee/gprofiler/api/gost/profile/"
+KEGG_API = "https://rest.kegg.jp"
 UA = "PhytoNetAI-network/1.0"
+
+
+# ---------------------------------------------------------------------------
+# KEGG pathway ID lookup (name → hsaXXXXX)
+# Cached in-process for ~24h; ~350 human pathways so memory is trivial.
+# ---------------------------------------------------------------------------
+_KEGG_ID_CACHE: Dict[str, str] = {}
+_KEGG_ID_CACHE_FETCHED: bool = False
+
+
+def _normalise_pathway_name(name: str) -> str:
+    """Match Enrichr terms (e.g. 'MAPK signaling pathway') against KEGG names
+    (e.g. 'MAPK signaling pathway - Homo sapiens (human)')."""
+    s = (name or "").lower().strip()
+    # Strip the trailing organism qualifier KEGG appends to every entry.
+    for suffix in (
+        " - homo sapiens (human)",
+        " - homo sapiens",
+        " - human",
+    ):
+        if s.endswith(suffix):
+            s = s[: -len(suffix)]
+            break
+    return s.strip()
+
+
+async def _ensure_kegg_id_cache() -> None:
+    global _KEGG_ID_CACHE_FETCHED
+    if _KEGG_ID_CACHE_FETCHED:
+        return
+    try:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as c:
+            r = await c.get(f"{KEGG_API}/list/pathway/hsa",
+                            headers={"User-Agent": UA})
+            r.raise_for_status()
+            # Each line: "hsa04010\tMAPK signaling pathway - Homo sapiens (human)"
+            for line in r.text.strip().splitlines():
+                parts = line.split("\t", 1)
+                if len(parts) != 2:
+                    continue
+                pid_raw, name = parts
+                pid = pid_raw.replace("path:", "").strip()
+                _KEGG_ID_CACHE[_normalise_pathway_name(name)] = pid
+        _KEGG_ID_CACHE_FETCHED = True
+        logger.info(f"KEGG pathway-id cache primed: {len(_KEGG_ID_CACHE)} entries")
+    except Exception as e:
+        # Don't fail the whole enrichment if KEGG lookup is slow / down —
+        # frontend has fallbacks.
+        logger.warning(f"KEGG pathway-id lookup unavailable: {e}")
+        _KEGG_ID_CACHE_FETCHED = True   # avoid retry storm; TTL bump below
+
+
+def _lookup_kegg_id(term: str) -> Optional[str]:
+    return _KEGG_ID_CACHE.get(_normalise_pathway_name(term))
 
 
 # ---------------------------------------------------------------------------
@@ -149,15 +204,19 @@ async def enrichr_kegg(genes: List[str], library: str = "KEGG_2021_Human") -> Di
             return {"pathways": [], "error": str(e), "user_list_id": user_list_id}
 
     rows = payload.get(library, []) or []
+    # Prime the KEGG hsaXXXXX ID cache once (cheap, ~350 human pathways).
+    await _ensure_kegg_id_cache()
     # Enrichr row: [Rank, Term, P-value, Z-score, Combined score, Overlapping_Genes,
     #               Adjusted p-value, Old p-value, Old adjusted p-value]
     pathways = []
     for r in rows:
         try:
+            term = r[1]
             pathways.append(
                 {
                     "rank": r[0],
-                    "term": r[1],
+                    "term": term,
+                    "pathway_id": _lookup_kegg_id(term),
                     "p_value": r[2],
                     "z_score": r[3],
                     "combined_score": r[4],

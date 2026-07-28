@@ -31,6 +31,28 @@ const SHAPE = {
 const nid = (type, raw) => `${type}::${String(raw).trim().replace(/\s+/g, "_")}`;
 const norm = (s) => (s || "").toString().trim().toUpperCase();
 
+// Above this label length, the PCTDP node switches to its identifier (IMPPAT
+// or KEGG hsaXXXXX) so the network stays readable. Full name is preserved
+// in `fullLabel` for tooltips, tables, and the report.
+const MAX_INLINE_LABEL = 20;
+
+function compoundDisplayLabel(fullName, imppatId, pubchemCid) {
+  const primary = (fullName || "").trim();
+  if (primary && primary.length <= MAX_INLINE_LABEL) return primary;
+  if (imppatId) return imppatId;
+  if (pubchemCid) return `CID:${pubchemCid}`;
+  if (primary) return primary.slice(0, MAX_INLINE_LABEL - 1) + "…";
+  return "Compound";
+}
+
+function pathwayDisplayLabel(fullName, pathwayId) {
+  const primary = (fullName || "").trim();
+  if (primary && primary.length <= MAX_INLINE_LABEL) return primary;
+  if (pathwayId) return pathwayId;                          // e.g. hsa04010
+  if (primary) return primary.slice(0, MAX_INLINE_LABEL - 1) + "…";
+  return "Pathway";
+}
+
 export function buildPCTDPGraph({
   plantName,
   selectedCompounds = [],
@@ -67,16 +89,18 @@ export function buildPCTDPGraph({
   const showCompounds = include.compound && (!plantId || isExp(plantId));
   if (showCompounds) {
     for (const c of selectedCompounds || []) {
-      const label = c.compound_name || c.name || c.imppat_id || c.pubchem_cid || "Compound";
-      const cid = nid("compound", c.imppat_id || c.pubchem_cid || label);
+      const fullName = c.compound_name || c.name || c.imppat_id || c.pubchem_cid || "Compound";
+      const label = compoundDisplayLabel(fullName, c.imppat_id, c.pubchem_cid);
+      const cid = nid("compound", c.imppat_id || c.pubchem_cid || fullName);
       addNode(cid, {
         type: "compound",
         label,
+        fullLabel: fullName,
         color: PALETTE.compound, shape: SHAPE.compound,
         imppat_id: c.imppat_id, pubchem_cid: c.pubchem_cid,
         smiles: c.smiles, mw: c.mw, logp: c.logp, drug_likeness: c.drug_likeness,
       });
-      compoundIdByLabel.set(norm(label), cid);
+      compoundIdByLabel.set(norm(fullName), cid);
       if (c.imppat_id)   compoundIdByImppat.set(norm(c.imppat_id), cid);
       if (plantId) addEdge(plantId, cid, "contains");
     }
@@ -131,8 +155,9 @@ export function buildPCTDPGraph({
 
       addNode(pid, {
         type: "pathway",
-        label: term.length > 40 ? term.slice(0, 38) + "…" : term,
+        label: pathwayDisplayLabel(term, p.pathway_id),
         fullLabel: term,
+        pathway_id: p.pathway_id,
         color: PALETTE.pathway, shape: SHAPE.pathway,
         p_value: p.p_value, adj_p_value: p.adj_p_value,
         gene_count: p.gene_count ?? eligibleTargets.length,

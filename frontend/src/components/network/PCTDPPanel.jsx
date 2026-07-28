@@ -167,11 +167,17 @@ export function PCTDPPanel({ intersectingGenes = [], selectedKeggPathways = [], 
 
   const nodeTableRows = useMemo(() => graph.nodes.map((n) => {
     const c = centrality?.get(n.id) || {};
+    // Prefer fullLabel (unmodified biological name) for the human-facing
+    // Display Name column; the graph itself may render the identifier
+    // (IMPPAT / KEGG hsaXXXXX) when the primary name exceeds 20 chars.
+    const displayName = n.fullLabel || n.label || n.id;
     return {
       id: n.id,
       node_id: n.id.split("::").slice(1).join("::"),
       node_type: TYPE_META[n.type]?.label || n.type,
-      display_name: n.label || n.id,
+      display_name: displayName,
+      graph_label: n.label,
+      identifier: n.imppat_id || n.pathway_id || "",
       degree: n.degree,
       betweenness: c.betweenness ?? 0,
       closeness: c.closeness ?? 0,
@@ -195,6 +201,7 @@ export function PCTDPPanel({ intersectingGenes = [], selectedKeggPathways = [], 
     { key: "node_id", label: "Node ID", filterable: true },
     { key: "node_type", label: "Type", filterable: true },
     { key: "display_name", label: "Display Name", filterable: true },
+    { key: "identifier", label: "Identifier", filterable: true },
     { key: "degree", label: "Degree" },
     { key: "betweenness", label: "Betweenness", format: (v) => (v ?? 0).toFixed(3) },
     { key: "closeness", label: "Closeness", format: (v) => (v ?? 0).toFixed(4) },
@@ -444,10 +451,11 @@ function layoutOptions(name, nodeCount = 20) {
 function PCTDPTooltip({ x, y, node }) {
   if (!node) return null;
   const rows = [];
+  const fullName = node.fullLabel || node.label;
   if (node.type === "plant") {
     rows.push(["Species", node.label]);
   } else if (node.type === "compound") {
-    rows.push(["Compound", node.label]);
+    rows.push(["Compound", fullName]);
     if (node.imppat_id)      rows.push(["IMPPAT", node.imppat_id]);
     if (node.pubchem_cid)    rows.push(["PubChem", node.pubchem_cid]);
     if (node.mw != null)     rows.push(["Mol. weight", `${Number(node.mw).toFixed(2)} Da`]);
@@ -459,7 +467,8 @@ function PCTDPTooltip({ x, y, node }) {
     if (node.protein_name)   rows.push(["Protein", node.protein_name]);
     if (node.intersecting)   rows.push(["Intersecting", "Yes"]);
   } else if (node.type === "pathway") {
-    rows.push(["Pathway", node.fullLabel || node.label]);
+    rows.push(["Pathway", fullName]);
+    if (node.pathway_id)     rows.push(["KEGG ID", node.pathway_id]);
     if (node.gene_count != null) rows.push(["Mapped targets", node.gene_count]);
     if (node.adj_p_value != null) rows.push(["Adj. P", Number(node.adj_p_value).toExponential(2)]);
   } else if (node.type === "disease") {
