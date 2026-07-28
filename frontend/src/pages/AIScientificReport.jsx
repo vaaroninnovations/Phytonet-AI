@@ -186,13 +186,13 @@ export default function AIScientificReport() {
 
   return (
     <WorkflowLayout>
-      <main data-testid="report-generation-page" className="mx-auto max-w-7xl px-6 pb-24 pt-10">
+      <main data-testid="report-generation-page" className="mx-auto w-full max-w-7xl px-4 pb-24 pt-6 sm:px-6 sm:pt-10">
         {/* Header */}
         <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
+          <div className="min-w-0 flex-1">
             <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">Module · 08 · Final</p>
-            <h1 className="mt-2 font-display text-4xl font-bold tracking-tight text-[#0B0B18] sm:text-5xl">Report Builder</h1>
-            <p className="mt-2 max-w-3xl text-[#64748B]">
+            <h1 className="mt-2 font-display text-3xl font-bold tracking-tight text-[#0B0B18] sm:text-4xl lg:text-5xl">Report Builder</h1>
+            <p className="mt-2 max-w-3xl text-sm text-[#64748B] sm:text-base">
               Compose a modular, publication-quality computational analysis report. Toggle only the
               modules and sections you want — the export excludes anything you leave off, and empty
               modules are dropped automatically. Nothing is fabricated.
@@ -200,12 +200,12 @@ export default function AIScientificReport() {
           </div>
           <div className="flex flex-wrap gap-2">
             <button data-testid="report-generate-pdf" onClick={genPdf} disabled={busy != null || !anyIncluded}
-              className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#5139ED] via-[#395AED] to-[#8139ED] px-5 py-2.5 text-[13px] font-bold uppercase tracking-widest text-white shadow-[0_10px_30px_-10px_rgba(81,57,237,0.6)] disabled:opacity-40">
+              className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#5139ED] via-[#395AED] to-[#8139ED] px-4 py-2 text-[12px] font-bold uppercase tracking-widest text-white shadow-[0_10px_30px_-10px_rgba(81,57,237,0.6)] disabled:opacity-40 sm:px-5 sm:py-2.5 sm:text-[13px]">
               {busy === "pdf" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
               {busy === "pdf" ? "Building PDF…" : "Download PDF"}
             </button>
             <button data-testid="report-generate-docx" onClick={genDocx} disabled={busy != null || !anyIncluded}
-              className="inline-flex items-center gap-2 rounded-full border border-[#5139ED]/40 bg-white px-5 py-2.5 text-[13px] font-bold uppercase tracking-widest text-[#5139ED] hover:bg-[#F5F3FE] disabled:opacity-40">
+              className="inline-flex items-center gap-2 rounded-full border border-[#5139ED]/40 bg-white px-4 py-2 text-[12px] font-bold uppercase tracking-widest text-[#5139ED] hover:bg-[#F5F3FE] disabled:opacity-40 sm:px-5 sm:py-2.5 sm:text-[13px]">
               {busy === "docx" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
               {busy === "docx" ? "Building DOCX…" : "Download DOCX"}
             </button>
@@ -213,22 +213,23 @@ export default function AIScientificReport() {
         </div>
 
         {/* Report info card */}
-        <section data-testid="report-info" className="mt-6 rounded-3xl border border-[#E7E7F3] bg-white p-5">
+        <section data-testid="report-info" className="mt-6 rounded-3xl border border-[#E7E7F3] bg-white p-4 sm:p-5">
           <div className="flex items-center gap-2">
             <FileText className="h-4 w-4 text-[#5139ED]" />
             <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">Report Information</p>
           </div>
-          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <Kv label="Report ID" value={reportId} mono />
             <Field label="Project Name (auto-derived if blank)">
               <input data-testid="report-project-title" value={projectTitle} onChange={(e) => setProjectTitle(e.target.value)}
                 placeholder={reportDoc.meta.projectTitle}
-                className="w-full rounded-lg border border-[#E7E7F3] bg-white px-3 py-2 text-sm text-[#0B0B18]" />
+                title={reportDoc.meta.projectTitle}
+                className="w-full min-w-0 rounded-lg border border-[#E7E7F3] bg-white px-3 py-2 text-sm text-[#0B0B18]" />
             </Field>
             <Field label="Plant scientific name (Genus species)">
               <input data-testid="report-scientific-name" value={scientificName} onChange={(e) => setScientificName(e.target.value)}
                 placeholder="e.g. Withania somnifera"
-                className="w-full rounded-lg border border-[#E7E7F3] bg-white px-3 py-2 text-sm italic text-[#0B0B18]" />
+                className="w-full min-w-0 rounded-lg border border-[#E7E7F3] bg-white px-3 py-2 text-sm italic text-[#0B0B18]" />
             </Field>
             <Kv label="Plant" value={reportDoc.meta.plantName} />
             <Kv label="Disease" value={reportDoc.meta.diseaseName || "—"} />
@@ -240,7 +241,7 @@ export default function AIScientificReport() {
         </section>
 
         {/* Report Builder — module picker + toggles */}
-        <section data-testid="report-builder" className="mt-6 rounded-3xl border border-[#E7E7F3] bg-white p-5">
+        <section data-testid="report-builder" className="mt-6 rounded-3xl border border-[#E7E7F3] bg-white p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <Layers className="h-4 w-4 text-[#5139ED]" />
@@ -256,7 +257,7 @@ export default function AIScientificReport() {
             Each included module has independent controls for Methods · Tables · Figures · AI Interpretation.
           </p>
 
-          <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-2">
             {MODULES.map((mod) => {
               const has = availability[mod.id];
               const sel = selection[mod.id] || { included: false, ...DEFAULT_TOGGLES };

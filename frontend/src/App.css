@@ -2,4 +2,28 @@
     min-height: 100vh;
     background: #ffffff;
     color: #0b0b18;
+    /* Global overflow guard — prevents wide content (long IDs, big tables,
+       Cytoscape canvases) from pushing horizontal scroll onto the whole page.
+       Individual scrollable regions (tables, code blocks) still work because
+       overflow-x is set on their local containers, not on body. */
+    overflow-x: hidden;
+}
+
+html, body {
+    overflow-x: hidden;
+    max-width: 100vw;
+}
+
+/* Anything that renders in the main flow should never overflow the viewport
+   width horizontally. Tables and long token strings get a scrollable parent. */
+img, video, canvas, svg {
+    max-width: 100%;
+    height: auto;
+}
+
+/* Long identifiers (SMILES, UniProt IDs, KEGG IDs) should wrap in body text
+   rather than push horizontal scroll. */
+.break-anywhere {
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }

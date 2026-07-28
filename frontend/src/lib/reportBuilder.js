@@ -346,7 +346,7 @@ export function buildReportDoc({ workflow, user, projectTitle, scientificName, r
   }
 
   // 3.2 ADMET results
-  if (hasAdmet) {
+  if (nAdmet > 0) {
     const rows = selectedCompounds
       .filter((c) => c.admet != null || c.admet_score != null || c.drug_likeness != null)
       .slice(0, 40)
