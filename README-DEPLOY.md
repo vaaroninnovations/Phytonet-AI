@@ -90,17 +90,51 @@ docker compose up -d --force-recreate backend celery_worker celery_beat frontend
 
 ## 4. Required `.env` values
 
-| Key                    | Notes                                                                 |
-|------------------------|-----------------------------------------------------------------------|
-| `ADMIN_EMAIL`          | First admin account — seeded on first boot                            |
-| `ADMIN_PASSWORD`       | Strong password — you can rotate later                                |
-| `JWT_SECRET`           | `openssl rand -hex 48`                                                |
-| `SESSION_SECRET`       | `openssl rand -hex 48`                                                |
-| `FRONTEND_URL`         | `https://phytonet.example.com`                                        |
-| `REACT_APP_BACKEND_URL`| Leave blank for same-origin (nginx proxies `/api`) — recommended      |
-| `CORS_ORIGINS`         | Match `FRONTEND_URL`                                                  |
-| `GROQ_API_KEY`         | Optional — enables AI Assistant. Get from https://console.groq.com   |
-| `GOOGLE_CLIENT_ID/…`   | Optional — enables "Continue with Google"                            |
+| Key                       | Notes                                                                 |
+|---------------------------|-----------------------------------------------------------------------|
+| `ADMIN_EMAIL`             | First user-side admin account — seeded on first boot                  |
+| `ADMIN_PASSWORD`          | Strong password — you can rotate later                                |
+| **`SUPER_ADMIN_EMAIL`**   | **Super Admin console at `/admin/login`** — see §4.1                  |
+| **`SUPER_ADMIN_PASSWORD`**| **Strong password for the Super Admin** — see §4.1                    |
+| **`SUPER_ADMIN_JWT_SECRET`** | **`openssl rand -hex 32`** — must NOT reuse `JWT_SECRET`           |
+| `JWT_SECRET`              | `openssl rand -hex 48`                                                |
+| `SESSION_SECRET`          | `openssl rand -hex 48`                                                |
+| `FRONTEND_URL`            | `https://phytonet.example.com`                                        |
+| `REACT_APP_BACKEND_URL`   | Leave blank for same-origin (nginx proxies `/api`) — recommended      |
+| `CORS_ORIGINS`            | Match `FRONTEND_URL`                                                  |
+| `GROQ_API_KEY`            | Optional — enables AI Assistant. Get from https://console.groq.com   |
+| `GOOGLE_CLIENT_ID/…`      | Optional — enables "Continue with Google"                            |
+
+### 4.1 Super Admin console — must be configured
+
+PhytoNet AI ships with a dedicated **Super Admin console at `/admin/login`** (Dashboard,
+Users, Audit Log, Settings, Profile — full details in `/app/memory/PRD.md`). This is
+a *separate account* from the user-side admin (`ADMIN_EMAIL`).
+
+Add these three lines to your `.env` **before first boot** (or before your next rebuild):
+
+```bash
+SUPER_ADMIN_EMAIL=superadmin@yourdomain.com
+SUPER_ADMIN_PASSWORD='pick-a-strong-passphrase-with-symbols-2026!'
+SUPER_ADMIN_JWT_SECRET=$(openssl rand -hex 32)   # generate a fresh one
+```
+
+The backend seeds this account on startup. To verify after `docker compose up`:
+
+```bash
+docker compose logs backend | grep -i "super admin"
+# Expected: "Seeded super admin: superadmin@yourdomain.com"
+```
+
+Then log in at `https://yourdomain.com/admin/login` and immediately:
+
+1. **Enable 2FA** — Profile → choose Authenticator app (TOTP) or Email OTP.
+2. **Change the password** — Profile → Change password (min 10 chars).
+3. **Review Audit Log** — every subsequent admin action is recorded here.
+
+⚠️ Rotate the `SUPER_ADMIN_PASSWORD` env var to a placeholder after first login,
+or leave it as-is; the DB hash is the source of truth once seeded. The env var is
+only used to re-sync the password if the hash goes missing.
 
 ---
 
@@ -189,11 +223,42 @@ docker compose logs -f celery_worker
 docker compose logs -f frontend
 ```
 
-### 7.2 Restart / rebuild after a code pull
+### 7.2 Restart / rebuild after a code pull (⚠️ read this if changes don't appear)
+
+The frontend is a **pre-built static bundle** baked into the nginx image at build
+time. Simply `git pull`ing does NOT update the running site — you must rebuild
+the image so nginx serves the new bundle:
 
 ```bash
 git pull
-docker compose up -d --build                     # rebuilds only what changed
+docker compose up -d --build             # rebuilds ONLY services whose code changed
+# If the frontend didn't visibly update, force it:
+docker compose build --no-cache frontend
+docker compose up -d frontend
+```
+
+Then hard-refresh your browser to bust the client cache:
+
+- **Chrome / Edge**: `Ctrl+Shift+R` (Win) or `Cmd+Shift+R` (Mac)
+- **Or**: DevTools → Network → tick *Disable cache* → reload
+
+If you're serving through Cloudflare / any CDN, purge that cache too:
+
+```bash
+# Cloudflare CLI example
+curl -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/purge_cache" \
+  -H "Authorization: Bearer $CF_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{"purge_everything":true}'
+```
+
+### 7.2b One-liner "go-live after pulling changes"
+
+```bash
+cd ~/phytonet-ai && \
+git pull && \
+docker compose up -d --build && \
+docker compose logs -f backend | head -30
 ```
 
 ### 7.3 Update `.env`

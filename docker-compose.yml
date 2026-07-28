@@ -40,6 +40,11 @@ x-backend-env: &backend-env
   SESSION_SECRET: ${SESSION_SECRET:-CHANGE_ME_dev_only_session_secret_do_not_use_in_production}
   ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@phytonet.local}
   ADMIN_PASSWORD: ${ADMIN_PASSWORD:-ChangeMe123!}
+  # ─── SUPER ADMIN (new single-super-admin console at /admin/*) ───
+  # These MUST be set in production. See README-DEPLOY.md §Super Admin.
+  SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL:-superadmin@phytonet.local}
+  SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD:-ChangeMe_SuperAdmin_2026!}
+  SUPER_ADMIN_JWT_SECRET: ${SUPER_ADMIN_JWT_SECRET:-CHANGE_ME_dev_only_super_admin_jwt_secret_do_not_use_in_prod}
   CORS_ORIGINS: ${CORS_ORIGINS:-*}
   FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
   # ─── Google OAuth ───
