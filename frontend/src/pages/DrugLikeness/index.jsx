@@ -552,6 +552,7 @@ export default function DrugLikeness() {
             filters={filters}
             setFilters={setFilters}
             categoryOrder={["Absorption", "Distribution", "Metabolism", "Excretion"]}
+            hueKey="adme"
           />
           <ResultsTable
             title="ADME Results"
@@ -576,6 +577,7 @@ export default function DrugLikeness() {
             filters={filters}
             setFilters={setFilters}
             flatLayout={true}
+            hueKey="toxicity"
           />
           <ResultsTable
             title="Toxicity Results"

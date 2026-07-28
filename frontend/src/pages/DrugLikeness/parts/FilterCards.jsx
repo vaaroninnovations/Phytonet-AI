@@ -1,75 +1,122 @@
+import { useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DL_RULES, DL_NUMERIC, DL_CRITERIA_TABLE } from "@/lib/admetParams";
 import { HelpTip } from "./HelpTip";
 
-function FilterCard({ title, testid, params, filters, setFilters, categoryOrder, flatLayout }) {
-  // Skip computed (derived) params from the filter controls.
-  const controllable = params.filter((p) => p.kind !== "computed");
-  if (flatLayout) {
-    return (
-      <div
-        data-testid={testid}
-        className="mt-6 rounded-3xl border border-[#E7E7F3] bg-white p-5 md:p-6"
-      >
-        <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">
-          {title}
-        </p>
-        <div className="mt-4">
-          <div className="mb-2 flex items-center gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-[#8139ED]">
-              Toxicity
-            </span>
-            <span className="h-px flex-1 bg-[#E7E7F3]" />
-          </div>
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            {controllable.map((p) => (
-              <FilterControl
-                key={p.id}
-                param={p}
-                filters={filters}
-                setFilters={setFilters}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-  const groups = groupByCategory(controllable, categoryOrder);
+/**
+ * Hue registry — each section gets a distinct visual identity while staying
+ * within the "premium scientific" palette. `sub` is used for group headers
+ * inside the card (Absorption, Distribution, etc.).
+ */
+const HUES = {
+  adme: {
+    border: "border-[#DBEAFE]",
+    bg: "bg-gradient-to-br from-white via-[#F7FBFF] to-[#EEF6FF]",
+    title: "text-[#1D4ED8]",
+    sub: "text-[#2563EB]",
+    divider: "bg-[#DBEAFE]",
+    subGroups: {
+      Absorption: "text-[#0EA5E9] bg-[#F0F9FF]",
+      Distribution: "text-[#0891B2] bg-[#ECFEFF]",
+      Metabolism: "text-[#7C3AED] bg-[#F5F3FF]",
+      Excretion: "text-[#2563EB] bg-[#EFF6FF]",
+    },
+  },
+  toxicity: {
+    border: "border-[#FEE2E2]",
+    bg: "bg-gradient-to-br from-white via-[#FFF7F7] to-[#FEECEC]",
+    title: "text-[#B91C1C]",
+    sub: "text-[#DC2626]",
+    divider: "bg-[#FECACA]",
+    subGroups: { Toxicity: "text-[#DC2626] bg-[#FEF2F2]" },
+  },
+  druglikeness: {
+    border: "border-[#D1FAE5]",
+    bg: "bg-gradient-to-br from-white via-[#F5FFFB] to-[#E7FBF2]",
+    title: "text-[#047857]",
+    sub: "text-[#059669]",
+    divider: "bg-[#A7F3D0]",
+    subGroups: {
+      Rules: "text-[#059669] bg-[#ECFDF5]",
+      "Numeric properties": "text-[#0D9488] bg-[#F0FDFA]",
+    },
+  },
+  criteria: {
+    border: "border-[#E7E7F3]",
+    bg: "bg-gradient-to-br from-white via-[#FAFAFF] to-[#F4F4FB]",
+    title: "text-[#5139ED]",
+    sub: "text-[#8139ED]",
+    divider: "bg-[#E7E7F3]",
+    subGroups: {},
+  },
+};
+
+function useHue(hueKey) {
+  return HUES[hueKey] || HUES.criteria;
+}
+
+/**
+ * CardShell — wraps every collapsible card with header (title + chevron
+ * toggle) and animated body reveal.
+ */
+function CardShell({ title, testid, hueKey, defaultOpen = true, children, subtitle }) {
+  const hue = useHue(hueKey);
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <div
       data-testid={testid}
-      className="mt-6 rounded-3xl border border-[#E7E7F3] bg-white p-5 md:p-6"
+      className={`mt-6 rounded-3xl border ${hue.border} ${hue.bg} p-5 md:p-6 transition-colors`}
     >
-      <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">
-        {title}
-      </p>
-      <div className="mt-4 space-y-4">
-        {groups.map(([cat, list]) => (
-          <div key={cat} data-testid={`${testid}-row-${cat.toLowerCase()}`}>
-            <div className="mb-2 flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-[#8139ED]">
-                {cat}
-              </span>
-              <span className="h-px flex-1 bg-[#E7E7F3]" />
-            </div>
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-              {list.map((p) => (
-                <FilterControl
-                  key={p.id}
-                  param={p}
-                  filters={filters}
-                  setFilters={setFilters}
-                />
-              ))}
-            </div>
-          </div>
-        ))}
+      <button
+        type="button"
+        data-testid={`${testid}-toggle`}
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-3 text-left"
+        aria-expanded={open}
+      >
+        <div>
+          <p className={`font-heading text-xs font-bold uppercase tracking-[0.24em] ${hue.title}`}>
+            {title}
+          </p>
+          {subtitle && <p className="mt-1 text-xs text-[#64748B]">{subtitle}</p>}
+        </div>
+        <span
+          className={`inline-flex h-8 w-8 items-center justify-center rounded-full border ${hue.border} bg-white/70 text-[#64748B] transition-transform ${open ? "" : "-rotate-90"}`}
+          aria-hidden
+        >
+          <ChevronDown size={16} />
+        </span>
+      </button>
+      <div
+        className={`grid transition-all duration-200 ease-out ${
+          open ? "mt-4 grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+        }`}
+      >
+        <div className="overflow-hidden">{children}</div>
       </div>
     </div>
   );
 }
 
+/**
+ * SubGroupHeader — colored pill + horizontal rule for named categories
+ * inside a card (e.g. Absorption within ADME).
+ */
+function SubGroupHeader({ label, hueKey }) {
+  const hue = useHue(hueKey);
+  const chipClass = hue.subGroups[label] || `${hue.sub}`;
+  return (
+    <div className="mb-2 flex items-center gap-2">
+      <span
+        className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest ${chipClass}`}
+      >
+        {label}
+      </span>
+      <span className={`h-px flex-1 ${hue.divider}`} />
+    </div>
+  );
+}
 
 function groupByCategory(params, order) {
   const map = new Map();
@@ -83,10 +130,45 @@ function groupByCategory(params, order) {
   return [...known, ...rest].map((c) => [c, map.get(c)]);
 }
 
+/**
+ * Shared collapsible + hued FilterCard used for ADME (grouped) and Toxicity
+ * (flat) sections.
+ */
+function FilterCard({ title, testid, params, filters, setFilters, categoryOrder, flatLayout, hueKey = "adme" }) {
+  const controllable = params.filter((p) => p.kind !== "computed");
+  const inner = flatLayout ? (
+    <div>
+      <SubGroupHeader label="Toxicity" hueKey={hueKey} />
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {controllable.map((p) => (
+          <FilterControl key={p.id} param={p} filters={filters} setFilters={setFilters} />
+        ))}
+      </div>
+    </div>
+  ) : (
+    <div className="space-y-4">
+      {groupByCategory(controllable, categoryOrder).map(([cat, list]) => (
+        <div key={cat} data-testid={`${testid}-row-${cat.toLowerCase()}`}>
+          <SubGroupHeader label={cat} hueKey={hueKey} />
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            {list.map((p) => (
+              <FilterControl key={p.id} param={p} filters={filters} setFilters={setFilters} />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+  return (
+    <CardShell title={title} testid={testid} hueKey={hueKey}>
+      {inner}
+    </CardShell>
+  );
+}
 
 function FilterControl({ param, filters, setFilters }) {
   const setF = (patch) => setFilters((s) => ({ ...s, ...patch }));
-  if (param.kind === "computed") return null; // derived — no filter control
+  if (param.kind === "computed") return null;
   const label = (
     <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-[#64748B]">
       {param.label}
@@ -192,55 +274,26 @@ function FilterControl({ param, filters, setFilters }) {
 // ───────────────── Drug-Likeness dedicated filter card ───────────────────
 
 function DrugLikenessFilterCard({ filters, setFilters }) {
+  const hueKey = "druglikeness";
   return (
-    <div
-      data-testid="dl-filters"
-      className="mt-6 rounded-3xl border border-[#E7E7F3] bg-white p-5 md:p-6"
-    >
-      <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">
-        Drug-Likeness Assessment Filters
-      </p>
-
-      {/* Rules row */}
-      <div className="mt-4">
-        <div className="mb-2 flex items-center gap-2">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-[#8139ED]">
-            Rules
-          </span>
-          <span className="h-px flex-1 bg-[#E7E7F3]" />
-        </div>
+    <CardShell title="Drug-Likeness Assessment Filters" testid="dl-filters" hueKey={hueKey}>
+      <div>
+        <SubGroupHeader label="Rules" hueKey={hueKey} />
         <div className="flex flex-wrap items-center gap-2">
           {DL_RULES.map((p) => (
-            <FilterControl
-              key={p.id}
-              param={p}
-              filters={filters}
-              setFilters={setFilters}
-            />
+            <FilterControl key={p.id} param={p} filters={filters} setFilters={setFilters} />
           ))}
         </div>
       </div>
-
-      {/* Numeric row */}
       <div className="mt-4">
-        <div className="mb-2 flex items-center gap-2">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-[#8139ED]">
-            Numeric properties
-          </span>
-          <span className="h-px flex-1 bg-[#E7E7F3]" />
-        </div>
+        <SubGroupHeader label="Numeric properties" hueKey={hueKey} />
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           {DL_NUMERIC.filter((p) => p.kind !== "shared_bioavailability").map((p) => (
-            <FilterControl
-              key={p.id}
-              param={p}
-              filters={filters}
-              setFilters={setFilters}
-            />
+            <FilterControl key={p.id} param={p} filters={filters} setFilters={setFilters} />
           ))}
         </div>
       </div>
-    </div>
+    </CardShell>
   );
 }
 
@@ -248,17 +301,14 @@ function DrugLikenessFilterCard({ filters, setFilters }) {
 
 function CriteriaCard() {
   return (
-    <div
-      data-testid="dl-criteria-card"
-      className="mt-6 rounded-3xl border border-[#E7E7F3] bg-white p-5 md:p-6"
+    <CardShell
+      title="Common Drug-Likeness Criteria"
+      testid="dl-criteria-card"
+      hueKey="criteria"
+      defaultOpen={false}
+      subtitle="Reference thresholds used by ADMET-AI and this scoring engine."
     >
-      <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">
-        Common Drug-Likeness Criteria
-      </p>
-      <p className="mt-1 text-xs text-[#64748B]">
-        Reference thresholds used by ADMET-AI and this scoring engine.
-      </p>
-      <div className="mt-4 overflow-hidden rounded-xl border border-[#F1F1FA]">
+      <div className="overflow-hidden rounded-xl border border-[#F1F1FA]">
         <table className="w-full text-[12px]">
           <thead>
             <tr className="bg-[#FAFAFF] text-[#64748B]">
@@ -284,10 +334,8 @@ function CriteriaCard() {
           </tbody>
         </table>
       </div>
-    </div>
+    </CardShell>
   );
 }
-
-// ────────────────────────── Generic Results Table ────────────────────────
 
 export { FilterCard, groupByCategory, FilterControl, DrugLikenessFilterCard, CriteriaCard };
