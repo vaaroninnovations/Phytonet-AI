@@ -10,6 +10,27 @@ import time
 import pytest
 import requests
 import pyotp
+from filelock import FileLock
+
+# ─── Cross-worker serialization ───
+# pytest-xdist runs 2 workers in parallel. This file's tests all mutate the
+# SAME super-admin document (single-admin architecture forbids extra admins),
+# which produces flaky failures when e.g. worker A enables 2FA while worker B
+# expects the login response to say two_factor_required=False. We serialize
+# every test in this module with a filesystem lock — cheap, no external deps
+# beyond `filelock`, and correct.
+_ADMIN_LOCK_PATH = "/tmp/phytonet_admin_test.lock"
+
+
+@pytest.fixture(autouse=True)
+def _serialize_admin_tests(request):
+    """Hold a cross-process lock for the duration of every admin test."""
+    lock = FileLock(_ADMIN_LOCK_PATH, timeout=180)
+    lock.acquire()
+    try:
+        yield
+    finally:
+        lock.release()
 
 
 def _env(name, default=""):
@@ -31,25 +52,32 @@ API = f"{BASE_URL}/api"
 
 
 @pytest.fixture(autouse=True)
-def _purge_admin_lockouts():
-    """Clear admin_login_attempts before each test.
+def _purge_admin_lockouts(request):
+    """Clean shared admin state before each test.
 
-    Now that lockout is keyed by email only (single-admin threat model), any
-    prior test's failed attempts against ADMIN_EMAIL will otherwise lock out
-    subsequent tests that need to log the admin in.
+    The lock in `_serialize_admin_tests` guarantees only one test at a time
+    can be running, so this cleanup is race-free.
     """
     try:
         from pymongo import MongoClient
         m = MongoClient(_env("MONGO_URL", "mongodb://localhost:27017"))
         db = m[_env("DB_NAME", "test_database")]
-        # Skip synthetic lockout-test entries so parallel workers can't
-        # accidentally reset a running lockout test's counter.
+        # Skip synthetic lockout-test entries so our own lockout test isn't
+        # reset when we run it.
         db["admin_login_attempts"].delete_many(
             {"identifier": {"$not": {"$regex": "^lockout-"}}}
         )
-        # NOTE: do NOT wipe 2FA state here — mid-flight TOTP/EmailOTP tests
-        # would be broken by parallel workers running this fixture. 2FA
-        # tests are responsible for their own cleanup (disable at end).
+        cls = request.node.getparent(pytest.Class)
+        cls_name = cls.name if cls else ""
+        if cls_name not in ("TestTOTP", "TestEmailOTP"):
+            # Non-2FA tests: ensure 2FA is off so a stale enabled-state from
+            # a failed 2FA test doesn't cascade.
+            db["users"].update_one(
+                {"email": ADMIN_EMAIL},
+                {"$set": {"two_factor_enabled": False,
+                          "two_factor_method": None,
+                          "totp_secret": None}},
+            )
     except Exception:
         pass
     yield
@@ -188,7 +216,6 @@ class TestRegularUserAuthCoexists:
 
 
 # ─────────────────────── CHANGE PASSWORD ───────────────────────
-@pytest.mark.xdist_group("admin_mutations")
 class TestChangePassword:
     def test_change_password_wrong_current(self, admin_session):
         r = admin_session.post(f"{API}/admin/auth/change-password",
@@ -216,7 +243,6 @@ class TestChangePassword:
 
 
 # ─────────────────────── 2FA: TOTP ───────────────────────
-@pytest.mark.xdist_group("admin_mutations")
 class TestTOTP:
     def test_totp_full_lifecycle(self, admin_session):
         # setup
@@ -268,7 +294,6 @@ class TestTOTP:
 
 
 # ─────────────────────── 2FA: Email OTP ───────────────────────
-@pytest.mark.xdist_group("admin_mutations")
 class TestEmailOTP:
     def test_email_otp_setup_and_disable(self, admin_session):
         # Fetch OTP from Mongo (mocked SMTP)
