@@ -33,7 +33,10 @@ dnspython==2.8.0
 docstring_parser==0.18.0
 ecdsa==0.19.2
 email-validator==2.3.0
-emergentintegrations==0.2.0
+# emergentintegrations is installed in the Dockerfile via the Emergent
+# cloudfront index (see Dockerfile step 5). Leave it OUT of pinned requirements
+# because PyPI does not host it and pinning fails to resolve on fresh builds.
+# emergentintegrations==0.2.0
 et_xmlfile==2.0.0
 execnet==2.1.2
 fastapi==0.110.1
