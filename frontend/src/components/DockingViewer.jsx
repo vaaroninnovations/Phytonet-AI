@@ -10,9 +10,9 @@
 //   3. Interactions table (residue / type / distance).
 //   4. Download panel (Complex PDB / Pose PDBQT / Pose PDB / Interaction CSV /
 //      Snapshot PNG-SVG-TIFF-PDF).
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, forwardRef } from "react";
 import { toast } from "sonner";
-import { Download, Expand, RotateCcw, Loader2, Camera, Info } from "lucide-react";
+import { Download, Expand, RotateCcw, Loader2, Camera, Info, Image as ImageIcon } from "lucide-react";
 import { dockingPoseURL } from "@/lib/api";
 import {
   downloadPNG, downloadSVG, downloadTIFF, downloadPDF,
@@ -33,6 +33,10 @@ const INTERACTION_STYLE = {
  */
 export default function DockingViewer({ jobId, pairId, ligandName, receptor, bestAffinity, interactions }) {
   const [expanded, setExpanded] = useState(false);
+  // Shared ref: the InteractionDiagram2D forwards its <svg> element up so
+  // the 3D-viewer toolbar can offer a one-click "2D image" download without
+  // making the user scroll to the sibling diagram panel.
+  const diagramSvgRef = useRef(null);
   return (
     <div data-testid={`docking-viewer-${pairId}`} className="rounded-3xl border border-[#E7E7F3] bg-white p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -62,9 +66,17 @@ export default function DockingViewer({ jobId, pairId, ligandName, receptor, bes
 
       {expanded && (
         <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <Complex3DViewer jobId={jobId} pairId={pairId} interactions={interactions} />
+          <Complex3DViewer
+            jobId={jobId} pairId={pairId} interactions={interactions}
+            interactionSvgRef={diagramSvgRef}
+            ligandName={ligandName} receptor={receptor}
+          />
           <div className="flex flex-col gap-4">
-            <InteractionDiagram2D pairId={pairId} interactions={interactions} ligandName={ligandName} receptor={receptor} />
+            <InteractionDiagram2D
+              ref={diagramSvgRef}
+              pairId={pairId} interactions={interactions}
+              ligandName={ligandName} receptor={receptor}
+            />
             <InteractionsTable interactions={interactions} pairId={pairId} />
             <DownloadPanel jobId={jobId} pairId={pairId} ligandName={ligandName} receptor={receptor} />
           </div>
@@ -75,13 +87,14 @@ export default function DockingViewer({ jobId, pairId, ligandName, receptor, bes
 }
 
 /* ── 3D Complex viewer (3Dmol.js) ─────────────────────────────────────── */
-function Complex3DViewer({ jobId, pairId, interactions }) {
+function Complex3DViewer({ jobId, pairId, interactions, interactionSvgRef, ligandName, receptor }) {
   const wrapRef = useRef(null);   // outer React div (holds loading overlay + host)
   const hostRef = useRef(null);   // dedicated 3Dmol mount point — React never renders into this
   const viewerRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [style, setStyle] = useState("cartoon");        // cartoon | surface
   const [showHbondLabels, setShowHbondLabels] = useState(true);
+  const [downloading2d, setDownloading2d] = useState(false);
 
   const applyStyle = useCallback((v) => {
     if (!viewerRef.current) return;
@@ -228,6 +241,29 @@ function Complex3DViewer({ jobId, pairId, interactions }) {
     }
   };
 
+  /** One-click 2D interaction-diagram PNG download from the 3D toolbar.
+   *  Pulls the SVG rendered by the sibling InteractionDiagram2D so the two
+   *  panels stay perfectly in sync (same H-bond set, same labels). */
+  const download2D = useCallback(async () => {
+    const svg = interactionSvgRef?.current;
+    if (!svg) {
+      toast.error("2D diagram not ready yet");
+      return;
+    }
+    try {
+      setDownloading2d(true);
+      await downloadPNG(svg, `${pairId}_2D.png`, {
+        dpi: 300,
+        title: `${ligandName} × ${receptor}`,
+      });
+      toast.success("Downloaded 2D interaction diagram");
+    } catch (e) {
+      toast.error(`2D download failed: ${e.message || e}`);
+    } finally {
+      setDownloading2d(false);
+    }
+  }, [interactionSvgRef, pairId, ligandName, receptor]);
+
   /** Server-side high-DPI render (matplotlib Agg). Downloads at 600 DPI by
    *  default — the browser canvas is capped by the GPU, this isn't. */
   const hiResExport = async (fmt, dpi) => {
@@ -284,6 +320,13 @@ function Complex3DViewer({ jobId, pairId, interactions }) {
                   className="inline-flex items-center gap-1 rounded-full border border-[#E7E7F3] bg-white px-2.5 py-1 text-[10px] font-bold text-[#0B0B18] hover:border-[#5139ED]/40">
             <Camera className="h-3 w-3" /> PDF
           </button>
+          <button data-testid={`viewer-download-2d-${pairId}`} onClick={download2D}
+                  disabled={downloading2d}
+                  title="Download the 2D interaction diagram as PNG (300 DPI)"
+                  className="inline-flex items-center gap-1 rounded-full border border-[#5139ED]/40 bg-[#F5F3FE] px-2.5 py-1 text-[10px] font-bold text-[#5139ED] hover:bg-[#EDE9FE] disabled:opacity-50">
+            {downloading2d ? <Loader2 className="h-3 w-3 animate-spin" /> : <ImageIcon className="h-3 w-3" />}
+            2D&nbsp;PNG
+          </button>
           <span className="mx-1 h-4 w-px bg-[#E7E7F3]" />
           <select
             data-testid={`viewer-hidpi-${pairId}`}
@@ -336,8 +379,22 @@ function Complex3DViewer({ jobId, pairId, interactions }) {
 }
 
 /* ── 2D Interaction diagram (SVG, publication-ready) ────────────────────── */
-function InteractionDiagram2D({ pairId, interactions, ligandName, receptor }) {
+// forwardRef exposes the internal <svg> element to the parent DockingViewer
+// so the sibling 3D viewer can download this diagram directly from its
+// toolbar (data-testid=viewer-download-2d-{pairId}). We still keep the local
+// download buttons at the bottom of this card.
+const InteractionDiagram2D = forwardRef(function InteractionDiagram2D(
+  { pairId, interactions, ligandName, receptor },
+  externalRef
+) {
   const svgRef = useRef(null);
+  // Link the internal svgRef with the caller's ref so both can point at the
+  // same <svg> node.
+  const setSvgRef = (node) => {
+    svgRef.current = node;
+    if (typeof externalRef === "function") externalRef(node);
+    else if (externalRef) externalRef.current = node;
+  };
   const rows = useMemo(() => {
     const all = interactions?.all || [];
     // Prefer H-bonds + salt bridges + pi-stacking first (biologically most important)
@@ -371,7 +428,7 @@ function InteractionDiagram2D({ pairId, interactions, ligandName, receptor }) {
           ))}
         </div>
       </div>
-      <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} width="100%" height={H} className="rounded-xl bg-white"
+      <svg ref={setSvgRef} viewBox={`0 0 ${W} ${H}`} width="100%" height={H} className="rounded-xl bg-white"
            fontFamily="'Inter', system-ui, sans-serif">
         {/* Ligand centroid */}
         <circle cx={CX} cy={CY} r="34" fill="#5139ED" opacity="0.95" />
@@ -408,7 +465,7 @@ function InteractionDiagram2D({ pairId, interactions, ligandName, receptor }) {
       </svg>
     </div>
   );
-}
+});
 
 /* ── Interactions table ─────────────────────────────────────────────────── */
 function InteractionsTable({ interactions, pairId }) {
