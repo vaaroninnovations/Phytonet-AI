@@ -194,3 +194,6 @@ zipp==4.1.0
 # --- Background task scaffolding (Redis + Celery) ---
 celery==5.3.6
 redis==5.0.4
+pillow==12.3.0
+PyOTP==2.10.0
+qrcode==8.2

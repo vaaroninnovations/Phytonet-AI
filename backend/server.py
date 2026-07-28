@@ -1294,6 +1294,16 @@ api_router_nodes = APIRouter(prefix="/api")
 api_router_nodes.include_router(_nodes_router)
 app.include_router(api_router_nodes)
 
+# ─── Super Admin routes — mounted at /api/admin ───
+import admin_service  # noqa: E402
+from routes import admin as _admin_routes  # noqa: E402
+_admin_router = _admin_routes.build_router(
+    db, frontend_url=os.environ.get("FRONTEND_URL", "")
+)
+api_router_admin = APIRouter(prefix="/api")
+api_router_admin.include_router(_admin_router)
+app.include_router(api_router_admin)
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
@@ -1346,6 +1356,12 @@ async def _startup():
         await auth_service.initialize(db)
     except Exception as e:
         logger.warning(f"Auth init failed (non-fatal): {e}")
+
+    # Initialize super admin (indexes, seed, default settings)
+    try:
+        await admin_service.initialize(db)
+    except Exception as e:
+        logger.warning(f"Admin init failed (non-fatal): {e}")
 
     # Initialize projects indexes
     try:

@@ -1,5 +1,5 @@
 import "@/App.css";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import Home from "@/pages/Home";
 import PhytoNetAI from "@/pages/PhytoNetAI";
 import PlantDatabase from "@/pages/PlantDatabase";
@@ -19,6 +19,14 @@ import DatabasesHub from "@/pages/DatabasesHub";
 import Dashboard from "@/pages/Dashboard";
 import Profile from "@/pages/Profile";
 import Settings from "@/pages/Settings";
+import AdminLogin from "@/pages/admin/AdminLogin";
+import AdminLayout from "@/pages/admin/AdminLayout";
+import AdminDashboard from "@/pages/admin/AdminDashboard";
+import AdminUsers from "@/pages/admin/AdminUsers";
+import AdminAuditLog from "@/pages/admin/AdminAuditLog";
+import AdminSettings from "@/pages/admin/AdminSettings";
+import AdminProfile from "@/pages/admin/AdminProfile";
+import { AdminForgotPassword, AdminResetPassword } from "@/pages/admin/AdminPasswordReset";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import { SelectionProvider } from "@/context/SelectionContext";
@@ -26,6 +34,7 @@ import { ResultsProvider } from "@/context/ResultsContext";
 import { WorkflowProvider } from "@/context/WorkflowContext";
 import { NetworkProvider } from "@/context/NetworkContext";
 import { AuthProvider } from "@/context/AuthContext";
+import { AdminAuthProvider } from "@/context/AdminAuthContext";
 import { ProjectProvider } from "@/context/ProjectContext";
 import { ChartStyleProvider } from "@/context/ChartStyleContext";
 import { NodeProvider } from "@/context/NodeContext";
@@ -34,10 +43,24 @@ import ResumeSessionModal from "@/components/ResumeSessionModal";
 import { PurchaseNodesModal, InsufficientNodesModal } from "@/components/nodes/NodeModals";
 import { Toaster } from "sonner";
 
+function SiteChrome({ children }) {
+  // Hide user SiteHeader/Footer on admin routes — admin has its own chrome.
+  const { pathname } = useLocation();
+  const isAdmin = pathname.startsWith("/admin");
+  return (
+    <>
+      {!isAdmin && <SiteHeader />}
+      {children}
+      {!isAdmin && <SiteFooter />}
+    </>
+  );
+}
+
 function App() {
   return (
     <div className="App">
       <BrowserRouter>
+        <AdminAuthProvider>
         <AuthProvider>
           <NodeProvider>
           <SelectionProvider>
@@ -46,7 +69,7 @@ function App() {
                 <NetworkProvider>
                   <ProjectProvider>
                     <ChartStyleProvider>
-                    <SiteHeader />
+                    <SiteChrome>
                     <Routes>
                       <Route path="/" element={<Home />} />
                       <Route path="/phytonet-ai" element={<PhytoNetAI />} />
@@ -79,8 +102,21 @@ function App() {
                       <Route path="/ai-assistant" element={<PhytoNet />} />
                       <Route path="/auth/google/callback" element={<GoogleCallback />} />
                       <Route path="/tool/:slug" element={<ComingSoon />} />
+
+                      {/* ─── Super Admin ─── */}
+                      <Route path="/admin/login" element={<AdminLogin />} />
+                      <Route path="/admin/forgot-password" element={<AdminForgotPassword />} />
+                      <Route path="/admin/reset-password" element={<AdminResetPassword />} />
+                      <Route path="/admin" element={<AdminLayout />}>
+                        <Route index element={<AdminDashboard />} />
+                        <Route path="dashboard" element={<AdminDashboard />} />
+                        <Route path="users" element={<AdminUsers />} />
+                        <Route path="audit-log" element={<AdminAuditLog />} />
+                        <Route path="settings" element={<AdminSettings />} />
+                        <Route path="profile" element={<AdminProfile />} />
+                      </Route>
                     </Routes>
-                    <SiteFooter />
+                    </SiteChrome>
                     <AuthModal />
                     <ResumeSessionModal />
                     <PurchaseNodesModal />
@@ -93,6 +129,7 @@ function App() {
           </SelectionProvider>
           </NodeProvider>
         </AuthProvider>
+        </AdminAuthProvider>
         <Toaster position="top-right" richColors />
       </BrowserRouter>
     </div>
