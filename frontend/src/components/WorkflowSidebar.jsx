@@ -1,7 +1,8 @@
 import { useNavigate, useLocation } from "react-router-dom";
-import { CheckCircle2, Lock, Menu } from "lucide-react";
-import { useMemo, useState } from "react";
+import { CheckCircle2, Lock, Menu, ChevronRight } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { useWorkflow, WORKFLOW_STEPS } from "@/context/WorkflowContext";
+import { SUBSECTIONS as NETWORK_SUBSECTIONS } from "@/pages/NetworkAnalysis/parts/common";
 
 /**
  * Persistent left sidebar rendered on every workflow module. The active step
@@ -9,7 +10,7 @@ import { useWorkflow, WORKFLOW_STEPS } from "@/context/WorkflowContext";
  */
 export default function WorkflowSidebar() {
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const { pathname, hash } = useLocation();
   const { isCompleted, isAccessible } = useWorkflow();
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -18,10 +19,30 @@ export default function WorkflowSidebar() {
     [pathname]
   );
 
+  // Track the currently active network subsection via URL hash so the sidebar
+  // (this component) and the Network Analysis page stay in sync automatically.
+  const [activeSub, setActiveSub] = useState(
+    () => (hash || "").replace("#", "") || "intersection"
+  );
+  useEffect(() => {
+    if (activeId !== "network-analysis") return;
+    const sync = () =>
+      setActiveSub((window.location.hash || "").replace("#", "") || "intersection");
+    sync();
+    window.addEventListener("hashchange", sync);
+    return () => window.removeEventListener("hashchange", sync);
+  }, [activeId, hash]);
+
   const onStepClick = (step) => {
     if (!isAccessible(step.id)) return;
     if (step.route === pathname) return;
     navigate(step.route);
+  };
+
+  const onSubClick = (subId) => {
+    if (window.location.hash === `#${subId}`) return;
+    window.location.hash = subId;
+    setActiveSub(subId);
   };
 
   const items = WORKFLOW_STEPS.map((step, idx) => {
@@ -29,9 +50,10 @@ export default function WorkflowSidebar() {
     const completed = isCompleted(step.id);
     const accessible = isAccessible(step.id);
     const locked = !accessible && !active;
+    const showSubs = step.id === "network-analysis" && active;
     return (
+      <div key={step.id}>
       <button
-        key={step.id}
         data-testid={`workflow-step-${step.id}`}
         data-active={active ? "true" : "false"}
         data-completed={completed ? "true" : "false"}
@@ -89,6 +111,44 @@ export default function WorkflowSidebar() {
           </span>
         )}
       </button>
+      {showSubs && (
+        <ul
+          data-testid="sidebar-network-subs"
+          className="ml-4 mt-1 space-y-0.5 border-l border-[#E7E7F3] pl-2"
+        >
+          {NETWORK_SUBSECTIONS.map((s, sIdx) => {
+            const isActive = activeSub === s.id;
+            const SubIcon = s.icon;
+            return (
+              <li key={s.id}>
+                <button
+                  type="button"
+                  data-testid={`sidebar-sub-${s.id}`}
+                  data-active={isActive ? "true" : "false"}
+                  onClick={() => onSubClick(s.id)}
+                  className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] transition-colors ${
+                    isActive
+                      ? "bg-[#5139ED]/10 font-semibold text-[#5139ED]"
+                      : "text-[#64748B] hover:bg-[#F5F5FC] hover:text-[#0B0B18]"
+                  }`}
+                >
+                  <span
+                    className={`grid h-4 w-4 shrink-0 place-items-center rounded font-mono text-[8px] font-bold ${
+                      isActive ? "bg-[#5139ED] text-white" : "bg-[#F1F1FA] text-[#8139ED]"
+                    }`}
+                  >
+                    {sIdx + 1}
+                  </span>
+                  <SubIcon className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{s.label}</span>
+                  {isActive && <ChevronRight className="ml-auto h-3 w-3" />}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      </div>
     );
   });
 

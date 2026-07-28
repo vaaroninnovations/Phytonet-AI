@@ -63,7 +63,28 @@ export default function NetworkAnalysis() {
   } = useNetwork();
   const { markComplete } = useWorkflow();
 
-  const [active, setActive] = useState("intersection");
+  // ─── Active subsection is now sourced from the URL hash so the workflow
+  // sidebar (nested Network Analysis children) and this page stay in sync.
+  const [active, setActiveState] = useState(
+    () => (window.location.hash || "").replace("#", "") || "intersection"
+  );
+  const setActive = (id) => {
+    setActiveState(id);
+    if (window.location.hash !== `#${id}`) {
+      // history.replaceState avoids polluting back-button history with every
+      // sub-step click.
+      window.history.replaceState(null, "", `${window.location.pathname}#${id}`);
+    }
+  };
+  useEffect(() => {
+    const onHash = () => {
+      const next = (window.location.hash || "").replace("#", "") || "intersection";
+      setActiveState(next);
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
   const [completed, setCompleted] = useState({}); // { subId: true }
   const [intersectSel, setIntersectSel] = useState({}); // {gene: true}
   const [intersectDone, setIntersectDone] = useState(false);
@@ -214,14 +235,9 @@ export default function NetworkAnalysis() {
           {selectedDisease?.name ? ` · ${selectedDisease.name}` : ""}
         </p>
 
-        {/* Two-column: subsection nav + panel */}
-        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[240px_1fr]">
-          <SubsectionNav
-            active={active}
-            setActive={setActive}
-            completed={completed}
-            canNavigate={canNavigate}
-          />
+        {/* Subsection nav lives in the workflow sidebar (nested under
+            Network Analysis). Panel is now full-width. */}
+        <div className="mt-6">
           <div>
             {active === "intersection" && (
               <IntersectionPanel
