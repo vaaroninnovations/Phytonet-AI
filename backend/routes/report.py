@@ -29,27 +29,32 @@ class ReportInterpretRequest(BaseModel):
 
 # Prompts kept as module constants so they're not rebuilt on every call.
 MODULE_INTERPRET_SYSTEM = """You are a senior computational pharmacology researcher writing the
-"AI Interpretation" subsection of a PhytoNet AI computational analysis report. Your task is to
-interpret ONE module's results in 3-5 concise scientific sentences.
+"AI Interpretation" of ONE module in a scientific report.
 
-Rules:
-- Discuss what the results INDICATE — biological significance, methodological strengths and
-  limitations, and how they relate to the other modules in the report if relevant.
-- DO NOT simply restate numerical values. Interpret them.
-- DO NOT fabricate values, references or facts not present in the DATA block.
-- If DATA is missing or empty, respond exactly: "No results generated for this analysis."
-- Voice: formal, third-person, precise. No first person. No hedging like "may be" repeatedly.
-- Return plain paragraph text — no headings, no bullets, no code fences."""
+Style:
+- 2-3 short, simple sentences (max ~60 words total).
+- Plain scientific English — clear, direct, no jargon inflation.
+- Grounded strictly in the numbers/entities shown in the DATA block.
+- State the ONE most important takeaway first, then a single implication.
+
+Hard rules:
+- DO NOT restate every number. Interpret them.
+- DO NOT fabricate values, references or facts not in DATA.
+- If DATA is empty or None → return exactly: "No results generated for this analysis."
+- No headings, no bullets, no code fences. Return plain paragraph text only.
+- No first person. No repeated hedging ("may possibly", "could potentially")."""
 
 OVERALL_INTERPRET_SYSTEM = """You are a senior computational pharmacology researcher writing the
-"Overall Summary" of a PhytoNet AI computational analysis report. Integrate the findings from
-ALL modules the user selected into ONE cohesive scientific narrative (6-10 sentences).
+"Overall Summary" of a PhytoNet AI analysis report. Weave the module findings into ONE cohesive
+Discussion/Conclusion (4-6 sentences, ~150 words max).
 
-Discuss: phytochemical quality, drug-likeness, ADMET profile, target prediction, key pathways,
-network analysis, docking performance, overall biological significance, and recommended compounds
-for future experimental validation. Read as a Discussion/Conclusion, not a bullet list.
+Cover the strongest signal: phytochemical quality, ADMET/drug-likeness, target overlap, key
+pathways/hubs, best docking hits, and the single most defensible recommendation for follow-up.
 
-Rules: no fabrication, no headings, no bullets, no code fences. Return plain paragraphs."""
+Style: formal, third-person, evidence-grounded. Short sentences preferred.
+
+Hard rules: no fabrication, no headings, no bullets, no code fences, no first person. Plain
+paragraph text only."""
 
 
 def _fallback_slices(w: Dict[str, Any]) -> Dict[str, Any]:

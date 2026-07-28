@@ -79,6 +79,17 @@ def _build_prompt(workflow: Dict[str, Any]) -> str:
     docking = workflow.get("docking_results") or []
     md_cfg = workflow.get("md_config") or {}
 
+    # Derive real applied counts so the LLM cites actual numbers.
+    n_compounds = len(compounds)
+    n_intersect = len(intersect)
+    n_hubs = len(hubs)
+    n_go = len(go)
+    n_kegg = len(kegg)
+    n_dock = len(docking) if isinstance(docking, list) else 0
+    dock_cfg = (workflow.get("docking_config") or {})
+    exh = dock_cfg.get("exhaustiveness", 8)
+    poses = dock_cfg.get("num_modes", 9)
+
     prompt = f"""
 # Task
 Write a **publication-ready** IMRAD manuscript in Markdown for a network-pharmacology
@@ -87,26 +98,52 @@ study of **{plant}** against **{disease}**.
 # Style rules
 - Follow this exact section order and use `##` for section titles:
   {', '.join(SECTION_ORDER)}
-- Abstract: 250-300 words, structured (Background, Methods, Results, Conclusion).
-- Materials and Methods must name real tools: IMPPAT (compounds), admet-ai,
-  ChEMBL + BindingDB (target prediction), Open Targets (disease targets),
-  STRING (PPI), CytoHubba (hub ranking, mention MCC / Degree / Betweenness /
-  Closeness / Radiality / EPC / MNC / DMNC / Stress / Bottleneck), g:Profiler
-  (GO), Enrichr KEGG_2021_Human, AutoDock Vina 1.2.3 + Meeko + OpenBabel + RDKit,
-  GROMACS with amber99sb-ildn + TIP3P.
-- Results section MUST include sub-headings for every module and cite specific
-  numbers from the DATA block below. Prefer sentences like "Compound X exhibited
-  a docking affinity of −7.4 kcal/mol against Y".
-- Discussion: 4-6 paragraphs interpreting biological significance.
-- References: at least 15 real, well-known citations, formatted Vancouver style.
-- Supplementary Tables: describe (do NOT embed) supplementary tables with
-  captions (they will be attached as CSV/XLSX separately).
+
+- **Abstract**: 200-250 words, structured (Background, Methods, Results, Conclusion).
+
+- **Materials and Methods** — every sub-heading must state the APPLIED methodology
+  with the ACTUAL parameters from this run:
+    * Plant Database: name the plant + IMPPAT 2.0 + LOTUS + NCBI Taxonomy.
+    * Phytochemical Standardization: RDKit + PubChem harmonisation.
+    * Compound Library: exact count = {n_compounds} compounds.
+    * Drug-likeness: rule sets used (Lipinski / Ghose / Veber / Egan / Muegge / QED / PAINS / Brenk).
+    * ADMET: ADMET-AI + SwissADME; specific endpoints.
+    * Target Prediction: SwissTargetPrediction (probability ≥ 0.10) + ChEMBL + BindingDB.
+    * Disease Targets: Open Targets + DisGeNET; N intersecting genes = {n_intersect}.
+    * Network Analysis: STRING v12 (confidence 0.7).
+    * Hub Genes: CytoHubba — MCC / MNC / Degree / Betweenness / Closeness / Radiality / EPC / DMNC / Stress / Bottleneck (top {min(n_hubs, 10)} reported of {n_hubs}).
+    * GO Enrichment: g:Profiler, BH-corrected q < 0.05, {n_go} significant terms.
+    * KEGG Enrichment: Enrichr KEGG_2021_Human, adjusted q < 0.05, {n_kegg} significant pathways.
+    * Docking: AutoDock Vina 1.2.5 + Meeko + Open Babel + RDKit, exhaustiveness={exh}, {poses} poses/ligand, {n_dock} ligand–receptor complexes.
+    * MD (if applicable): GROMACS + amber99sb-ildn + TIP3P (use md_config values).
+
+- **Results section**: use sub-headings for every module. State the RESULTS OBTAINED
+  as concrete numbers from the DATA block — e.g., "Compound X exhibited a docking
+  affinity of −7.4 kcal/mol against Y".
+
+- **Discussion**: 3-4 short paragraphs interpreting biological significance. Prefer
+  short direct sentences over long hedging. Discuss what the numbers imply, don't
+  restate them.
+
+- **AI Interpretation blocks (per subsection)**: 2-3 short simple sentences each,
+  grounded strictly in the numbers just presented. No fabrication.
+
+- **References**: at least 12 real, well-known citations, Vancouver style.
+- Supplementary tables: describe (do NOT embed).
 
 # Data
 ```json
 {{
   "plant": "{plant}",
   "disease": "{disease}",
+  "n_compounds": {n_compounds},
+  "n_intersect": {n_intersect},
+  "n_hubs": {n_hubs},
+  "n_go": {n_go},
+  "n_kegg": {n_kegg},
+  "n_dock": {n_dock},
+  "docking_exhaustiveness": {exh},
+  "docking_poses": {poses},
   "selected_compounds_top20": {_kbytes(compounds[:20], cap=2000)},
   "intersecting_genes_top50": {_kbytes(intersect[:50], cap=1200)},
   "hub_ranking_top10": {_kbytes(hubs[:10], cap=1200)},
