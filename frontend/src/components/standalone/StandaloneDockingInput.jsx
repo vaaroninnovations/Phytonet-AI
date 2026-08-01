@@ -134,28 +134,36 @@ function TargetCard({ target, onClear }) {
 export default function StandaloneDockingInput() {
   const { setSelectedCompounds, setCompoundTargets, setIntersectingGenes } = useNetwork();
 
+  // NOTE: this page now supports MULTIPLE compounds + targets. The resolver
+  // fields still handle one lookup at a time, but each successful resolve is
+  // added to the list. Docking will run the full N × M cross-product.
   const [compoundQuery, setCompoundQuery] = useState("");
-  const [compound, setCompound] = useState(null);
   const [compoundBusy, setCompoundBusy] = useState(false);
+  const [compoundList, setCompoundList] = useState([]);    // resolved compounds
 
   const [targetQuery, setTargetQuery] = useState("");
-  const [target, setTarget] = useState(null);
   const [targetBusy, setTargetBusy] = useState(false);
+  const [targetList, setTargetList] = useState([]);        // resolved targets
 
   const [advOpen, setAdvOpen] = useState(false);
   const [advSmiles, setAdvSmiles] = useState("");
+  const [advSmilesName, setAdvSmilesName] = useState("");
   const [advUniprot, setAdvUniprot] = useState("");
   const [advPdb, setAdvPdb] = useState("");
 
-  /* Compound resolver */
+  /* Compound resolver — appends to the list on success */
   const resolveCompound = async () => {
     const q = compoundQuery.trim();
     if (!q) return toast.error("Enter a compound name");
+    if (compoundList.some((c) => (c.name || "").toLowerCase() === q.toLowerCase())) {
+      return toast.info(`“${q}” is already in the list`);
+    }
     setCompoundBusy(true);
     try {
       const data = await compoundLookup(q);
-      setCompound(data);
-      toast.success(`Resolved “${q}” → CID ${data.pubchem_cid}`);
+      setCompoundList((prev) => [...prev, data]);
+      setCompoundQuery("");
+      toast.success(`Added ${data.name} (CID ${data.pubchem_cid}) — ${compoundList.length + 1} compound(s)`);
     } catch (e) {
       const detail = e?.response?.data?.detail || e?.message || "Lookup failed";
       toast.error(`Could not resolve “${q}”: ${detail}`);
@@ -164,15 +172,20 @@ export default function StandaloneDockingInput() {
     }
   };
 
-  /* Target resolver */
+  /* Target resolver — appends to the list on success */
   const resolveTarget = async () => {
     const q = targetQuery.trim();
     if (!q) return toast.error("Enter a gene symbol or protein name");
+    if (targetList.some((t) => (t.uniprot_id || "").toLowerCase() === q.toLowerCase()
+                              || (t.primary_gene || "").toLowerCase() === q.toLowerCase())) {
+      return toast.info(`“${q}” is already in the list`);
+    }
     setTargetBusy(true);
     try {
       const data = await targetResolve(q);
-      setTarget(data);
-      toast.success(`Resolved “${q}” → ${data.uniprot_id}`);
+      setTargetList((prev) => [...prev, data]);
+      setTargetQuery("");
+      toast.success(`Added ${data.primary_gene || data.uniprot_id} — ${targetList.length + 1} target(s)`);
     } catch (e) {
       const detail = e?.response?.data?.detail || e?.message || "Lookup failed";
       toast.error(`Could not resolve “${q}”: ${detail}`);
@@ -181,53 +194,60 @@ export default function StandaloneDockingInput() {
     }
   };
 
-  /* Commit both to the docking pipeline */
-  const commit = () => {
-    // Compound: prefer resolved > advanced-paste SMILES
-    let comp;
-    if (compound) {
-      comp = {
-        name: compound.name,
-        compound_name: compound.name,
-        smiles: compound.canonical_smiles || compound.isomeric_smiles || "",
-        cid: compound.pubchem_cid || null,
-        source: "resolver",
-      };
-    } else if (advSmiles.trim()) {
-      comp = { name: "AdvancedInput", compound_name: "AdvancedInput", smiles: advSmiles.trim(), cid: null, source: "advanced" };
-    } else {
-      return toast.error("Resolve a compound (or paste a SMILES in Advanced) first");
-    }
-    if (!comp.smiles) return toast.error("Resolved compound has no SMILES — try Advanced paste");
+  const removeCompound = (idx) =>
+    setCompoundList((prev) => prev.filter((_, i) => i !== idx));
+  const removeTarget = (idx) =>
+    setTargetList((prev) => prev.filter((_, i) => i !== idx));
 
-    // Target: prefer resolved > advanced UniProt
-    let tgt;
-    if (target) {
-      tgt = {
-        gene_symbol: target.primary_gene || target.uniprot_id,
-        uniprot_id: target.uniprot_id,
-        protein_name: target.protein_name,
-        confidence: 5, score: 1,
-        pdb_id: (advPdb.trim() || target.pdb_ids?.[0] || undefined),
-      };
-    } else if (advUniprot.trim()) {
-      tgt = {
+  /** Push all resolved compounds + targets to the docking pipeline. Docking
+   *  runs the full cross-product (N compounds × M targets). */
+  const commit = () => {
+    const comps = compoundList.map((c) => ({
+      name: c.name,
+      compound_name: c.name,
+      smiles: c.canonical_smiles || c.isomeric_smiles || "",
+      cid: c.pubchem_cid || null,
+      source: "resolver",
+    }));
+    // Advanced-mode single SMILES falls back if the list is empty
+    if (comps.length === 0 && advSmiles.trim()) {
+      comps.push({
+        name: advSmilesName.trim() || "AdvancedInput",
+        compound_name: advSmilesName.trim() || "AdvancedInput",
+        smiles: advSmiles.trim(),
+        cid: null,
+        source: "advanced",
+      });
+    }
+    if (comps.length === 0) return toast.error("Add at least one compound first");
+    if (comps.some((c) => !c.smiles)) return toast.error("Some compounds have no SMILES");
+
+    const tgts = targetList.map((t) => ({
+      gene_symbol: t.primary_gene || t.uniprot_id,
+      uniprot_id: t.uniprot_id,
+      protein_name: t.protein_name,
+      confidence: 5, score: 1,
+      pdb_id: t.pdb_ids?.[0] || undefined,
+    }));
+    if (tgts.length === 0 && advUniprot.trim()) {
+      tgts.push({
         gene_symbol: advUniprot.trim().toUpperCase(),
         uniprot_id: advUniprot.trim().toUpperCase(),
         protein_name: advUniprot.trim().toUpperCase(),
         confidence: 5, score: 1,
         pdb_id: advPdb.trim() || undefined,
-      };
-    } else {
-      return toast.error("Resolve a target (or paste a UniProt ID in Advanced) first");
+      });
     }
+    if (tgts.length === 0) return toast.error("Add at least one target first");
 
-    setSelectedCompounds([comp]);
-    setCompoundTargets([tgt]);
+    setSelectedCompounds(comps);
+    setCompoundTargets(tgts);
     if (typeof setIntersectingGenes === "function") {
-      setIntersectingGenes([tgt.gene_symbol]);
+      setIntersectingGenes(tgts.map((t) => t.gene_symbol));
     }
-    toast.success("Inputs loaded — configure docking parameters below");
+    toast.success(
+      `Loaded ${comps.length} compound(s) × ${tgts.length} target(s) = ${comps.length * tgts.length} docking pair(s)`
+    );
   };
 
   return (
@@ -245,10 +265,9 @@ export default function StandaloneDockingInput() {
             Intelligent Docking Assistant
           </h1>
           <p className="mt-2 max-w-3xl text-[15px] text-[#4B5563]">
-            Just type a <strong>compound name</strong> (e.g. Curcumin) and a{" "}
-            <strong>protein or gene</strong> (e.g. EGFR). We'll fetch SMILES + PubChem metadata,
-            resolve the UniProt entry, and auto-pick the best PDB structure for docking. Advanced
-            users can override every field.
+            Add one or more <strong>compounds</strong> (e.g. Curcumin, Quercetin) and one or more{" "}
+            <strong>protein targets</strong> (e.g. EGFR, AKT1). Every compound will be docked against
+            every target, producing a full N × M binding matrix. Advanced users can override every field.
           </p>
         </div>
       </div>
@@ -257,10 +276,18 @@ export default function StandaloneDockingInput() {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {/* COMPOUND */}
         <div className="rounded-3xl border border-[#E7E7F3] bg-white/80 p-5 backdrop-blur">
-          <div className="flex items-center gap-2 text-[13px] font-semibold text-[#111827]">
-            <FlaskConical className="h-4 w-4 text-[#2BB673]" /> Compound
+          <div className="flex items-center justify-between text-[13px] font-semibold text-[#111827]">
+            <span className="flex items-center gap-2">
+              <FlaskConical className="h-4 w-4 text-[#2BB673]" /> Compounds
+            </span>
+            <span
+              data-testid="compound-count"
+              className="rounded-full bg-[#2BB673]/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-[#2BB673]"
+            >
+              {compoundList.length} added
+            </span>
           </div>
-          <p className="mt-1 text-[12px] text-[#64748B]">Compound name (e.g. Quercetin, Metformin, Aspirin) — PubChem-resolved.</p>
+          <p className="mt-1 text-[12px] text-[#64748B]">Search by name — each successful resolve is added to the list below.</p>
           <div className="mt-3 flex gap-2">
             <div className="relative flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94A3B8]" />
@@ -281,18 +308,45 @@ export default function StandaloneDockingInput() {
               className="inline-flex items-center gap-1.5 rounded-full bg-[#2BB673] px-4 py-2 text-[12.5px] font-bold text-white transition hover:-translate-y-0.5 hover:bg-[#22986a] disabled:pointer-events-none disabled:opacity-50"
             >
               {compoundBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
-              Resolve
+              Add
             </button>
           </div>
-          {compound && <div className="mt-4"><CompoundCard compound={compound} onClear={() => setCompound(null)} /></div>}
+          {compoundList.length > 0 && (
+            <ul data-testid="compound-list" className="mt-4 space-y-2">
+              {compoundList.map((c, i) => (
+                <li key={`${c.pubchem_cid || c.name}-${i}`}
+                    data-testid={`compound-chip-${i}`}
+                    className="flex items-center justify-between gap-2 rounded-xl border border-[#2BB673]/30 bg-[#F0FDF4] px-3 py-2">
+                  <div className="min-w-0">
+                    <div className="truncate text-[12.5px] font-semibold text-[#065F46]">{c.name}</div>
+                    <div className="truncate font-mono text-[10.5px] text-[#059669]">
+                      CID {c.pubchem_cid} · {(c.canonical_smiles || c.isomeric_smiles || "").slice(0, 42)}{(c.canonical_smiles || "").length > 42 ? "…" : ""}
+                    </div>
+                  </div>
+                  <button data-testid={`remove-compound-${i}`} onClick={() => removeCompound(i)}
+                          className="shrink-0 rounded-full p-1 text-[#059669] hover:bg-[#2BB673]/20">
+                    <XCircle className="h-4 w-4" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         {/* TARGET */}
         <div className="rounded-3xl border border-[#E7E7F3] bg-white/80 p-5 backdrop-blur">
-          <div className="flex items-center gap-2 text-[13px] font-semibold text-[#111827]">
-            <Target className="h-4 w-4 text-[#DB2777]" /> Target
+          <div className="flex items-center justify-between text-[13px] font-semibold text-[#111827]">
+            <span className="flex items-center gap-2">
+              <Target className="h-4 w-4 text-[#DB2777]" /> Targets
+            </span>
+            <span
+              data-testid="target-count"
+              className="rounded-full bg-[#DB2777]/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-[#DB2777]"
+            >
+              {targetList.length} added
+            </span>
           </div>
-          <p className="mt-1 text-[12px] text-[#64748B]">Gene symbol or protein name (e.g. EGFR, "Insulin receptor") — UniProt-resolved with auto-PDB pick.</p>
+          <p className="mt-1 text-[12px] text-[#64748B]">Search gene symbol or protein name — each resolve is added to the list.</p>
           <div className="mt-3 flex gap-2">
             <div className="relative flex-1">
               <Dna className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94A3B8]" />
@@ -313,10 +367,31 @@ export default function StandaloneDockingInput() {
               className="inline-flex items-center gap-1.5 rounded-full bg-[#DB2777] px-4 py-2 text-[12.5px] font-bold text-white transition hover:-translate-y-0.5 hover:bg-[#be1e6a] disabled:pointer-events-none disabled:opacity-50"
             >
               {targetBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
-              Resolve
+              Add
             </button>
           </div>
-          {target && <div className="mt-4"><TargetCard target={target} onClear={() => setTarget(null)} /></div>}
+          {targetList.length > 0 && (
+            <ul data-testid="target-list" className="mt-4 space-y-2">
+              {targetList.map((t, i) => (
+                <li key={`${t.uniprot_id}-${i}`}
+                    data-testid={`target-chip-${i}`}
+                    className="flex items-center justify-between gap-2 rounded-xl border border-[#DB2777]/30 bg-[#FDF2F8] px-3 py-2">
+                  <div className="min-w-0">
+                    <div className="truncate text-[12.5px] font-semibold text-[#831843]">
+                      {t.primary_gene || t.uniprot_id}{t.protein_name && t.primary_gene ? ` — ${t.protein_name}` : ""}
+                    </div>
+                    <div className="truncate font-mono text-[10.5px] text-[#BE185D]">
+                      UniProt {t.uniprot_id}{t.pdb_ids?.[0] ? ` · PDB ${t.pdb_ids[0]}` : ""}
+                    </div>
+                  </div>
+                  <button data-testid={`remove-target-${i}`} onClick={() => removeTarget(i)}
+                          className="shrink-0 rounded-full p-1 text-[#BE185D] hover:bg-[#DB2777]/20">
+                    <XCircle className="h-4 w-4" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
 
@@ -329,31 +404,38 @@ export default function StandaloneDockingInput() {
           className="flex w-full items-center justify-between gap-2 text-left text-[12px] font-semibold text-[#5139ED]"
         >
           <span className="inline-flex items-center gap-2">
-            <Info className="h-3.5 w-3.5" /> Advanced mode — override with raw SMILES / UniProt / PDB
+            <Info className="h-3.5 w-3.5" /> Advanced mode — override with raw SMILES / UniProt / PDB (used only when the lists above are empty)
           </span>
           <span className="text-[11px] text-[#94A3B8]">{advOpen ? "hide" : "show"}</span>
         </button>
         {advOpen && (
-          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-4">
+            <input
+              data-testid="adv-smiles-name"
+              value={advSmilesName}
+              onChange={(e) => setAdvSmilesName(e.target.value)}
+              placeholder="Compound name (optional)"
+              className="h-9 rounded-lg border border-[#E7E7F3] bg-white px-3 text-[11.5px] outline-none focus:border-[#5139ED]/50"
+            />
             <input
               data-testid="adv-smiles"
               value={advSmiles}
               onChange={(e) => setAdvSmiles(e.target.value)}
-              placeholder="Ligand SMILES override"
+              placeholder="Ligand SMILES"
               className="h-9 rounded-lg border border-[#E7E7F3] bg-white px-3 font-mono text-[11.5px] outline-none focus:border-[#5139ED]/50"
             />
             <input
               data-testid="adv-uniprot"
               value={advUniprot}
               onChange={(e) => setAdvUniprot(e.target.value)}
-              placeholder="UniProt ID override (e.g. P00533)"
+              placeholder="UniProt ID (e.g. P00533)"
               className="h-9 rounded-lg border border-[#E7E7F3] bg-white px-3 font-mono text-[11.5px] outline-none focus:border-[#5139ED]/50"
             />
             <input
               data-testid="adv-pdb"
               value={advPdb}
               onChange={(e) => setAdvPdb(e.target.value)}
-              placeholder="PDB ID override (e.g. 1M17)"
+              placeholder="PDB ID (e.g. 1M17)"
               className="h-9 rounded-lg border border-[#E7E7F3] bg-white px-3 font-mono text-[11.5px] outline-none focus:border-[#5139ED]/50"
             />
           </div>
@@ -366,10 +448,10 @@ export default function StandaloneDockingInput() {
           type="button"
           data-testid="dock-submit"
           onClick={commit}
-          disabled={!compound && !advSmiles.trim()}
+          disabled={compoundList.length === 0 && !advSmiles.trim()}
           className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#DB2777] via-[#8139ED] to-[#5139ED] px-6 py-3 text-[13px] font-bold text-white shadow-[0_14px_36px_-10px_rgba(219,39,119,0.6)] transition hover:-translate-y-0.5 disabled:pointer-events-none disabled:opacity-50"
         >
-          <Play className="h-4 w-4" /> Load & continue to docking
+          <Play className="h-4 w-4" /> Load {compoundList.length || 1} × {targetList.length || 1} = {(compoundList.length || 1) * (targetList.length || 1)} pair(s)
         </button>
         <span className="ml-auto text-[11px] text-[#94A3B8]">
           Backend: PubChem · UniProt · RCSB PDB · AutoDock Vina · Open Babel · Meeko
