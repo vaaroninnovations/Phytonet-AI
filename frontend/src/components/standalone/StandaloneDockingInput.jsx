@@ -9,10 +9,10 @@
 // Once both a compound and a target are locked in, the "Load & continue"
 // action pushes them into NetworkContext so the existing AutoDock Vina
 // pipeline mounted below renders unchanged.
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   Atom, Sparkles, Target, Search, Loader2, CheckCircle2, XCircle,
-  ExternalLink, FlaskConical, Copy, Play, Info, Dna,
+  ExternalLink, FlaskConical, Copy, Play, Info, Dna, Upload, ListPlus,
 } from "lucide-react";
 import { useNetwork } from "@/context/NetworkContext";
 import { compoundLookup, targetResolve } from "@/lib/api";
@@ -130,6 +130,150 @@ function TargetCard({ target, onClear }) {
   );
 }
 
+/* ────────── Bulk import — CSV upload + multi-line paste ────────── */
+/**
+ * Parses either a plain multi-line text (one entry per line) or a CSV file
+ * with headers. For CSV we prefer these column names (case-insensitive):
+ *   Compound side: "smiles" > "compound" > "name"
+ *   Target side:   "uniprot" > "target" > "gene" > "name"
+ * Every value gets trimmed; empty lines and duplicates are dropped.
+ */
+function parseBulkInput(raw, preferCols) {
+  if (!raw) return [];
+  const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  if (lines.length === 0) return [];
+
+  // CSV detection: header line contains any of the preferred columns.
+  const first = lines[0].toLowerCase();
+  const looksCsv = first.includes(",") && preferCols.some((c) => first.includes(c));
+  if (looksCsv) {
+    const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
+    let col = -1;
+    for (const c of preferCols) {
+      const idx = headers.indexOf(c);
+      if (idx !== -1) { col = idx; break; }
+    }
+    if (col === -1) col = 0; // fall back to first column
+    return lines
+      .slice(1)
+      .map((row) => (row.split(",")[col] || "").trim().replace(/^"|"$/g, ""))
+      .filter(Boolean);
+  }
+  // Plain text — one entry per line, or comma-separated on a single line
+  if (lines.length === 1 && lines[0].includes(",")) {
+    return lines[0].split(",").map((v) => v.trim()).filter(Boolean);
+  }
+  return lines;
+}
+
+function BulkImportPanel({ kind, resolver, existingKey, onAdded, onClose, color }) {
+  // kind: 'compound' | 'target'   resolver: async (query) => resolved obj
+  const [raw, setRaw] = useState("");
+  const [progress, setProgress] = useState(null); // {done, total, current}
+  const inputRef = useRef(null);
+
+  const readFile = async (file) => {
+    if (!file) return;
+    const text = await file.text();
+    setRaw(text);
+  };
+
+  const run = async () => {
+    const cols = kind === "compound"
+      ? ["smiles", "compound", "name"]
+      : ["uniprot", "target", "gene", "name"];
+    const entries = Array.from(new Set(parseBulkInput(raw, cols)));
+    if (!entries.length) {
+      toast.error("Nothing to import — paste at least one entry per line");
+      return;
+    }
+    setProgress({ done: 0, total: entries.length, current: entries[0] });
+    let ok = 0, skipped = 0, failed = 0;
+    for (let i = 0; i < entries.length; i++) {
+      const q = entries[i];
+      setProgress({ done: i, total: entries.length, current: q });
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        const data = await resolver(q);
+        const key = existingKey(data);
+        // De-dup vs already-added entries via the parent callback
+        const added = onAdded(data, key);
+        if (added) ok++; else skipped++;
+      } catch {
+        failed++;
+      }
+    }
+    setProgress(null);
+    setRaw("");
+    toast.success(`Bulk import: ${ok} added, ${skipped} duplicates, ${failed} failed`);
+    onClose();
+  };
+
+  return (
+    <div
+      data-testid={`${kind}-bulk-panel`}
+      className="mt-3 rounded-2xl border border-dashed border-[#5139ED]/40 bg-[#F5F3FE]/60 p-3"
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-[12px] font-semibold text-[#5139ED]">
+          <ListPlus className="h-3.5 w-3.5" /> Bulk import — paste one per line OR upload a CSV
+        </div>
+        <button
+          onClick={onClose}
+          data-testid={`${kind}-bulk-close`}
+          className="text-[11px] text-[#94A3B8] hover:text-[#5139ED]"
+        >
+          close
+        </button>
+      </div>
+      <textarea
+        data-testid={`${kind}-bulk-textarea`}
+        value={raw}
+        onChange={(e) => setRaw(e.target.value)}
+        rows={5}
+        placeholder={
+          kind === "compound"
+            ? "curcumin\nquercetin\nresveratrol\n\n… or paste CSV with a `compound` or `smiles` column"
+            : "EGFR\nAKT1\nTP53\n\n… or paste CSV with a `target` or `uniprot` column"
+        }
+        className="mt-2 h-28 w-full resize-y rounded-lg border border-[#E7E7F3] bg-white p-2 font-mono text-[11.5px] outline-none focus:border-[#5139ED]/50 focus:ring-2 focus:ring-[#5139ED]/15"
+      />
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".csv,.txt,text/csv,text/plain"
+          data-testid={`${kind}-bulk-file`}
+          onChange={(e) => readFile(e.target.files?.[0])}
+          className="hidden"
+        />
+        <button
+          onClick={() => inputRef.current?.click()}
+          disabled={!!progress}
+          className="inline-flex items-center gap-1 rounded-full border border-[#E7E7F3] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#0B0B18] hover:border-[#5139ED]/40"
+        >
+          <Upload className="h-3 w-3" /> Upload CSV / TXT
+        </button>
+        <button
+          data-testid={`${kind}-bulk-run`}
+          onClick={run}
+          disabled={!!progress || !raw.trim()}
+          className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-bold text-white transition disabled:pointer-events-none disabled:opacity-50"
+          style={{ background: color }}
+        >
+          {progress ? <Loader2 className="h-3 w-3 animate-spin" /> : <ListPlus className="h-3 w-3" />}
+          {progress ? `Resolving ${progress.done}/${progress.total}…` : "Import & resolve all"}
+        </button>
+        {progress && (
+          <span className="truncate text-[10.5px] text-[#64748B]" data-testid={`${kind}-bulk-progress`}>
+            Current: {progress.current}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ─────────────────────────── Main ─────────────────────────── */
 export default function StandaloneDockingInput() {
   const { setSelectedCompounds, setCompoundTargets, setIntersectingGenes } = useNetwork();
@@ -140,10 +284,12 @@ export default function StandaloneDockingInput() {
   const [compoundQuery, setCompoundQuery] = useState("");
   const [compoundBusy, setCompoundBusy] = useState(false);
   const [compoundList, setCompoundList] = useState([]);    // resolved compounds
+  const [compoundBulkOpen, setCompoundBulkOpen] = useState(false);
 
   const [targetQuery, setTargetQuery] = useState("");
   const [targetBusy, setTargetBusy] = useState(false);
   const [targetList, setTargetList] = useState([]);        // resolved targets
+  const [targetBulkOpen, setTargetBulkOpen] = useState(false);
 
   const [advOpen, setAdvOpen] = useState(false);
   const [advSmiles, setAdvSmiles] = useState("");
@@ -310,7 +456,35 @@ export default function StandaloneDockingInput() {
               {compoundBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
               Add
             </button>
+            <button
+              type="button"
+              data-testid="compound-bulk-toggle"
+              onClick={() => setCompoundBulkOpen((v) => !v)}
+              title="Import multiple compounds from a list or CSV"
+              className="inline-flex items-center gap-1 rounded-full border border-[#2BB673]/40 bg-white px-3 py-2 text-[11.5px] font-semibold text-[#2BB673] hover:bg-[#F0FDF4]"
+            >
+              <ListPlus className="h-3.5 w-3.5" /> Bulk
+            </button>
           </div>
+          {compoundBulkOpen && (
+            <BulkImportPanel
+              kind="compound"
+              color="#2BB673"
+              resolver={compoundLookup}
+              existingKey={(d) => (d.name || "").toLowerCase() + ":" + (d.pubchem_cid || "")}
+              onClose={() => setCompoundBulkOpen(false)}
+              onAdded={(data) => {
+                const key = (data.name || "").toLowerCase();
+                let added = false;
+                setCompoundList((prev) => {
+                  if (prev.some((c) => (c.name || "").toLowerCase() === key)) return prev;
+                  added = true;
+                  return [...prev, data];
+                });
+                return added;
+              }}
+            />
+          )}
           {compoundList.length > 0 && (
             <ul data-testid="compound-list" className="mt-4 space-y-2">
               {compoundList.map((c, i) => (
@@ -369,7 +543,35 @@ export default function StandaloneDockingInput() {
               {targetBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
               Add
             </button>
+            <button
+              type="button"
+              data-testid="target-bulk-toggle"
+              onClick={() => setTargetBulkOpen((v) => !v)}
+              title="Import multiple targets from a list or CSV"
+              className="inline-flex items-center gap-1 rounded-full border border-[#DB2777]/40 bg-white px-3 py-2 text-[11.5px] font-semibold text-[#DB2777] hover:bg-[#FDF2F8]"
+            >
+              <ListPlus className="h-3.5 w-3.5" /> Bulk
+            </button>
           </div>
+          {targetBulkOpen && (
+            <BulkImportPanel
+              kind="target"
+              color="#DB2777"
+              resolver={targetResolve}
+              existingKey={(d) => (d.uniprot_id || "").toLowerCase()}
+              onClose={() => setTargetBulkOpen(false)}
+              onAdded={(data) => {
+                const key = (data.uniprot_id || "").toLowerCase();
+                let added = false;
+                setTargetList((prev) => {
+                  if (prev.some((t) => (t.uniprot_id || "").toLowerCase() === key)) return prev;
+                  added = true;
+                  return [...prev, data];
+                });
+                return added;
+              }}
+            />
+          )}
           {targetList.length > 0 && (
             <ul data-testid="target-list" className="mt-4 space-y-2">
               {targetList.map((t, i) => (
