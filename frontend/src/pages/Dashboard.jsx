@@ -59,7 +59,7 @@ export default function Dashboard() {
   }), [debits, projects]);
 
   if (!user) return null;
-  const welcomeBonus = 100;
+  const welcomeBonus = 10;
   const remaining = balance;
 
   return (

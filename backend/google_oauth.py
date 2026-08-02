@@ -142,7 +142,7 @@ def build_router(db, auth_service):
                 "created_at": now,
                 "last_login_at": now,
                 "oauth_provider": "google",
-                "nodes_balance": 100,
+                "nodes_balance": 10,
                 "nodes_lifetime_used": 0,
                 "nodes_lifetime_purchased": 0,
                 "welcome_bonus_granted": True,

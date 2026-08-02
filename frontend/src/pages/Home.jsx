@@ -825,7 +825,15 @@ function Pricing() {
                 <ul className="mt-5 space-y-2 text-[13px] text-[#374151]">
                   <li className="flex items-start gap-2">
                     <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#5139ED]" />
-                    Access every premium AI workflow
+                    <span>
+                      <span className="font-semibold text-[#0B0B18]">10 nodes</span> per PhytoNet AI agent run
+                    </span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#5139ED]" />
+                    <span>
+                      <span className="font-semibold text-[#0B0B18]">5 nodes</span> per Molecular Docking job
+                    </span>
                   </li>
                   <li className="flex items-start gap-2">
                     <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#5139ED]" />

@@ -103,7 +103,7 @@ def build_router(db, get_current_user):
 
     async def _ensure_node_fields(user_doc: dict) -> dict:
         """Backfill node fields for existing users who registered before this
-        service went live. Grants the 100-node welcome bonus one time, then
+        service went live. Grants the 10-node welcome bonus one time, then
         writes back so future requests are O(1).
         """
         if user_doc.get("welcome_bonus_granted") is True:
@@ -112,7 +112,7 @@ def build_router(db, get_current_user):
         await users.update_one(
             {"_id": user_doc["_id"]},
             {"$set": {
-                "nodes_balance": 100,
+                "nodes_balance": 10,
                 "nodes_lifetime_used": user_doc.get("nodes_lifetime_used", 0),
                 "nodes_lifetime_purchased": user_doc.get("nodes_lifetime_purchased", 0),
                 "welcome_bonus_granted": True,
@@ -122,8 +122,8 @@ def build_router(db, get_current_user):
         await ledger.insert_one({
             "user_id": str(user_doc["_id"]),
             "direction": "credit",
-            "amount": 100,
-            "balance_after": 100,
+            "amount": 10,
+            "balance_after": 10,
             "module": "system",
             "workflow": "welcome_bonus",
             "reason": "One-time welcome bonus",
@@ -131,7 +131,7 @@ def build_router(db, get_current_user):
             "meta": {},
             "at": now,
         })
-        user_doc["nodes_balance"] = 100
+        user_doc["nodes_balance"] = 10
         user_doc["welcome_bonus_granted"] = True
         return user_doc
 

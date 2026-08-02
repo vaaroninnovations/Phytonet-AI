@@ -290,9 +290,9 @@ def build_router(db, frontend_url: str = ""):
             "email_verified": False,
             "account_type": "user",
             "created_at": datetime.now(timezone.utc),
-            # Node credit system — every new user gets a one-time 100-node welcome bonus.
+            # Node credit system — every new user gets a one-time 10-node welcome bonus.
             # Additional purchases update these atomically in the /api/nodes routes.
-            "nodes_balance": 100,
+            "nodes_balance": 10,
             "nodes_lifetime_used": 0,
             "nodes_lifetime_purchased": 0,
             "welcome_bonus_granted": True,

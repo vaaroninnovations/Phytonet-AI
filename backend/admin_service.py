@@ -390,7 +390,7 @@ DEFAULT_SETTINGS = {
             {"id": "research", "label": "Research", "nodes": 25, "price_inr": 500, "highlight": True, "badge": "Most Popular"},
             {"id": "professional", "label": "Professional", "nodes": 60, "price_inr": 1000},
         ],
-        "welcome_bonus": 100,
+        "welcome_bonus": 10,
         "module_costs": {
             "phytonet-ai-agent": 10,
             "molecular-docking": 5,
