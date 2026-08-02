@@ -9,13 +9,14 @@ Endpoints
   GET  /api/nodes/balance            → current user's balance + lifetime stats
   POST /api/nodes/charge             → atomic deduction; idempotent by job_id
   GET  /api/nodes/history            → paginated ledger (newest first)
-  GET  /api/nodes/pricing            → static pricing plans (shell — no live
-                                       payment provider yet; see PRD)
-  POST /api/nodes/purchase-intent    → placeholder "coming soon" purchase
-                                       intent that pretends to queue the
-                                       transaction and returns a client-visible
-                                       tracking id (real Razorpay/Stripe will
-                                       replace this in a follow-up).
+  GET  /api/nodes/pricing            → static pricing plans
+  POST /api/nodes/purchase-intent    → Razorpay Standard Checkout — creates an
+                                       order and returns { order_id, amount,
+                                       currency, razorpay_key_id } so the
+                                       browser can open the checkout modal.
+  POST /api/nodes/verify-payment     → verifies the Razorpay HMAC signature,
+                                       credits nodes on success and appends a
+                                       ledger entry. Idempotent by order_id.
 
 Node ledger — MongoDB collection `node_transactions`
 ────────────────────────────────────────────────────
@@ -35,12 +36,29 @@ mutation goes through the same atomic pipeline (see `_apply_transaction`).
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
+import logging
+import os
 from datetime import datetime, timezone
 from typing import Optional
 
+import razorpay
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from bson import ObjectId
+
+logger = logging.getLogger(__name__)
+
+
+# ── Razorpay client — lazily instantiated so the module still imports when
+#    keys are unset (e.g. local dev without a payment gateway).
+def _razorpay_client() -> Optional[razorpay.Client]:
+    key_id = os.environ.get("RAZORPAY_KEY_ID")
+    key_secret = os.environ.get("RAZORPAY_KEY_SECRET")
+    if not (key_id and key_secret):
+        return None
+    return razorpay.Client(auth=(key_id, key_secret))
 
 
 # ── Static pricing plans (INR) — kept here so the frontend can pull from
@@ -92,6 +110,12 @@ class ChargePayload(BaseModel):
 
 class PurchaseIntentPayload(BaseModel):
     plan_id: str = Field(..., min_length=2, max_length=32)
+
+
+class VerifyPaymentPayload(BaseModel):
+    razorpay_order_id: str = Field(..., min_length=6, max_length=64)
+    razorpay_payment_id: str = Field(..., min_length=6, max_length=64)
+    razorpay_signature: str = Field(..., min_length=6, max_length=256)
 
 
 def build_router(db, get_current_user):
@@ -262,29 +286,179 @@ def build_router(db, get_current_user):
     @router.post("/purchase-intent")
     async def purchase_intent(payload: PurchaseIntentPayload,
                               user=Depends(get_current_user)):
-        # SHELL — no live payment provider is wired yet. When the user
-        # configures Razorpay we'll expand this to create an order + secret.
+        """Create a Razorpay order for the requested plan.
+
+        The browser passes the returned `order_id` + `razorpay_key_id` straight
+        into the Razorpay Standard Checkout widget. Amount is denominated in
+        paise (Razorpay's smallest unit — 100 paise = 1 INR).
+        """
         plan = next((p for p in PRICING_PLANS if p["id"] == payload.plan_id), None)
         if not plan:
             raise HTTPException(status_code=404, detail=f"Unknown plan '{payload.plan_id}'")
+
+        client = _razorpay_client()
+        if client is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Payment gateway not configured — set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.",
+            )
+
+        amount_paise = int(plan["price_inr"]) * 100
+        if amount_paise < 100:  # Razorpay minimum
+            raise HTTPException(status_code=400, detail="Plan amount below Razorpay minimum (100 paise).")
+
         now = datetime.now(timezone.utc)
-        # Persist the intent so the follow-up payment integration can look it up.
-        res = await db["purchase_intents"].insert_one({
+        # Local intent doc — created first so we always have a reference even if
+        # the Razorpay order call ends up erroring below.
+        intent = await db["purchase_intents"].insert_one({
             "user_id": str(user["_id"]),
             "plan_id": plan["id"],
             "nodes": plan["nodes"],
             "amount_inr": plan["price_inr"],
-            "status": "coming_soon",  # will become "created"/"paid"/"failed" once live
+            "amount_paise": amount_paise,
+            "status": "created",
             "created_at": now,
         })
+
+        try:
+            # Receipt is capped at 40 chars by Razorpay; the intent id is 24.
+            order = client.order.create({
+                "amount": amount_paise,
+                "currency": "INR",
+                "receipt": f"phy-{intent.inserted_id}",
+                "notes": {
+                    "user_id": str(user["_id"]),
+                    "plan_id": plan["id"],
+                    "nodes": str(plan["nodes"]),
+                },
+            })
+        except razorpay.errors.BadRequestError as e:
+            logger.exception("razorpay order.create BadRequest")
+            await db["purchase_intents"].update_one(
+                {"_id": intent.inserted_id},
+                {"$set": {"status": "failed", "error": str(e)}},
+            )
+            raise HTTPException(status_code=400, detail=f"Razorpay rejected the order: {e}")
+        except Exception as e:
+            logger.exception("razorpay order.create failed")
+            await db["purchase_intents"].update_one(
+                {"_id": intent.inserted_id},
+                {"$set": {"status": "failed", "error": str(e)}},
+            )
+            raise HTTPException(status_code=500, detail="Could not create Razorpay order.")
+
+        await db["purchase_intents"].update_one(
+            {"_id": intent.inserted_id},
+            {"$set": {
+                "razorpay_order_id": order["id"],
+                "razorpay_order_status": order.get("status"),
+            }},
+        )
+
         return {
-            "id": str(res.inserted_id),
+            "id": str(intent.inserted_id),
             "plan": plan,
-            "status": "coming_soon",
-            "message": (
-                "Payment gateway is being configured. Your intent has been "
-                "recorded — we'll notify you once purchases go live."
-            ),
+            "order_id": order["id"],
+            "amount": amount_paise,
+            "currency": "INR",
+            "razorpay_key_id": os.environ["RAZORPAY_KEY_ID"],
+            "prefill": {
+                "name": " ".join(x for x in [user.get("first_name"), user.get("last_name")] if x) or user.get("email", ""),
+                "email": user.get("email", ""),
+            },
+        }
+
+    @router.post("/verify-payment")
+    async def verify_payment(payload: VerifyPaymentPayload,
+                             user=Depends(get_current_user)):
+        """Verify Razorpay HMAC signature and credit nodes atomically.
+
+        Razorpay signs `order_id + "|" + payment_id` with HMAC-SHA256 keyed by
+        the KEY_SECRET. If the signatures match we credit the plan's nodes and
+        record a ledger entry. Idempotent — verifying the same order twice
+        never credits twice.
+        """
+        key_secret = os.environ.get("RAZORPAY_KEY_SECRET")
+        if not key_secret:
+            raise HTTPException(status_code=503, detail="Payment gateway not configured.")
+
+        # 1. HMAC verification (do NOT trust anything on the wire before this).
+        expected = hmac.new(
+            key_secret.encode("utf-8"),
+            f"{payload.razorpay_order_id}|{payload.razorpay_payment_id}".encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+        if not hmac.compare_digest(expected, payload.razorpay_signature):
+            raise HTTPException(status_code=400, detail="Invalid payment signature.")
+
+        # 2. Match the order to a local intent that belongs to this user.
+        intent = await db["purchase_intents"].find_one({
+            "razorpay_order_id": payload.razorpay_order_id,
+            "user_id": str(user["_id"]),
+        })
+        if not intent:
+            raise HTTPException(status_code=404, detail="Unknown Razorpay order for this user.")
+
+        # 3. Idempotency — if we've already credited this order, return the
+        #    existing balance instead of double-crediting.
+        if intent.get("status") == "paid":
+            fresh = await users.find_one({"_id": user["_id"]})
+            return {
+                "ok": True,
+                "already_verified": True,
+                "credited": intent.get("nodes", 0),
+                "balance_after": fresh.get("nodes_balance", 0),
+            }
+
+        # 4. Atomic credit + ledger entry (same pipeline used by welcome bonus).
+        credited = int(intent.get("nodes", 0))
+        amount_inr = int(intent.get("amount_inr", 0))
+        if credited <= 0:
+            raise HTTPException(status_code=500, detail="Purchase intent has no node quantity.")
+
+        now = datetime.now(timezone.utc)
+        upd = await users.find_one_and_update(
+            {"_id": user["_id"]},
+            {"$inc": {
+                "nodes_balance": credited,
+                "nodes_lifetime_purchased": credited,
+            }},
+            return_document=True,
+        )
+        balance_after = upd.get("nodes_balance", credited) if upd else credited
+
+        await ledger.insert_one({
+            "user_id": str(user["_id"]),
+            "direction": "credit",
+            "amount": credited,
+            "balance_after": balance_after,
+            "module": "system",
+            "workflow": "razorpay_purchase",
+            "reason": f"Purchased plan {intent.get('plan_id')} (₹{amount_inr})",
+            "job_id": None,
+            "meta": {
+                "razorpay_order_id": payload.razorpay_order_id,
+                "razorpay_payment_id": payload.razorpay_payment_id,
+                "plan_id": intent.get("plan_id"),
+                "amount_inr": amount_inr,
+            },
+            "at": now,
+        })
+
+        await db["purchase_intents"].update_one(
+            {"_id": intent["_id"]},
+            {"$set": {
+                "status": "paid",
+                "razorpay_payment_id": payload.razorpay_payment_id,
+                "paid_at": now,
+            }},
+        )
+
+        return {
+            "ok": True,
+            "already_verified": False,
+            "credited": credited,
+            "balance_after": balance_after,
         }
 
     return router

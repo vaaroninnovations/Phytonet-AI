@@ -93,6 +93,8 @@ export const getNodeHistory = (params = {}) =>
 export const getNodePricing = () => api.get("/nodes/pricing").then((r) => r.data);
 export const createPurchaseIntent = (plan_id) =>
   api.post("/nodes/purchase-intent", { plan_id }).then((r) => r.data);
+export const verifyPayment = (payload) =>
+  api.post("/nodes/verify-payment", payload).then((r) => r.data);
 
 // ── Profile / preferences ─────────────────────────────────────────
 export const updateProfile = (payload) =>

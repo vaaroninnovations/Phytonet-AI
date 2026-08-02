@@ -10,7 +10,8 @@
 import { useState, useEffect } from "react";
 import { X, Check, Loader2, Sparkles, ShieldAlert, Wallet, Info } from "lucide-react";
 import { useNodes } from "@/context/NodeContext";
-import { getNodePricing, createPurchaseIntent } from "@/lib/api";
+import { getNodePricing, createPurchaseIntent, verifyPayment } from "@/lib/api";
+import { openRazorpayCheckout } from "@/lib/razorpay";
 import { toast } from "sonner";
 import { GoldenLeaf } from "@/components/nodes/NodeBadge";
 
@@ -45,7 +46,7 @@ function ModalShell({ open, onClose, children, testid, size = "md" }) {
 
 /* ─────────────────────── PurchaseNodesModal ─────────────────────── */
 export function PurchaseNodesModal() {
-  const { purchaseOpen, closePurchase, balance } = useNodes();
+  const { purchaseOpen, closePurchase, balance, refresh } = useNodes();
   const [plans, setPlans] = useState([]);
   const [busy, setBusy] = useState(null);
 
@@ -57,14 +58,49 @@ export function PurchaseNodesModal() {
   const buy = async (planId) => {
     setBusy(planId);
     try {
-      const d = await createPurchaseIntent(planId);
-      toast.message("Payment gateway coming soon", {
-        description: d.message,
-        duration: 6000,
+      // 1. Create a Razorpay order on the backend for this plan.
+      const intent = await createPurchaseIntent(planId);
+
+      // 2. Open the Standard Checkout modal against that order.
+      await openRazorpayCheckout({
+        intent,
+        onSuccess: async (resp) => {
+          // 3. Backend verifies the HMAC signature, credits nodes atomically
+          //    and returns the fresh balance. Only trust it after this call.
+          try {
+            const r = await verifyPayment({
+              razorpay_order_id: resp.razorpay_order_id,
+              razorpay_payment_id: resp.razorpay_payment_id,
+              razorpay_signature: resp.razorpay_signature,
+            });
+            toast.success(
+              r.already_verified
+                ? "Payment already verified"
+                : `Purchase successful — ${r.credited} nodes added to your balance`,
+              { description: `New balance: ${r.balance_after} nodes`, duration: 6000 },
+            );
+            refresh?.();
+            closePurchase();
+          } catch (e) {
+            toast.error(
+              e?.response?.data?.detail
+                || "Payment received but verification failed. Please contact support with your payment ID.",
+            );
+          } finally {
+            setBusy(null);
+          }
+        },
+        onFailure: (err) => {
+          toast.error(err?.description || err?.message || "Payment failed. Please try again.");
+          setBusy(null);
+        },
+        onDismiss: () => {
+          // User closed the modal without paying — no toast needed, silent.
+          setBusy(null);
+        },
       });
     } catch (e) {
-      toast.error(e?.response?.data?.detail || "Could not create purchase intent");
-    } finally {
+      toast.error(e?.response?.data?.detail || e?.message || "Could not start checkout.");
       setBusy(null);
     }
   };
@@ -133,7 +169,7 @@ export function PurchaseNodesModal() {
         <div className="flex items-start gap-2">
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#5139ED]" />
           <span>
-            Payment gateway is being configured. Clicking "Buy plan" records your interest — we'll notify you the moment purchases go live.
+            Payments are processed securely by Razorpay. Nodes are credited to your account the moment your payment is verified.
           </span>
         </div>
       </div>
