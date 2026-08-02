@@ -392,9 +392,27 @@ export default function DrugLikeness() {
     );
   };
 
+  // ── Standalone Workflow Info Card wiring ────────────────────────────────
+  const moduleInfo = useMemo(() => ({
+    title: "ADMET & Drug-Likeness",
+    moduleTag: "Module · 02",
+    description:
+      "Predict absorption, distribution, metabolism, excretion, toxicity and drug-likeness metrics for your compound set. Filter, weight and rank candidates before advancing to target prediction and docking.",
+    databases: ["ADMET-AI", "Chemprop", "Lipinski Ro5", "Veber", "Ghose"],
+  }), []);
+  const currentStep = useMemo(() => {
+    if (inputCount === 0) return 0;                          // Input
+    if (status === "queued") return 1;                        // Validation
+    if (status === "running") return 2;                       // Processing
+    if (status === "done" && rows.length === 0) return 3;     // Analysis (post-run, waiting for filters)
+    if (rows.length > 0 && finalCount === 0) return 3;        // Analysis (rows shown, none picked)
+    if (rows.length > 0 && finalCount > 0) return 4;          // Results
+    return 0;
+  }, [inputCount, status, rows.length, finalCount]);
+
   if (inputCount === 0) {
     return (
-      <WorkflowLayout>
+      <WorkflowLayout moduleInfo={moduleInfo} currentStep={currentStep}>
         {standalone ? (
           <StandaloneSMILESInput
             title="ADMET & Drug-Likeness Analysis"
@@ -408,7 +426,7 @@ export default function DrugLikeness() {
   }
 
   return (
-    <WorkflowLayout>
+    <WorkflowLayout moduleInfo={moduleInfo} currentStep={currentStep}>
       <TooltipProvider delayDuration={150}>
         <main
           data-testid="admet-page"

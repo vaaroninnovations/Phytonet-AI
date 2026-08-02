@@ -408,16 +408,33 @@ export default function MolecularDocking() {
   ];
 
   const noInputs = compoundOptions.length === 0 || targetOptions.length === 0;
+
+  // ── Standalone Workflow Info Card wiring ────────────────────────────────
+  const moduleInfo = useMemo(() => ({
+    title: "Molecular Docking",
+    moduleTag: "Module · 06",
+    description:
+      "Bind selected phytochemicals to their predicted protein targets using AutoDock Vina. Auto-fetches receptor structures from RCSB PDB, prepares ligands via Meeko/RDKit, and reports binding affinity plus 3D poses ready for publication.",
+    databases: ["AutoDock Vina", "RCSB PDB", "Meeko", "RDKit", "UniProt"],
+  }), []);
+  const currentStep = useMemo(() => {
+    if (noInputs) return 0;
+    if (running) return progressDone > 0 ? 2 : 1;
+    if (result && result.results?.length > 0) return 4;
+    if (selectedComp.length > 0 && selectedGenes.length > 0) return 3;
+    return 0;
+  }, [noInputs, running, progressDone, result, selectedComp.length, selectedGenes.length]);
+
   if (noInputs) {
     if (standalone) {
       return (
-        <WorkflowLayout>
+        <WorkflowLayout moduleInfo={moduleInfo} currentStep={currentStep}>
           <StandaloneDockingInput />
         </WorkflowLayout>
       );
     }
     return (
-      <WorkflowLayout>
+      <WorkflowLayout moduleInfo={moduleInfo} currentStep={currentStep}>
         <main data-testid="dock-empty" className="mx-auto max-w-3xl px-6 pb-24 pt-14 text-center">
           <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-[#5139ED]/10 text-[#5139ED]"><Beaker className="h-6 w-6" /></div>
           <h1 className="mt-6 font-display text-4xl font-bold tracking-tight text-[#0B0B18]">Molecular Docking</h1>
@@ -429,7 +446,7 @@ export default function MolecularDocking() {
   }
 
   return (
-    <WorkflowLayout>
+    <WorkflowLayout moduleInfo={moduleInfo} currentStep={currentStep}>
       <main data-testid="molecular-docking-page" className="mx-auto max-w-7xl px-6 pb-24 pt-14">
         <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">Module · 06</p>
         <h1 className="mt-3 font-display text-4xl font-bold tracking-tight text-[#0B0B18] sm:text-5xl">Molecular Docking</h1>

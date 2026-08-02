@@ -229,8 +229,24 @@ export default function DiseaseTargets() {
     navigate("/network-analysis");
   };
 
+  // ── Standalone Workflow Info Card wiring ────────────────────────────────
+  const moduleInfo = useMemo(() => ({
+    title: "Disease Target Identification",
+    moduleTag: "Module · 04",
+    description:
+      "Retrieve disease-associated human genes from Open Targets, CTD, NCBI Gene and UniProt Disease — normalized via HGNC. Filter by evidence and consensus confidence, then hand off high-quality targets to Network Analysis.",
+    databases: ["Open Targets", "CTD", "NCBI Gene", "UniProt", "HGNC"],
+  }), []);
+  const currentStep = useMemo(() => {
+    if (!chosen) return 0;
+    if (loadingTargets) return 2;
+    if (rows.length === 0) return 1;
+    if (selectedCount === 0) return 3;
+    return 4;
+  }, [chosen, loadingTargets, rows.length, selectedCount]);
+
   return (
-    <WorkflowLayout>
+    <WorkflowLayout moduleInfo={moduleInfo} currentStep={currentStep}>
       <TooltipProvider delayDuration={150}>
         <main
           data-testid="disease-page"

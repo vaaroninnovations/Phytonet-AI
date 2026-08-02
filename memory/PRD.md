@@ -843,3 +843,28 @@ Refined the botanical Plant Information card per user request:
 **File**: `/app/frontend/src/pages/PlantDatabase/parts/PlantInfoCard.jsx`
 
 **Verification**: screenshot on `Withania somnifera` confirms the new left/right layout and the download pill inside the lightbox.
+
+## Implemented (2026-02-15) — Standalone Workflow Information Card
+
+Every standalone module (`/plant-database`, `/admet`, `/compound-target-prediction`, `/disease-target-prediction`, `/dock`) now renders a sticky **Workflow Information Card** on the left column (25-30% width, 300-340px). The main module UI occupies the right column (70-75%). On mobile the card stacks above the content and can be collapsed via a chevron toggle. Guided workflow (`/phytonet-ai`) is unaffected — it continues to render the step-tracker sidebar.
+
+**New files**
+- `/app/frontend/src/components/WorkflowInfoCard.jsx` — sticky glass-morphism card with numbered vertical timeline (6 default steps: Input → Data Validation → Processing → Analysis → Results → Download/Export), progress ribbon ("Step X of Y" + %), Lucide-icon step markers with active/done state colouring, supported-databases chip row, and mobile collapse toggle.
+
+**Modified files**
+- `/app/frontend/src/components/WorkflowLayout.jsx` — accepts optional `moduleInfo` and `currentStep` props. When standalone + moduleInfo → renders 2-column responsive layout (sticky info card left + children right). Legacy behaviour preserved when props are omitted.
+- `/app/frontend/src/pages/PlantDatabase/index.jsx` — new `hasOuterLayout` prop; when true the outer wrapper is owned by the parent (PhytoNetAI guided flow). Direct route wraps itself in WorkflowLayout with moduleInfo.
+- `/app/frontend/src/pages/PhytoNetAI.jsx` — passes `hasOuterLayout` to avoid double-wrapping.
+- `/app/frontend/src/pages/DrugLikeness/index.jsx`, `/app/frontend/src/pages/TargetPrediction.jsx`, `/app/frontend/src/pages/DiseaseTargets.jsx`, `/app/frontend/src/pages/MolecularDocking.jsx` — each declares `moduleInfo` (title, tag, description, supported databases) and derives `currentStep` (0-5) from its own state (loading, results, selection counts). Passed to WorkflowLayout.
+
+**Per-module supported databases**
+- Plant Database: IMPPAT · LOTUS · PubChem · InChI
+- ADMET & Drug-Likeness: ADMET-AI · Chemprop · Lipinski Ro5 · Veber · Ghose
+- Compound Target Prediction: ChEMBL · SwissTargetPrediction · UniProt · STITCH · PubChem BioAssay
+- Disease Target Identification: Open Targets · CTD · NCBI Gene · UniProt · HGNC
+- Molecular Docking: AutoDock Vina · RCSB PDB · Meeko · RDKit · UniProt
+
+**Backend/analysis pipeline**: unchanged. Purely frontend enhancement.
+
+**Verification**: screenshotted all 5 standalone routes at desktop viewport; step highlighting updates live as the researcher progresses (verified on `/plant-database` — Step 1 (Input) → Step 4 (Analysis) after a Withania somnifera search).
+

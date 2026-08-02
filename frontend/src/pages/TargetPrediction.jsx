@@ -253,10 +253,27 @@ export default function TargetPrediction() {
     navigate("/disease-target-identification");
   };
 
+  // ── Standalone Workflow Info Card wiring ────────────────────────────────
+  const moduleInfo = useMemo(() => ({
+    title: "Compound Target Prediction",
+    moduleTag: "Module · 03",
+    description:
+      "Predict human protein targets for each phytochemical using ChEMBL, SwissTarget and similarity-based search. Rank by consensus score and select high-confidence targets for downstream network analysis.",
+    databases: ["ChEMBL", "SwissTargetPrediction", "UniProt", "STITCH", "PubChem BioAssay"],
+  }), []);
+  const currentStep = useMemo(() => {
+    if (!selectedCompounds || selectedCompounds.length === 0) return 0;
+    if (status === "running") return progress.done > 0 ? 2 : 1;
+    if (status === "done" && rows.length === 0) return 3;
+    if (rows.length > 0 && selectedCount === 0) return 3;
+    if (rows.length > 0 && selectedCount > 0) return 4;
+    return 0;
+  }, [selectedCompounds, status, progress.done, rows.length, selectedCount]);
+
   if (!selectedCompounds || selectedCompounds.length === 0) {
     if (standalone) {
       return (
-        <WorkflowLayout>
+        <WorkflowLayout moduleInfo={moduleInfo} currentStep={currentStep}>
           <StandaloneSMILESInput
             title="Compound Target Prediction"
             subtitle="Paste SMILES, upload a CSV/Excel file, or start with a curated example — no workflow prerequisite."
@@ -266,7 +283,7 @@ export default function TargetPrediction() {
       );
     }
     return (
-      <WorkflowLayout>
+      <WorkflowLayout moduleInfo={moduleInfo} currentStep={currentStep}>
         <main
           data-testid="target-empty"
           className="mx-auto max-w-3xl px-6 pb-24 pt-14 text-center"
@@ -294,7 +311,7 @@ export default function TargetPrediction() {
   }
 
   return (
-    <WorkflowLayout>
+    <WorkflowLayout moduleInfo={moduleInfo} currentStep={currentStep}>
       <TooltipProvider delayDuration={150}>
         <main
           data-testid="target-prediction-page"

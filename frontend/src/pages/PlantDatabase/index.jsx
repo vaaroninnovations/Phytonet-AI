@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useIsStandalone } from "@/hooks/useIsStandalone";
+import WorkflowLayout from "@/components/WorkflowLayout";
 import {
   searchPlant,
   lotusSimple,
@@ -80,7 +81,7 @@ const SOURCE_OPTIONS = [
   { id: "IMPPAT+LOTUS", label: "Both databases" },
 ];
 
-export default function PlantDatabase({ topRightSlot = null }) {
+export default function PlantDatabase({ topRightSlot = null, hasOuterLayout = false }) {
   const navigate = useNavigate();
   const { standalone } = useIsStandalone();
   const {
@@ -317,7 +318,24 @@ export default function PlantDatabase({ topRightSlot = null }) {
 
   const exportFields = activeFields.filter((f) => f.key !== "structure");
 
-  return (
+  // ── Standalone Workflow Info Card wiring ────────────────────────────────
+  // Static module metadata + a step index derived from the page's own state.
+  // Purely informational: it never mutates search/results state.
+  const moduleInfo = useMemo(() => ({
+    title: "Plant Database",
+    moduleTag: "Module · 01",
+    description:
+      "Retrieve phytochemicals from medicinal plants across IMPPAT and LOTUS, or query LOTUS by exact structure, substructure or molecular-weight range. Curate a working compound set for downstream ADMET, docking and network analyses.",
+    databases: ["IMPPAT", "LOTUS", "PubChem", "InChI"],
+  }), []);
+  const currentStep = useMemo(() => {
+    if (loading) return progress > 30 ? 2 : 1;         // Validation / Processing
+    if (compounds.length === 0) return 0;              // Input
+    if (selectedCount === 0) return 3;                 // Analysis (results shown, none picked)
+    return 4;                                           // Results (some picked, ready to export/continue)
+  }, [loading, progress, compounds.length, selectedCount]);
+
+  const pageJsx = (
     <main data-testid="plant-database-page" className="relative overflow-hidden">
       {/* backdrop orbs */}
       <div
@@ -997,5 +1015,15 @@ export default function PlantDatabase({ topRightSlot = null }) {
         </AlertDialogContent>
       </AlertDialog>
     </main>
+  );
+
+  // When rendered inside PhytoNetAI (guided workflow) the outer wrapper is
+  // provided by that parent; otherwise (direct route /plant-database), wrap
+  // in WorkflowLayout so the standalone Info Card is rendered on the left.
+  if (hasOuterLayout) return pageJsx;
+  return (
+    <WorkflowLayout moduleInfo={moduleInfo} currentStep={currentStep}>
+      {pageJsx}
+    </WorkflowLayout>
   );
 }
