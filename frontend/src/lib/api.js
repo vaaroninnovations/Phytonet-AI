@@ -84,6 +84,10 @@ export const compoundLookup = (name) =>
 export const targetResolve = (query, organism = "Homo sapiens") =>
   api.get("/target/resolve", { params: { query, organism } }).then((r) => r.data);
 
+// ── Docking Validation API ─────────────────────────────────────────
+export const runDockingValidation = (payload) =>
+  api.post("/docking/validate", payload).then((r) => r.data);
+
 // ── Node credit system ─────────────────────────────────────────────
 export const getNodeBalance = () => api.get("/nodes/balance").then((r) => r.data);
 export const chargeNodes = (payload) =>

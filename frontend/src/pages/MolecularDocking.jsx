@@ -7,6 +7,7 @@ import { useNodes } from "@/context/NodeContext";
 import { ChargeConfirmationDialog } from "@/components/nodes/NodeModals";
 import { GoldenLeaf } from "@/components/nodes/NodeBadge";
 import StandaloneDockingInput from "@/components/standalone/StandaloneDockingInput";
+import DockingValidationPanel from "@/components/docking/DockingValidationPanel";
 import WorkflowLayout from "@/components/WorkflowLayout";
 import { useNetwork } from "@/context/NetworkContext";
 import { useResults } from "@/context/ResultsContext";
@@ -429,7 +430,10 @@ export default function MolecularDocking() {
     if (standalone) {
       return (
         <WorkflowLayout moduleInfo={moduleInfo} currentStep={currentStep}>
-          <StandaloneDockingInput />
+          <div className="mx-auto max-w-7xl px-6">
+            <StandaloneDockingInput />
+            <DockingValidationPanel />
+          </div>
         </WorkflowLayout>
       );
     }

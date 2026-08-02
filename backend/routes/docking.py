@@ -12,6 +12,7 @@ from pydantic import BaseModel
 import deps_check
 import docking_service
 import docking_render
+import docking_validation
 import llm_groq
 
 
@@ -37,6 +38,12 @@ class DockRunRequest(BaseModel):
     exhaustiveness: int = 8
     num_modes: int = 9
     box_padding: float = 8.0
+
+
+class DockValidateRequest(BaseModel):
+    pdb_id: str
+    ligand_resname: Optional[str] = None
+    exhaustiveness: int = 8
 
 
 _DOCK_MISSING_MSG = (
@@ -83,6 +90,35 @@ def build_router() -> APIRouter:
             )
         except Exception as e:
             logging.exception("Docking batch failed")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @router.post("/docking/validate")
+    async def docking_validate(payload: DockValidateRequest):
+        """Redock the native ligand of a PDB and compute RMSD vs the crystal
+        pose — the industry-standard sanity check for a docking protocol."""
+        _check_deps()
+        try:
+            r = await docking_validation.validate_pdb(
+                pdb_id=payload.pdb_id,
+                ligand_resname=payload.ligand_resname,
+                exhaustiveness=payload.exhaustiveness,
+            )
+            return {
+                "pdb_id": r.pdb_id,
+                "ligand_resname": r.ligand_resname,
+                "ligand_smiles": r.ligand_smiles,
+                "ligand_heavy_atoms": r.ligand_heavy_atoms,
+                "redocked_affinity": r.redocked_affinity,
+                "rmsd_angstrom": r.rmsd_angstrom,
+                "validation_status": r.validation_status,
+                "notes": r.notes,
+                "job_id": r.job_id,
+                "pair_id": r.pair_id,
+            }
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            logging.exception("Docking validation failed")
             raise HTTPException(status_code=500, detail=str(e))
 
     @router.post("/docking/run/stream")
