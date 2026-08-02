@@ -50,6 +50,7 @@ import {
 import { SearchInput, NumberField, ExportButton } from "./parts/inputs";
 import { CellValue } from "./parts/CellValue";
 import { LoadingRows, EmptyState } from "./parts/tableStates";
+import PlantInfoCard from "./parts/PlantInfoCard";
 
 const ALL_FIELDS = [
   { key: "compound_name", label: "Compound Name", default: true },
@@ -344,9 +345,6 @@ export default function PlantDatabase({ topRightSlot = null }) {
 
       <section className="relative mx-auto max-w-7xl px-6 pt-14">
         <div className="max-w-3xl">
-          <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">
-            Compound Extractor · Live
-          </p>
           <h1 className="mt-3 font-display text-4xl font-bold tracking-tight text-[#0B0B18] sm:text-5xl">
             Plant Database
           </h1>
@@ -553,6 +551,11 @@ export default function PlantDatabase({ topRightSlot = null }) {
           )}
         </div>
       </section>
+
+      {/* Plant Information Card — botanical context above the compound table.
+          Renders only when a plant search has produced meta.plant. Backend /
+          compound retrieval is untouched. */}
+      <PlantInfoCard plantName={meta?.plant} />
 
       {/* Results */}
       <section className="relative mx-auto mt-10 max-w-7xl px-6 pb-40">
