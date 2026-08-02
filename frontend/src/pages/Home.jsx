@@ -911,9 +911,15 @@ export default function Home() {
 
   // Smooth-scroll to any hash target (#pricing, #faq, #how, …) whenever the
   // route hash changes. Retries a few times so it survives mount-time layout
-  // shifts (image loading, framer-motion animations).
+  // shifts (image loading, framer-motion animations). When there is NO hash,
+  // force the viewport back to the top so the browser's scroll-restoration
+  // doesn't strand fresh loads on a mid-page section (e.g. after clicking
+  // Pricing then refreshing "/").
   useEffect(() => {
-    if (!hash) return;
+    if (!hash) {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      return;
+    }
     const id = hash.replace(/^#/, "");
     let tries = 0;
     const tick = () => {
