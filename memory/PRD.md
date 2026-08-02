@@ -832,3 +832,14 @@ Extended the admin Users page from read-only to full user lifecycle management. 
 - P2: Continue MD Execution work per user's earlier question (still pending decision on option a/b/c/d/e).
 - P3: Optional — send a notification email when admin resets a user's password (once SMTP is production-configured on Hostinger).
 - P3: Cross-user audit-log filtering (search audit log by target user).
+
+
+## Implemented (2026-02-15) — PlantInfoCard Layout & Download Button
+Refined the botanical Plant Information card per user request:
+- **Layout**: single hero image (Whole Plant) on the LEFT (2/5 width) with the "Traditional medicinal uses" description on the RIGHT (3/5 width). The second "Medicinal Part Used" tile was removed for a cleaner reading experience; the medicinal part is now surfaced as a pill badge ("Part used: Root", etc.) beneath the description.
+- **Lightbox Download**: added a `Camera`-icon "Download image" pill floating at the top-left of the lightbox modal. Clicking it triggers a real "Save As" via `fetch → blob → <a download>` when CORS permits; if Wikimedia blocks the fetch, it falls back to opening the original-resolution file in a new tab so the user can right-click → Save.
+- **File cleanup**: dropped the `fetchArticleImages`/`WIKI_MEDIALIST` helper (no longer needed with a single image), removed unused `medicinalPartUrl`, and updated the top-of-file docstring.
+
+**File**: `/app/frontend/src/pages/PlantDatabase/parts/PlantInfoCard.jsx`
+
+**Verification**: screenshot on `Withania somnifera` confirms the new left/right layout and the download pill inside the lightbox.

@@ -1,14 +1,15 @@
 // PlantInfoCard — botanical info card shown above the compound results.
-// Two images: whole plant + medicinal part used. Data source: Wikipedia REST
-// API (summary + media-list endpoints, free, no auth). Family and medicinal-
-// part label come from vetted hint maps for common medicinal genera.
+// Left: hero image (whole plant). Right: description + medicinal part label.
+// Data source: Wikipedia REST API (summary + media-list endpoints, free, no
+// auth). Family and medicinal-part label come from vetted hint maps for common
+// medicinal genera. Lightbox includes a "Download image" button that pulls the
+// original-resolution file from Wikimedia Commons.
 //
 // FRONTEND-ONLY — the compound retrieval pipeline is untouched.
 import { useEffect, useState, useCallback } from "react";
-import { Loader2, ExternalLink, Leaf, X, ZoomIn } from "lucide-react";
+import { Loader2, ExternalLink, Leaf, X, ZoomIn, Camera } from "lucide-react";
 
 const WIKI_SUMMARY   = "https://en.wikipedia.org/api/rest_v1/page/summary/";
-const WIKI_MEDIALIST = "https://en.wikipedia.org/api/rest_v1/page/media-list/";
 const WIKIDATA_ENT   = "https://www.wikidata.org/wiki/Special:EntityData/";
 
 // ── botanical fallback family map for common Ayurvedic/medicinal genera ──
@@ -43,34 +44,7 @@ const MEDICINAL_PART_HINTS = {
   papaver: "Latex / capsule",
 };
 
-/** Pick the top N reasonably-sized images from Wikipedia's media list. Filters
- *  out logos, icons, SVG diagrams, and taxonomic tree images so we get real
- *  photographs of the plant. */
-async function fetchArticleImages(title, wantN = 2) {
-  const url = WIKI_MEDIALIST + encodeURIComponent(title);
-  const res = await fetch(url);
-  if (!res.ok) return [];
-  const j = await res.json();
-  const items = (j.items || [])
-    .filter((it) => it.type === "image")
-    .filter((it) => {
-      const t = (it.title || "").toLowerCase();
-      // Skip icons/diagrams/logos/taxonomy trees
-      return !/\.svg$/i.test(t)
-        && !/(icon|logo|status|distribution|range|map|graph|chart|placeholder)/i.test(t)
-        && !/(commons-logo)/i.test(t);
-    });
-  // Prefer higher-resolution originals
-  return items
-    .map((it) => {
-      const src = it.srcset?.[it.srcset.length - 1]?.src || it.src || "";
-      // media-list returns paths like //upload.wikimedia.org/... — add scheme
-      return src.startsWith("//") ? "https:" + src : src;
-    })
-    .filter(Boolean)
-    .slice(0, wantN * 3);      // return extras so caller can dedupe/pick
-}
-
+/** Fetch summary + best-effort family from Wikipedia REST API. */
 async function fetchPlantSummary(name) {
   // 1. Summary — thumbnail + extract + article URL
   const res = await fetch(WIKI_SUMMARY + encodeURIComponent(name),
@@ -101,31 +75,25 @@ async function fetchPlantSummary(name) {
     } catch { /* keep null */ }
   }
 
-  // 3. Two images — the summary thumbnail becomes image 1; media-list supplies image 2
+  // Hero image — use Wikipedia's "originalimage" (full resolution) when available,
+  // otherwise fall back to the summary thumbnail. This same URL is passed to the
+  // lightbox "Download image" button so users can save the publication-quality file.
   const wholePlant = s.originalimage?.source || s.thumbnail?.source || null;
-  let medicinalPart = null;
-  try {
-    const extras = await fetchArticleImages(s.title || name, 2);
-    // Prefer an image that ISN'T identical to the whole-plant one
-    medicinalPart = extras.find((u) => u && u !== wholePlant) || null;
-    if (!medicinalPart && extras.length) medicinalPart = extras[0];
-  } catch { /* leave null */ }
 
-  const medicinalLabel = MEDICINAL_PART_HINTS[genus] || "Medicinal part";
+  const medicinalLabel = MEDICINAL_PART_HINTS[genus] || null;
 
   return {
     scientificName: s.title || name,
     family,
     description: s.extract || "",
     wholePlantUrl: wholePlant,
-    medicinalPartUrl: medicinalPart,
     medicinalLabel,
     articleUrl: s.content_urls?.desktop?.page || null,
   };
 }
 
 /* ─────────────── Lightbox modal ─────────────── */
-function Lightbox({ src, caption, onClose }) {
+function Lightbox({ src, caption, downloadUrl, onClose }) {
   const [scale, setScale] = useState(1);
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(null);
@@ -147,6 +115,37 @@ function Lightbox({ src, caption, onClose }) {
   };
   const stopDrag = () => setDragging(null);
 
+  // Wikimedia serves images cross-origin without CORS; a fetch→blob download
+  // often fails. We try blob first (best UX — real "Save As" dialog) and fall
+  // back to opening the original file in a new tab so users can right-click →
+  // Save Image without leaving the app.
+  const handleDownload = async (e) => {
+    e.stopPropagation();
+    const url = downloadUrl || src;
+    if (!url) return;
+    const filename = (() => {
+      try {
+        const raw = decodeURIComponent(url.split("/").pop() || "plant-image.jpg");
+        return raw.split("?")[0] || "plant-image.jpg";
+      } catch { return "plant-image.jpg"; }
+    })();
+    try {
+      const res = await fetch(url, { mode: "cors" });
+      if (!res.ok) throw new Error("fetch failed");
+      const blob = await res.blob();
+      const objUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(objUrl), 1500);
+    } catch {
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+  };
+
   return (
     <div
       data-testid="plant-info-lightbox"
@@ -161,6 +160,18 @@ function Lightbox({ src, caption, onClose }) {
       >
         <X className="h-5 w-5" />
       </button>
+
+      {/* Camera-icon Download badge — floats top-left of the lightbox */}
+      <button
+        data-testid="plant-info-lightbox-download"
+        onClick={handleDownload}
+        title="Download original-resolution image from Wikimedia Commons"
+        className="absolute left-5 top-5 inline-flex items-center gap-2 rounded-full bg-white/95 px-3.5 py-2 text-xs font-bold uppercase tracking-widest text-[#5139ED] shadow-lg transition hover:-translate-y-0.5 hover:bg-white hover:shadow-xl"
+      >
+        <Camera className="h-4 w-4" />
+        Download image
+      </button>
+
       <div
         onClick={(e) => e.stopPropagation()}
         onWheel={onWheel}
@@ -190,10 +201,13 @@ function Lightbox({ src, caption, onClose }) {
 }
 
 /* ─────────────── Image tile with hover zoom + click-to-lightbox ─────────────── */
-function ImageTile({ src, caption, testid, onOpen }) {
+function ImageTile({ src, caption, testid, onOpen, tall = false }) {
+  const heightCls = tall
+    ? "h-64 sm:h-80 md:h-[26rem] lg:h-[30rem]"
+    : "h-56 sm:h-64 md:h-72";
   if (!src) {
     return (
-      <div className="flex h-56 items-center justify-center rounded-2xl border border-dashed border-[#E7E7F3] bg-[#F5F5FC] text-xs text-[#94A3B8] sm:h-64 md:h-72">
+      <div className={`flex ${heightCls} items-center justify-center rounded-2xl border border-dashed border-[#E7E7F3] bg-[#F5F5FC] text-xs text-[#94A3B8]`}>
         No image available for “{caption}”
       </div>
     );
@@ -207,7 +221,7 @@ function ImageTile({ src, caption, testid, onOpen }) {
         title={`${caption} — click to enlarge`}
         className="relative block w-full cursor-zoom-in overflow-hidden rounded-2xl border border-[#E7E7F3] bg-[#F5F5FC] shadow-sm transition-shadow duration-300 hover:shadow-[0_18px_60px_-12px_rgba(81,57,237,0.35)]"
       >
-        <div className="h-56 w-full overflow-hidden sm:h-64 md:h-72">
+        <div className={`${heightCls} w-full overflow-hidden`}>
           <img
             src={src}
             alt={caption}
@@ -244,7 +258,7 @@ export default function PlantInfoCard({ plantName }) {
     return () => { cancelled = true; };
   }, [plantName]);
 
-  const openLightbox = useCallback((src, caption) => setLb({ src, caption }), []);
+  const openLightbox = useCallback((src, caption) => setLb({ src, caption, downloadUrl: src }), []);
 
   if (!plantName) return null;
 
@@ -290,37 +304,39 @@ export default function PlantInfoCard({ plantName }) {
 
           {data && !loading && (
             <>
-              {/* Two images — side-by-side on desktop, stacked on mobile */}
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <ImageTile
-                  src={data.wholePlantUrl}
-                  caption="Whole Plant"
-                  testid="plant-info-image-whole"
-                  onOpen={openLightbox}
-                />
-                <ImageTile
-                  src={data.medicinalPartUrl || data.wholePlantUrl}
-                  caption={`Medicinal Part Used${data.medicinalLabel ? ` — ${data.medicinalLabel}` : ""}`}
-                  testid="plant-info-image-medicinal"
-                  onOpen={openLightbox}
-                />
-              </div>
-
-              {/* Traditional medicinal uses */}
-              <div className="mt-6">
-                <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">
-                  Traditional medicinal uses
+              {/* Left: single hero image · Right: description */}
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-5 md:gap-8">
+                <div className="md:col-span-2">
+                  <ImageTile
+                    src={data.wholePlantUrl}
+                    caption="Whole Plant"
+                    testid="plant-info-image-whole"
+                    onOpen={openLightbox}
+                    tall
+                  />
                 </div>
-                <p
-                  data-testid="plant-info-uses"
-                  className="mt-2 text-sm leading-relaxed text-[#374151] sm:text-[15px]"
-                >
-                  {data.description || "No description available."}
-                </p>
+
+                <div className="md:col-span-3">
+                  <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">
+                    Traditional medicinal uses
+                  </div>
+                  <p
+                    data-testid="plant-info-uses"
+                    className="mt-2 text-sm leading-relaxed text-[#374151] sm:text-[15px]"
+                  >
+                    {data.description || "No description available."}
+                  </p>
+                  {data.medicinalLabel && (
+                    <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-[#E7E7F3] bg-[#F5F5FC] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-[#5139ED]">
+                      <Leaf className="h-3 w-3" />
+                      Part used: {data.medicinalLabel}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* References */}
-              <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-[#F1F1FA] pt-4 text-xs">
+              <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-[#F1F1FA] pt-4 text-xs">
                 <span className="font-semibold uppercase tracking-widest text-[#94A3B8]">
                   References:
                 </span>
@@ -350,7 +366,7 @@ export default function PlantInfoCard({ plantName }) {
         </div>
       </div>
 
-      {lb && <Lightbox src={lb.src} caption={lb.caption} onClose={() => setLb(null)} />}
+      {lb && <Lightbox src={lb.src} caption={lb.caption} downloadUrl={lb.downloadUrl} onClose={() => setLb(null)} />}
     </section>
   );
 }
