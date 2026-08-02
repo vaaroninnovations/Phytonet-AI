@@ -32,6 +32,36 @@ export default function SiteHeader() {
 
   useEffect(() => { setMobileOpen(false); }, [pathname, hash]);
 
+  // Robust smooth-scroll for hash nav links (Home ▾ Pricing/Docs/Resources).
+  //   • Same-page hash click → scroll immediately.
+  //   • Cross-route → let react-router navigate, then scroll after mount.
+  // Handled here so it works regardless of whether Home's own effect fires.
+  const handleNav = (to) => (e) => {
+    if (!to.startsWith("/#")) return;              // regular route link
+    const id = to.slice(2);
+    e.preventDefault();
+    setMobileOpen(false);
+    const doScroll = () => {
+      const el = document.getElementById(id);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+    if (pathname === "/") {
+      // Push the hash for URL clarity; then scroll on the current mount.
+      if (hash !== `#${id}`) navigate(to, { replace: false });
+      // Two rAFs so React commits the hash before we scroll.
+      requestAnimationFrame(() => requestAnimationFrame(doScroll));
+    } else {
+      navigate(to);
+      // Home will mount fresh — retry until the target exists.
+      let tries = 0;
+      const tick = () => {
+        if (document.getElementById(id)) return doScroll();
+        if (++tries < 20) setTimeout(tick, 80);
+      };
+      setTimeout(tick, 120);
+    }
+  };
+
   const initials = user ? (
     (user.first_name?.[0] || user.email?.[0] || "U").toUpperCase() +
     (user.last_name?.[0] || "").toUpperCase()
@@ -59,6 +89,7 @@ export default function SiteHeader() {
             <Link
               key={n.label}
               to={n.to}
+              onClick={handleNav(n.to)}
               data-testid={`nav-${n.label.toLowerCase().replace(/\s/g, "-")}`}
               className={`rounded-full px-3.5 py-1.5 text-[13px] font-semibold transition-colors ${
                 isActive(n.to)
@@ -140,7 +171,7 @@ export default function SiteHeader() {
         <div data-testid="mobile-nav" className="border-t border-[#E7E7F3] bg-white lg:hidden">
           <nav className="mx-auto flex max-w-7xl flex-col gap-1 px-6 py-4">
             {NAV.map((n) => (
-              <Link key={n.label} to={n.to} className="rounded-lg px-3 py-2 text-sm font-semibold text-[#111827] hover:bg-[#F8FAFC]">
+              <Link key={n.label} to={n.to} onClick={handleNav(n.to)} className="rounded-lg px-3 py-2 text-sm font-semibold text-[#111827] hover:bg-[#F8FAFC]">
                 {n.label}
               </Link>
             ))}

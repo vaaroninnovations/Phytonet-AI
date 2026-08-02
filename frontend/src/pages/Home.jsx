@@ -910,15 +910,21 @@ export default function Home() {
   }, []);
 
   // Smooth-scroll to any hash target (#pricing, #faq, #how, …) whenever the
-  // route hash changes. Handles both initial mount and in-page nav clicks.
+  // route hash changes. Retries a few times so it survives mount-time layout
+  // shifts (image loading, framer-motion animations).
   useEffect(() => {
     if (!hash) return;
     const id = hash.replace(/^#/, "");
-    // Delay a tick so the target section has been mounted before scrolling.
-    const t = setTimeout(() => {
+    let tries = 0;
+    const tick = () => {
       const el = document.getElementById(id);
-      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 60);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+      if (++tries < 20) setTimeout(tick, 80);
+    };
+    const t = setTimeout(tick, 60);
     return () => clearTimeout(t);
   }, [hash]);
 
