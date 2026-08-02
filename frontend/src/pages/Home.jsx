@@ -4,7 +4,7 @@
 // FAQ · Final CTA. Design: minimal white background, Manrope headlines,
 // Plus Jakarta Sans body, soft gradients + glassmorphism only where appropriate.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { motion, useInView } from "framer-motion";
 import {
   ArrowRight, ArrowUpRight, Check, ChevronRight, ChevronDown,
@@ -12,11 +12,12 @@ import {
   Search, FlaskConical, FileText, Video, Image as ImageIcon, Beaker,
   Microscope, Brain, Zap, BookOpen, Github, Linkedin, Twitter,
   Play, PlayCircle, Leaf, Cpu, Activity, Database, Workflow, Star, Quote,
-  Target, HeartPulse, Waves,
+  Target, HeartPulse, Waves, Coins, Bot, Clock, BarChart3, FileSearch,
 } from "lucide-react";
 import HeroVisual from "@/components/HeroVisual";
 import BrandLogo from "@/components/BrandLogo";
 import { useAuth } from "@/context/AuthContext";
+import { useNodes } from "@/context/NodeContext";
 
 /* ────────────────────────────── HERO ────────────────────────────── */
 function Hero() {
@@ -682,6 +683,191 @@ function FAQ() {
   );
 }
 
+/* ─────────────────────────── PRICING ─────────────────────────── */
+const NODE_PLANS = [
+  { id: "starter",   nodes: 10, price: 250,  label: "Starter"     },
+  { id: "research",  nodes: 25, price: 500,  label: "Most Popular", highlight: true },
+  { id: "lab",       nodes: 60, price: 1000, label: "Lab"         },
+];
+
+const NODE_VALUE_PROPS = [
+  { icon: Bot,          text: "AI-powered automation"           },
+  { icon: Clock,        text: "Significant time savings"        },
+  { icon: BarChart3,    text: "Reduced manual, repetitive work" },
+  { icon: FlaskConical, text: "Streamlined research workflows"  },
+  { icon: FileText,     text: "Automated report generation"     },
+];
+
+function Pricing() {
+  const { user, openModal } = useAuth();
+  const { openPurchase } = useNodes();
+
+  // Signed-in users open the existing purchase modal; anonymous visitors
+  // are nudged into the sign-in / sign-up flow so payment is authenticated.
+  const handleBuy = () => (user ? openPurchase() : openModal("signup"));
+
+  return (
+    <section
+      id="pricing"
+      data-testid="pricing"
+      className="relative scroll-mt-24 overflow-hidden bg-gradient-to-b from-white via-[#FAFAFF] to-white py-24"
+    >
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10">
+        <div className="absolute -left-24 top-16 h-72 w-72 rounded-full bg-[#5139ED]/8 blur-3xl" />
+        <div className="absolute -right-24 bottom-16 h-72 w-72 rounded-full bg-[#8139ED]/8 blur-3xl" />
+      </div>
+
+      <div className="mx-auto max-w-6xl px-6">
+        <div className="mx-auto max-w-2xl text-center">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[#E7E7F3] bg-white/70 px-3 py-1 text-[11px] font-bold uppercase tracking-widest text-[#5139ED] backdrop-blur">
+            <Coins className="h-3 w-3" />
+            Node Credits
+          </div>
+          <h2 className="mt-4 font-display text-4xl font-bold tracking-tight text-[#0B0B18] sm:text-5xl">
+            Pricing & Node Credits
+          </h2>
+          <p className="mt-4 text-[15px] leading-relaxed text-[#4B5563]">
+            Pay only for AI-powered automation that saves time and reduces repetitive manual research workflows.
+          </p>
+        </div>
+
+        {/* Why Nodes? — single highlighted information card above the plans */}
+        <div
+          data-testid="pricing-why-nodes"
+          className="relative mx-auto mt-12 max-w-4xl overflow-hidden rounded-3xl border border-white/60 bg-white/70 p-6 shadow-[0_18px_60px_-30px_rgba(81,57,237,0.35)] backdrop-blur-xl sm:p-8"
+        >
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(129,57,237,0.10),transparent_55%),radial-gradient(circle_at_bottom_left,rgba(57,90,237,0.08),transparent_55%)]"
+          />
+          <div className="relative">
+            <div className="flex items-start gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-[#5139ED] via-[#395AED] to-[#8139ED] text-white shadow-[0_10px_24px_-8px_rgba(81,57,237,0.5)]">
+                <Sparkles className="h-5 w-5" />
+              </span>
+              <div className="min-w-0">
+                <h3 className="font-display text-xl font-bold tracking-tight text-[#0B0B18]">
+                  Why Nodes?
+                </h3>
+                <p className="mt-2 text-[13.5px] leading-relaxed text-[#374151]">
+                  PhytoNet AI provides <strong className="text-[#0B0B18]">free access to standalone research modules</strong>. Nodes are only required when using <strong className="text-[#0B0B18]">premium AI-powered workflows</strong> that automate complex research tasks.
+                </p>
+                <p className="mt-2 text-[13.5px] leading-relaxed text-[#374151]">
+                  Instead of spending hours manually searching databases, organising data, cross-referencing results and preparing reports, PhytoNet AI performs these workflows in minutes — letting researchers focus on scientific interpretation and decision-making.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 border-t border-[#E7E7F3] pt-5">
+              <p className="text-[10.5px] font-bold uppercase tracking-widest text-[#5139ED]">
+                You are paying for
+              </p>
+              <ul className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {NODE_VALUE_PROPS.map(({ icon: Icon, text }) => (
+                  <li
+                    key={text}
+                    className="flex items-start gap-2 rounded-xl border border-[#E7E7F3] bg-white/60 px-3 py-2 text-[13px] text-[#374151]"
+                  >
+                    <Icon className="mt-0.5 h-4 w-4 shrink-0 text-[#5139ED]" />
+                    <span>{text}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        {/* Pricing plans */}
+        <div className="mt-10 grid grid-cols-1 gap-5 md:grid-cols-3">
+          {NODE_PLANS.map((p, i) => {
+            const perNode = (p.price / p.nodes).toFixed(1);
+            const highlighted = !!p.highlight;
+            return (
+              <motion.div
+                key={p.id}
+                initial={{ opacity: 0, y: 18 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-80px" }}
+                transition={{ duration: 0.5, delay: i * 0.08, ease: "easeOut" }}
+                data-testid={`pricing-plan-${p.id}`}
+                className={`relative flex flex-col overflow-hidden rounded-3xl border p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_20px_60px_-24px_rgba(81,57,237,0.4)] ${
+                  highlighted
+                    ? "border-[#5139ED]/40 bg-gradient-to-br from-white via-[#F5F5FC] to-white ring-1 ring-[#5139ED]/25"
+                    : "border-[#E7E7F3] bg-white"
+                }`}
+              >
+                {highlighted && (
+                  <span
+                    data-testid={`pricing-badge-${p.id}`}
+                    className="absolute right-4 top-4 inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-[#5139ED] via-[#395AED] to-[#8139ED] px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-white shadow-[0_8px_24px_-6px_rgba(81,57,237,0.55)]"
+                  >
+                    <Star className="h-3 w-3" />
+                    Most Popular
+                  </span>
+                )}
+
+                <p className="text-[10.5px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">
+                  {highlighted ? "Best value" : p.label}
+                </p>
+
+                <div className="mt-3 flex items-baseline gap-2">
+                  <span className="font-display text-4xl font-bold tracking-tight text-[#0B0B18]">
+                    ₹{p.price.toLocaleString("en-IN")}
+                  </span>
+                </div>
+
+                <p className="mt-1 text-[13px] text-[#64748B]">
+                  <span className="font-semibold text-[#0B0B18]">{p.nodes}</span> nodes
+                  <span className="mx-1.5 text-[#CBD5E1]">·</span>
+                  ₹{perNode} / node
+                </p>
+
+                <ul className="mt-5 space-y-2 text-[13px] text-[#374151]">
+                  <li className="flex items-start gap-2">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#5139ED]" />
+                    Access every premium AI workflow
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#5139ED]" />
+                    Nodes never expire, roll over between sessions
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#5139ED]" />
+                    Automated report generation included
+                  </li>
+                </ul>
+
+                <button
+                  data-testid={`pricing-buy-${p.id}`}
+                  onClick={handleBuy}
+                  className={`mt-6 inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition ${
+                    highlighted
+                      ? "bg-gradient-to-r from-[#5139ED] via-[#395AED] to-[#8139ED] text-white shadow-[0_10px_28px_-8px_rgba(81,57,237,0.55)] hover:brightness-110"
+                      : "border border-[#E7E7F3] bg-white text-[#0B0B18] hover:border-[#5139ED]/40 hover:text-[#5139ED]"
+                  }`}
+                >
+                  <Coins className="h-4 w-4" />
+                  Buy Nodes
+                </button>
+              </motion.div>
+            );
+          })}
+        </div>
+
+        {/* Note below pricing */}
+        <p
+          data-testid="pricing-note"
+          className="mx-auto mt-8 max-w-3xl text-center text-[12.5px] leading-relaxed text-[#64748B]"
+        >
+          <Leaf className="mr-1 inline h-3.5 w-3.5 -translate-y-0.5 text-[#5139ED]" />
+          Standalone modules remain <strong className="text-[#0B0B18]">free</strong>. Nodes are consumed only for premium AI-powered analyses and automation workflows.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+
 /* ─────────────────────────── FINAL CTA ─────────────────────────── */
 function FinalCTA() {
   return (
@@ -712,6 +898,8 @@ function FinalCTA() {
 
 /* ─────────────────────────── PAGE ─────────────────────────── */
 export default function Home() {
+  const { hash } = useLocation();
+
   useEffect(() => {
     document.title = "PhytoNet AI | AI Scientist for Medicinal Plant Drug Discovery";
     // meta description
@@ -720,6 +908,19 @@ export default function Home() {
     m.setAttribute("content",
       "AI-powered medicinal plant research platform integrating network pharmacology, target prediction, cheminformatics, enrichment analysis, AI manuscript generation, graphical abstracts, and scientific workflows.");
   }, []);
+
+  // Smooth-scroll to any hash target (#pricing, #faq, #how, …) whenever the
+  // route hash changes. Handles both initial mount and in-page nav clicks.
+  useEffect(() => {
+    if (!hash) return;
+    const id = hash.replace(/^#/, "");
+    // Delay a tick so the target section has been mounted before scrolling.
+    const t = setTimeout(() => {
+      const el = document.getElementById(id);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 60);
+    return () => clearTimeout(t);
+  }, [hash]);
 
   return (
     <main data-testid="home-page" className="relative overflow-hidden bg-white">
@@ -730,6 +931,7 @@ export default function Home() {
       <HowItWorks />
       <Trust />
       <Testimonials />
+      <Pricing />
       <FAQ />
       <FinalCTA />
     </main>
