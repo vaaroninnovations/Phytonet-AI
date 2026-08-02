@@ -3,11 +3,11 @@
 This test covers the bug fix where /api/docking/run returned HTTP 503
 'missing required dependencies: vina' when the preview pod was rebuilt
 without autodock-vina in the base image. deps_check.py now runs
-`apt-get install autodock-vina openbabel gromacs` on startup when a
-required binary is missing (gated by AUTO_INSTALL_MISSING_DEPS env var).
+`apt-get install autodock-vina openbabel` on startup when a required
+binary is missing (gated by AUTO_INSTALL_MISSING_DEPS env var).
 
 We test:
- 1) GET /api/deps/status  → ok:true, no missing required, vina/obabel/gmx OK
+ 1) GET /api/deps/status  → ok:true, no missing required, vina/obabel OK
  2) POST /api/docking/run (aspirin × PTGS1) → HTTP 200, best_affinity<0
  3) GET  /api/docking/pose/{job_id}/{pair_id}?fmt=complex_pdb → HTTP 200
  4) GET  /api/docking/render/{job_id}/{pair_id}?dpi=300&fmt=png → 200 + image/png
@@ -63,12 +63,6 @@ def test_deps_obabel_ok(session):
     r = session.get(f"{BASE_URL}/api/deps/status", timeout=30)
     obabel = r.json().get("deps", {}).get("obabel", {})
     assert obabel.get("ok") is True, f"obabel not ok: {obabel}"
-
-
-def test_deps_gmx_ok(session):
-    r = session.get(f"{BASE_URL}/api/deps/status", timeout=30)
-    gmx = r.json().get("deps", {}).get("gmx", {})
-    assert gmx.get("ok") is True, f"gmx not ok: {gmx}"
 
 
 # --- 2) POST /api/docking/run ---------------------------------------------

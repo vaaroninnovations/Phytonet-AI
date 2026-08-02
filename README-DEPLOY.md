@@ -6,7 +6,7 @@ End-to-end guide to deploy PhytoNet AI on a Hostinger KVM VPS (or any Docker-cap
 
 ## 1. VPS Sizing
 
-The backend image bundles **AutoDock Vina**, **Open Babel**, **GROMACS** and the full ML stack (`torch`, `admet_ai`, `chemprop`, `rdkit`).
+The backend image bundles **AutoDock Vina**, **Open Babel** and the full ML stack (`torch`, `admet_ai`, `chemprop`, `rdkit`). Molecular Dynamics is shipped as a downloadable GROMACS project generator only — users run the generated project on their own workstation / HPC / cloud VM.
 
 | Component     | Recommended        | Minimum          |
 |---------------|--------------------|------------------|
@@ -147,7 +147,7 @@ docker compose ps                # all services should be "healthy"
 docker compose logs -f backend   # tail backend boot logs
 ```
 
-First build takes 10-25 min (Vina/GROMACS + ML wheels). Subsequent rebuilds are layer-cached and finish in ~1 min.
+First build takes 5-15 min (Vina + ML wheels). Subsequent rebuilds are layer-cached and finish in ~1 min.
 
 ### 5.1 Smoke test
 

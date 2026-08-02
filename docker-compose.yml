@@ -63,10 +63,9 @@ x-backend-env: &backend-env
   SMTP_USERNAME: ${SMTP_USERNAME:-}
   SMTP_PASSWORD: ${SMTP_PASSWORD:-}
   SMTP_TLS: ${SMTP_TLS:-true}
-  # ─── Docking / MD binaries (baked into the backend image) ───
+  # ─── Docking binaries (baked into the backend image) ───
   VINA_EXECUTABLE: /usr/bin/vina
   OBABEL_EXECUTABLE: /usr/bin/obabel
-  GROMACS_EXECUTABLE: /usr/bin/gmx
   # ─── Runtime tunables ───
   AUTO_INSTALL_MISSING_DEPS: "off"
   # Ensures `backend.celery_app` resolves inside the worker container.

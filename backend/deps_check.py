@@ -1,21 +1,20 @@
 """PhytoNet AI — startup dependency verification.
 
 Runs once at backend startup. Verifies:
-  • System binaries: vina, obabel, gmx (optional)
+  • System binaries: vina, obabel
   • Python libs   : rdkit, meeko, vina (Python bindings — optional)
 
 Behaviour:
   • Missing REQUIRED dep  → sets DEPS_STATUS[key]["ok"] = False, logs a
-    diagnostic. `/api/docking/run` and `/api/md/build` inspect DEPS_STATUS
-    and refuse the request with HTTP 503 + a clear message rather than
-    crashing mid-batch with `[Errno 2] No such file or directory: vina`.
+    diagnostic. `/api/docking/run` inspects DEPS_STATUS and refuses the
+    request with HTTP 503 + a clear message rather than crashing mid-batch
+    with `[Errno 2] No such file or directory: vina`.
   • Missing OPTIONAL dep  → logs a warning; the endpoint may still run
-    with reduced functionality (e.g. GROMACS is required only for MD).
+    with reduced functionality.
 
 Configuration (env vars, all optional):
   VINA_EXECUTABLE     — override path to `vina` binary (default: shutil.which)
   OBABEL_EXECUTABLE   — override path to `obabel`
-  GROMACS_EXECUTABLE  — override path to `gmx`
 """
 from __future__ import annotations
 import logging
@@ -144,7 +143,6 @@ def _attempt_apt_install(pkgs: list[str]) -> bool:
 _APT_PACKAGE_FOR_DEP = {
     "vina":   "autodock-vina",
     "obabel": "openbabel",
-    "gmx":    "gromacs",
 }
 
 
@@ -155,7 +153,6 @@ def check_all() -> Dict[str, DepStatus]:
         # System binaries
         "vina":     _check_binary("vina",   "VINA_EXECUTABLE",    "vina",   ["--version"], required=True),
         "obabel":   _check_binary("obabel", "OBABEL_EXECUTABLE",  "obabel", ["-V"],        required=True),
-        "gmx":      _check_binary("gmx",    "GROMACS_EXECUTABLE", "gmx",    ["--version"], required=False),
         # Python libs
         "rdkit":    _check_python("rdkit",  "rdkit", required=True, version_attr="__version__"),
         "meeko":    _check_python("meeko",  "meeko", required=True),
@@ -176,8 +173,6 @@ def check_all() -> Dict[str, DepStatus]:
                     DEPS_STATUS[k] = _check_binary("vina", "VINA_EXECUTABLE", "vina", ["--version"], required=True)
                 elif k == "obabel":
                     DEPS_STATUS[k] = _check_binary("obabel", "OBABEL_EXECUTABLE", "obabel", ["-V"], required=True)
-                elif k == "gmx":
-                    DEPS_STATUS[k] = _check_binary("gmx", "GROMACS_EXECUTABLE", "gmx", ["--version"], required=False)
 
     for st in DEPS_STATUS.values():
         if st.ok:
