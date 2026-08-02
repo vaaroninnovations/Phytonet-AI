@@ -90,17 +90,36 @@ export async function downloadTIFF(svgEl, filename = "figure.tiff", { dpi = 300,
 }
 
 /**
- * Encode an arbitrary HTMLCanvasElement (e.g. a 3Dmol.js viewer canvas) into a
- * proper baseline-TIFF byte stream using UTIF. Not a PNG-rebranded-as-tiff.
+ * Encode an arbitrary HTMLCanvasElement (e.g. a 3Dmol.js WebGL viewer canvas)
+ * into a proper baseline-TIFF byte stream via UTIF.
+ *
+ * We can't call `getContext("2d")` on a canvas that already owns a WebGL
+ * context (it returns null and getImageData throws). Copy pixels into an
+ * offscreen 2D canvas first — `drawImage` works cross-context — then read
+ * RGBA out of the offscreen canvas and feed it to UTIF.
  */
 export function canvasToTIFF(canvas, filename = "figure.tiff", { dpi = 300 } = {}) {
   const w = canvas.width;
   const h = canvas.height;
-  const ctx = canvas.getContext("2d");
+  if (!w || !h) throw new Error("Canvas has zero dimensions — nothing to export.");
+
+  // Offscreen 2D canvas — same pixel dimensions as the source.
+  const off = document.createElement("canvas");
+  off.width = w;
+  off.height = h;
+  const ctx = off.getContext("2d");
+  if (!ctx) throw new Error("Could not create an offscreen 2D context for TIFF export.");
+
+  // White background so PDF/TIFF exports don't ship with transparent artefacts
+  // that render as black in journal viewers.
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fillRect(0, 0, w, h);
+  ctx.drawImage(canvas, 0, 0);
+
   const imgData = ctx.getImageData(0, 0, w, h);
   const bytes = UTIF.encodeImage(imgData.data, w, h, {
     t256: [w], t257: [h],
-    t282: [dpi, 1], t283: [dpi, 1], t296: [2],
+    t282: [dpi, 1], t283: [dpi, 1], t296: [2],   // Xres, Yres, ResolutionUnit=2 (inch)
   });
   saveAs(new Blob([bytes], { type: "image/tiff" }), filename);
 }
@@ -114,9 +133,21 @@ export function canvasToPDF(canvas, filename = "figure.pdf") {
   pdf.save(filename);
 }
 
-/** Save a canvas as a PNG file (utility wrapper). */
+/** Save a canvas as a PNG file. Works for both 2D and WebGL canvases —
+ *  routes through an offscreen 2D canvas so WebGL contexts (which sometimes
+ *  export as fully-transparent PNGs when the drawing buffer flushes between
+ *  `toBlob` and the browser's compositor) always produce solid pixels. */
 export function canvasToPNG(canvas, filename = "figure.png") {
-  canvas.toBlob((blob) => saveAs(blob, filename), "image/png");
+  const w = canvas.width, h = canvas.height;
+  if (!w || !h) throw new Error("Canvas has zero dimensions — nothing to export.");
+  const off = document.createElement("canvas");
+  off.width = w; off.height = h;
+  const ctx = off.getContext("2d");
+  if (!ctx) throw new Error("Could not create an offscreen 2D context for PNG export.");
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fillRect(0, 0, w, h);
+  ctx.drawImage(canvas, 0, 0);
+  off.toBlob((blob) => saveAs(blob, filename), "image/png");
 }
 
 export async function downloadPDF(svgEl, filename = "figure.pdf", { title } = {}) {

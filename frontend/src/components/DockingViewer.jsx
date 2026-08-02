@@ -19,6 +19,7 @@ import {
   canvasToTIFF, canvasToPDF, canvasToPNG,
 } from "@/lib/figureExporters";
 import { CustomizeFigureButton } from "@/components/CustomizeFigureButton";
+import { useAppliedStyle } from "@/context/ChartStyleContext";
 
 const INTERACTION_STYLE = {
   hydrogen_bond:   { color: "#2BB673", stroke: "#0F7A47", label: "H-Bond" },
@@ -96,8 +97,18 @@ function Complex3DViewer({ jobId, pairId, interactions, interactionSvgRef, ligan
   const [showHbondLabels, setShowHbondLabels] = useState(true);
   const [downloading2d, setDownloading2d] = useState(false);
 
+  // ── Customize-Figure style — live-consumed by the 3Dmol renderer so
+  //    background colour / label colour / palette actually affect the
+  //    viewer (not just an invisible chart-style store).
+  const applied = useAppliedStyle("docking");
+  const bgColor    = applied?.background || "#FFFFFF";
+  const labelColor = applied?.labelColor || "#FFFFFF";
+  const ligColor   = (applied?.palette && applied.palette[0]) || "#2BB673";
+  const hbondColor = (applied?.palette && applied.palette[3]) || "#2BB673";
+
   const applyStyle = useCallback((v) => {
     if (!viewerRef.current) return;
+    viewerRef.current.setBackgroundColor(bgColor);
     viewerRef.current.setStyle({}, {});
     // Receptor
     if (style === "cartoon") {
@@ -106,9 +117,10 @@ function Complex3DViewer({ jobId, pairId, interactions, interactionSvgRef, ligan
       viewerRef.current.setStyle({ chain: "A" }, { cartoon: { color: "#E7E7F3" } });
       viewerRef.current.addSurface(v.SurfaceType.VDW, { opacity: 0.75, color: "#c8c8e6" }, { chain: "A" });
     }
-    // Ligand
-    viewerRef.current.setStyle({ chain: "L" }, { stick: { colorscheme: "greenCarbon", radius: 0.22 } });
-    viewerRef.current.addStyle({ chain: "L" }, { sphere: { colorscheme: "greenCarbon", radius: 0.35 } });
+    // Ligand — carbon colour driven by the Customize palette so the researcher
+    // can recolour ligand sticks to match the journal template.
+    viewerRef.current.setStyle({ chain: "L" }, { stick: { color: ligColor, radius: 0.22 } });
+    viewerRef.current.addStyle({ chain: "L" }, { sphere: { color: ligColor, radius: 0.35 } });
     // Residues in interactions — sticks
     const resList = new Set();
     Object.values(interactions || {}).forEach((arr) => {
@@ -122,7 +134,7 @@ function Complex3DViewer({ jobId, pairId, interactions, interactionSvgRef, ligan
       viewerRef.current.addResLabels(
         { chain: "A", resi: Array.from(resList) },
         { fontSize: 11, backgroundColor: "#0B0B18", backgroundOpacity: 0.7,
-          fontColor: "#FFFFFF", showBackground: true }
+          fontColor: labelColor, showBackground: true }
       );
     }
     // H-bond distance labels
@@ -136,11 +148,11 @@ function Complex3DViewer({ jobId, pairId, interactions, interactionSvgRef, ligan
             || viewerRef.current.selectedAtoms({ chain: "A", resi: ri })?.[0];
           if (ligPos && recPos) {
             viewerRef.current.addLine({
-              start: ligPos, end: recPos, dashed: true, color: "#2BB673",
+              start: ligPos, end: recPos, dashed: true, color: hbondColor,
             });
             viewerRef.current.addLabel(`${b.distance} Å`, {
               position: { x: (ligPos.x + recPos.x) / 2, y: (ligPos.y + recPos.y) / 2, z: (ligPos.z + recPos.z) / 2 },
-              fontSize: 10, backgroundColor: "#0F7A47", fontColor: "#FFFFFF",
+              fontSize: 10, backgroundColor: "#0F7A47", fontColor: labelColor,
               backgroundOpacity: 0.85, showBackground: true, borderThickness: 0,
             });
           }
@@ -150,7 +162,13 @@ function Complex3DViewer({ jobId, pairId, interactions, interactionSvgRef, ligan
     viewerRef.current.zoomTo({ chain: "L" });
     viewerRef.current.zoom(0.6, 500);
     viewerRef.current.render();
-  }, [style, showHbondLabels, interactions]);
+  }, [style, showHbondLabels, interactions, bgColor, labelColor, ligColor, hbondColor]);
+
+  // Keep a ref to the latest `applyStyle` so the mount effect can call it
+  // without listing it as a dep — otherwise every colour change would force
+  // a full PDB refetch + viewer rebuild.
+  const applyStyleRef = useRef(applyStyle);
+  useEffect(() => { applyStyleRef.current = applyStyle; }, [applyStyle]);
 
   useEffect(() => {
     let cancelled = false;
@@ -180,7 +198,7 @@ function Complex3DViewer({ jobId, pairId, interactions, interactionSvgRef, ligan
           antialias: true,
         });
         viewerRef.current.addModel(pdbText, "pdb");
-        applyStyle($3Dmol);
+        applyStyleRef.current($3Dmol);
         setLoading(false);
       } catch (e) {
         console.error(e);
@@ -205,7 +223,17 @@ function Complex3DViewer({ jobId, pairId, interactions, interactionSvgRef, ligan
         viewerRef.current = null;
       }
     };
-  }, [jobId, pairId, applyStyle]);
+  }, [jobId, pairId]);
+
+  // Lightweight re-style: when the "Customize Figure" style changes, re-apply
+  // to the *existing* viewer instance without re-downloading the complex PDB.
+  useEffect(() => {
+    if (!viewerRef.current) return;
+    (async () => {
+      const $3Dmol = (await import("3dmol")).default || (await import("3dmol"));
+      applyStyle($3Dmol);
+    })();
+  }, [bgColor, labelColor, ligColor, hbondColor, applyStyle]);
 
   const reset = () => {
     if (viewerRef.current) {
