@@ -11,6 +11,7 @@ import { Loader2, ExternalLink, Leaf, X, ZoomIn, Camera } from "lucide-react";
 
 const WIKI_SUMMARY   = "https://en.wikipedia.org/api/rest_v1/page/summary/";
 const WIKIDATA_ENT   = "https://www.wikidata.org/wiki/Special:EntityData/";
+const WIKIDATA_API   = "https://www.wikidata.org/w/api.php";
 
 // ── botanical fallback family map for common Ayurvedic/medicinal genera ──
 const FAMILY_HINTS = {
@@ -44,47 +45,92 @@ const MEDICINAL_PART_HINTS = {
   papaver: "Latex / capsule",
 };
 
-/** Fetch summary + best-effort family from Wikipedia REST API. */
+/** Resolve a list of Wikidata Q-IDs to their English labels in one batched call.
+ *  Returns an ordered array of label strings (missing Q-IDs are silently dropped). */
+async function resolveWikidataLabels(qids) {
+  if (!qids?.length) return [];
+  const url = `${WIKIDATA_API}?action=wbgetentities&ids=${qids.join("|")}`
+            + `&props=labels&languages=en&format=json&origin=*`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return [];
+    const j = await res.json();
+    return qids
+      .map((qid) => j?.entities?.[qid]?.labels?.en?.value)
+      .filter(Boolean);
+  } catch { return []; }
+}
+
+/** Fetch Wikipedia summary + Wikidata botanical metadata (family, common names,
+ *  scientific name, synonyms) for the plant. Everything is best-effort — missing
+ *  values simply come back as null / [] and the UI hides those rows. */
 async function fetchPlantSummary(name) {
-  // 1. Summary — thumbnail + extract + article URL
+  // 1. Wikipedia summary — thumbnail + description extract + article URL
   const res = await fetch(WIKI_SUMMARY + encodeURIComponent(name),
                           { headers: { Accept: "application/json" } });
   if (!res.ok) throw new Error(`Wikipedia lookup failed (${res.status})`);
   const s = await res.json();
 
-  // 2. Family: prefer vetted hint (species→family), then Wikidata P171 fallback
   const genus = (name.split(/\s+/)[0] || "").toLowerCase();
-  let family = FAMILY_HINTS[genus] || null;
-  if (!family) {
-    try {
-      if (s.wikibase_item) {
-        const wd = await fetch(WIKIDATA_ENT + s.wikibase_item + ".json");
-        if (wd.ok) {
-          const j = await wd.json();
-          const claim = j?.entities?.[s.wikibase_item]?.claims?.P171?.[0];
-          const qid = claim?.mainsnak?.datavalue?.value?.id;
-          if (qid) {
-            const fam = await fetch(WIKIDATA_ENT + qid + ".json");
-            if (fam.ok) {
-              const fj = await fam.json();
-              family = fj?.entities?.[qid]?.labels?.en?.value || null;
-            }
+  let family        = FAMILY_HINTS[genus] || null;
+  let commonNames   = [];
+  let scientificNm  = s.title || name;   // Wikipedia article title is the taxon
+  let synonyms      = [];
+
+  // 2. Wikidata — pull ALL botanical claims we need from one entity fetch.
+  //    P171 = parent taxon (→ family), P1843 = taxon common name (monolingual),
+  //    P225 = taxon name (string), P1420 = taxon synonym (references other Q-IDs)
+  try {
+    if (s.wikibase_item) {
+      const wd = await fetch(WIKIDATA_ENT + s.wikibase_item + ".json");
+      if (wd.ok) {
+        const j = await wd.json();
+        const claims = j?.entities?.[s.wikibase_item]?.claims || {};
+
+        // Scientific name (P225) — authoritative taxon-name string
+        const p225 = claims.P225?.[0]?.mainsnak?.datavalue?.value;
+        if (typeof p225 === "string" && p225.trim()) scientificNm = p225.trim();
+
+        // Common names (P1843) — monolingual text; keep English ones only
+        commonNames = (claims.P1843 || [])
+          .map((c) => c?.mainsnak?.datavalue?.value)
+          .filter((v) => v && v.language === "en" && v.text)
+          .map((v) => v.text)
+          // De-dupe while preserving order
+          .filter((v, i, arr) => arr.findIndex((x) => x.toLowerCase() === v.toLowerCase()) === i);
+
+        // Family (P171 → parent taxon; walk up until rank=family if we can, else
+        // just take the immediate parent label since most plant summary pages
+        // link directly to their family)
+        if (!family) {
+          const parentQid = claims.P171?.[0]?.mainsnak?.datavalue?.value?.id;
+          if (parentQid) {
+            const [famLabel] = await resolveWikidataLabels([parentQid]);
+            if (famLabel) family = famLabel;
           }
         }
-      }
-    } catch { /* keep null */ }
-  }
 
-  // Hero image — use Wikipedia's "originalimage" (full resolution) when available,
-  // otherwise fall back to the summary thumbnail. This same URL is passed to the
-  // lightbox "Download image" button so users can save the publication-quality file.
+        // Synonyms (P1420) — array of Q-IDs; resolve to human labels in batch
+        const synQids = (claims.P1420 || [])
+          .map((c) => c?.mainsnak?.datavalue?.value?.id)
+          .filter(Boolean)
+          .slice(0, 12);   // keep the list manageable
+        if (synQids.length) synonyms = await resolveWikidataLabels(synQids);
+      }
+    }
+  } catch { /* leave defaults */ }
+
+  // Hero image — full-resolution when available (used for lightbox download too)
   const wholePlant = s.originalimage?.source || s.thumbnail?.source || null;
 
   const medicinalLabel = MEDICINAL_PART_HINTS[genus] || null;
 
   return {
-    scientificName: s.title || name,
+    displayName: name,                // exactly what the user searched
+    scientificName: scientificNm,     // italicised taxon name
+    commonNames,                      // array of strings (may be empty)
     family,
+    synonyms,                         // array of taxon-synonym strings
     description: s.extract || "",
     wholePlantUrl: wholePlant,
     medicinalLabel,
@@ -317,21 +363,76 @@ export default function PlantInfoCard({ plantName }) {
                 </div>
 
                 <div className="md:col-span-3">
-                  <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">
-                    Traditional medicinal uses
-                  </div>
-                  <p
-                    data-testid="plant-info-uses"
-                    className="mt-2 text-sm leading-relaxed text-[#374151] sm:text-[15px]"
+                  {/* Botanical detail rows — Name / Common / Scientific / Family / Synonyms */}
+                  <dl
+                    data-testid="plant-info-details"
+                    className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-2 text-[13px] sm:text-sm"
                   >
-                    {data.description || "No description available."}
-                  </p>
-                  {data.medicinalLabel && (
-                    <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-[#E7E7F3] bg-[#F5F5FC] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-[#5139ED]">
-                      <Leaf className="h-3 w-3" />
-                      Part used: {data.medicinalLabel}
+                    <dt className="font-semibold uppercase tracking-widest text-[10.5px] text-[#94A3B8]">Name</dt>
+                    <dd data-testid="plant-info-name" className="text-[#0B0B18]">
+                      {data.displayName || data.scientificName}
+                    </dd>
+
+                    {data.commonNames?.length > 0 && (
+                      <>
+                        <dt className="font-semibold uppercase tracking-widest text-[10.5px] text-[#94A3B8]">Common name</dt>
+                        <dd data-testid="plant-info-common-name" className="text-[#0B0B18]">
+                          {data.commonNames.join(", ")}
+                        </dd>
+                      </>
+                    )}
+
+                    <dt className="font-semibold uppercase tracking-widest text-[10.5px] text-[#94A3B8]">Scientific name</dt>
+                    <dd data-testid="plant-info-scientific-name" className="italic text-[#0B0B18]">
+                      {data.scientificName}
+                    </dd>
+
+                    {data.family && (
+                      <>
+                        <dt className="font-semibold uppercase tracking-widest text-[10.5px] text-[#94A3B8]">Family</dt>
+                        <dd data-testid="plant-info-family-row" className="text-[#0B0B18]">
+                          {data.family}
+                        </dd>
+                      </>
+                    )}
+
+                    {data.synonyms?.length > 0 && (
+                      <>
+                        <dt className="font-semibold uppercase tracking-widest text-[10.5px] text-[#94A3B8]">Synonyms</dt>
+                        <dd data-testid="plant-info-synonyms" className="text-[#0B0B18]">
+                          <div className="flex flex-wrap gap-1.5">
+                            {data.synonyms.map((syn) => (
+                              <span
+                                key={syn}
+                                className="inline-flex items-center rounded-md border border-[#E7E7F3] bg-[#F5F5FC] px-2 py-0.5 text-[11.5px] italic text-[#374151]"
+                              >
+                                {syn}
+                              </span>
+                            ))}
+                          </div>
+                        </dd>
+                      </>
+                    )}
+                  </dl>
+
+                  {/* Description */}
+                  <div className="mt-5 border-t border-[#F1F1FA] pt-4">
+                    <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">
+                      Description
                     </div>
-                  )}
+                    <p
+                      data-testid="plant-info-uses"
+                      className="mt-2 text-sm leading-relaxed text-[#374151] sm:text-[15px]"
+                    >
+                      {data.description || "No description available."}
+                    </p>
+                    {data.medicinalLabel && (
+                      <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-[#E7E7F3] bg-[#F5F5FC] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-[#5139ED]">
+                        <Leaf className="h-3 w-3" />
+                        Part used: {data.medicinalLabel}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
