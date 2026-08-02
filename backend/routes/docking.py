@@ -46,6 +46,11 @@ class DockValidateRequest(BaseModel):
     exhaustiveness: int = 8
 
 
+class DockValidateBatchRequest(BaseModel):
+    pdb_ids: List[str]
+    exhaustiveness: int = 8
+
+
 _DOCK_MISSING_MSG = (
     "Docking service unavailable — missing required dependencies: {miss}. "
     "Rebuild the backend image with `autodock-vina` + `openbabel` (see "
@@ -119,6 +124,34 @@ def build_router() -> APIRouter:
             raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
             logging.exception("Docking validation failed")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @router.get("/docking/validate/{job_id}/{pair_id}/overlay")
+    async def docking_validate_overlay(job_id: str, pair_id: str):
+        """Return the three PDB blobs needed to render the crystal-vs-redocked
+        pose overlay in the 3Dmol viewer."""
+        try:
+            return docking_validation.get_overlay_pdbs(job_id, pair_id)
+        except FileNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        except Exception as e:
+            logging.exception("Docking validation overlay failed")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @router.post("/docking/validate/batch")
+    async def docking_validate_batch(payload: DockValidateBatchRequest):
+        """Validate a suite of PDBs in one call and return per-PDB rows plus
+        aggregate success-rate stats for the AI Report."""
+        _check_deps()
+        try:
+            return await docking_validation.validate_batch(
+                pdb_ids=payload.pdb_ids,
+                exhaustiveness=payload.exhaustiveness,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            logging.exception("Docking batch validation failed")
             raise HTTPException(status_code=500, detail=str(e))
 
     @router.post("/docking/run/stream")

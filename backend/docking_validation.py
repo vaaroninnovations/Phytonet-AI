@@ -364,3 +364,142 @@ async def validate_pdb(pdb_id: str,
         job_id=root.name,
         pair_id=dock_result.pair_id,
     )
+
+
+def get_overlay_pdbs(job_id: str, pair_id: str) -> dict:
+    """Return the three PDB blobs needed by the 3D pose overlay viewer:
+        receptor       — protein backbone/sidechains (from RCSB)
+        native_ligand  — HETATM slice used as the crystal reference
+        redocked_pose  — best pose written by Vina + OpenBabel
+
+    Path-traversal safe: both ids must match the exact directory names that
+    validate_pdb produced. Anything else → FileNotFoundError.
+    """
+    if not re.match(r"^dock_validate_[0-9a-z_]{6,60}$", job_id or ""):
+        raise FileNotFoundError("Invalid validation job id.")
+    if not re.match(r"^[A-Za-z0-9_.\-]{2,80}$", pair_id or ""):
+        raise FileNotFoundError("Invalid validation pair id.")
+
+    root = Path("/tmp") / job_id
+    if not root.is_dir():
+        raise FileNotFoundError("Validation job not found (temp dir was cleaned up).")
+
+    pair_dir = root / pair_id
+    if not pair_dir.is_dir():
+        raise FileNotFoundError("Validation pair not found.")
+
+    # Discover the receptor PDB (validate_pdb writes it as "<PDB_ID>.pdb").
+    receptor_path = next(
+        (p for p in root.iterdir() if p.is_file() and p.suffix == ".pdb"
+         and p.name not in ("native_ligand.pdb",)),
+        None,
+    )
+    native_path = root / "native_ligand.pdb"
+    pose_path = pair_dir / "best_pose.pdb"
+    if not pose_path.exists():
+        pose_path = pair_dir / "pose.pdb"
+
+    if not (receptor_path and receptor_path.exists()):
+        raise FileNotFoundError("Receptor PDB missing for this validation.")
+    if not native_path.exists():
+        raise FileNotFoundError("Native ligand PDB missing for this validation.")
+    if not pose_path.exists():
+        raise FileNotFoundError("Redocked pose PDB missing for this validation.")
+
+    return {
+        "receptor_pdb": receptor_path.read_text(),
+        "native_ligand_pdb": native_path.read_text(),
+        "redocked_pose_pdb": pose_path.read_text(),
+    }
+
+
+async def validate_batch(pdb_ids: List[str],
+                         exhaustiveness: int = 8,
+                         ) -> dict:
+    """Run validate_pdb over a list of PDB IDs sequentially (Vina is CPU-heavy,
+    parallelising here would just thrash the box) and return per-PDB results
+    plus an aggregate success-rate summary suitable for the AI report.
+
+    A run counts as "successful" if `validation_status == 'excellent'` — the
+    < 2 Å industry-standard threshold. Acceptable / poor / error do NOT count
+    towards success but are broken out separately so the researcher can see
+    where the protocol breaks down.
+    """
+    seen = set()
+    unique = []
+    for pid in pdb_ids:
+        p = (pid or "").strip().upper()
+        if not p or p in seen:
+            continue
+        seen.add(p)
+        unique.append(p)
+
+    if not unique:
+        raise ValueError("Provide at least one PDB ID.")
+    if len(unique) > 12:
+        # Guardrail — a single validation can take several minutes; cap the
+        # batch so the request doesn't sit for half an hour.
+        raise ValueError("Batch benchmark accepts at most 12 PDB IDs per run.")
+
+    results = []
+    for pid in unique:
+        try:
+            r = await validate_pdb(pid, exhaustiveness=exhaustiveness)
+            results.append({
+                "pdb_id": r.pdb_id,
+                "ligand_resname": r.ligand_resname,
+                "ligand_heavy_atoms": r.ligand_heavy_atoms,
+                "redocked_affinity": r.redocked_affinity,
+                "rmsd_angstrom": r.rmsd_angstrom,
+                "validation_status": r.validation_status,
+                "notes": r.notes,
+                "job_id": r.job_id,
+                "pair_id": r.pair_id,
+            })
+        except Exception as e:
+            logger.exception("batch validation error for %s", pid)
+            results.append({
+                "pdb_id": pid,
+                "ligand_resname": "?",
+                "ligand_heavy_atoms": 0,
+                "redocked_affinity": 0.0,
+                "rmsd_angstrom": None,
+                "validation_status": "error",
+                "notes": str(e),
+                "job_id": None,
+                "pair_id": None,
+            })
+
+    n = len(results)
+    counts = {"excellent": 0, "acceptable": 0, "poor": 0, "error": 0}
+    rmsd_values = []
+    for r in results:
+        counts[r["validation_status"]] = counts.get(r["validation_status"], 0) + 1
+        if r["rmsd_angstrom"] is not None:
+            rmsd_values.append(float(r["rmsd_angstrom"]))
+
+    mean_rmsd = sum(rmsd_values) / len(rmsd_values) if rmsd_values else None
+    success_rate = round(100.0 * counts["excellent"] / n, 1) if n else 0.0
+
+    return {
+        "results": results,
+        "summary": {
+            "total": n,
+            "excellent": counts["excellent"],
+            "acceptable": counts["acceptable"],
+            "poor": counts["poor"],
+            "error": counts["error"],
+            "success_rate_pct": success_rate,
+            "mean_rmsd_angstrom": None if mean_rmsd is None else round(mean_rmsd, 3),
+            "verdict": (
+                "Protocol validated on this benchmark suite — safe to trust "
+                "predictions for the same receptor family."
+                if success_rate >= 80.0 else
+                "Protocol usable but not fully validated — inspect the failing "
+                "cases and consider tuning search box or exhaustiveness."
+                if success_rate >= 50.0 else
+                "Protocol needs adjustment before trusting new-compound "
+                "predictions — most benchmark cases exceed the 2 Å threshold."
+            ),
+        },
+    }

@@ -87,6 +87,10 @@ export const targetResolve = (query, organism = "Homo sapiens") =>
 // ── Docking Validation API ─────────────────────────────────────────
 export const runDockingValidation = (payload) =>
   api.post("/docking/validate", payload).then((r) => r.data);
+export const getDockingValidationOverlay = (job_id, pair_id) =>
+  api.get(`/docking/validate/${encodeURIComponent(job_id)}/${encodeURIComponent(pair_id)}/overlay`).then((r) => r.data);
+export const runDockingValidationBatch = (payload) =>
+  api.post("/docking/validate/batch", payload).then((r) => r.data);
 
 // ── Node credit system ─────────────────────────────────────────────
 export const getNodeBalance = () => api.get("/nodes/balance").then((r) => r.data);
