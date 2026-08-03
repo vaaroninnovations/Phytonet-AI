@@ -275,9 +275,58 @@ async def validate_pdb(pdb_id: str,
                                  dir="/tmp"))
     logger.info("validate: %s → %s", pdb_id, root)
 
-    # 1. Download PDB.
+    # 1. Download PDB from RCSB.
     pdb_path = root / f"{pdb_id}.pdb"
     await docking_service.download_pdb(pdb_id, pdb_path)
+
+    return await _validate_from_file(root, pdb_path, pdb_id,
+                                     ligand_resname=ligand_resname,
+                                     exhaustiveness=exhaustiveness)
+
+
+async def validate_uploaded_pdb(file_bytes: bytes,
+                                filename: str,
+                                ligand_resname: Optional[str] = None,
+                                exhaustiveness: int = 8,
+                                ) -> "ValidationResult":
+    """Same as `validate_pdb` but works from a user-uploaded PDB file instead
+    of fetching from RCSB. Ideal when the researcher has a modified receptor
+    or their own crystal structure. Everything downstream (ligand extraction,
+    SMILES perception, redock, RMSD) is identical."""
+    if not file_bytes or len(file_bytes) < 100:
+        raise ValueError("Uploaded PDB file is empty or too small.")
+    if len(file_bytes) > 20 * 1024 * 1024:      # 20 MB
+        raise ValueError("Uploaded PDB file exceeds the 20 MB limit.")
+
+    # Peek at the first few lines to confirm this looks like a PDB.
+    head = file_bytes[:512].decode("latin-1", errors="ignore")
+    if not any(tag in head for tag in ("HEADER", "ATOM  ", "HETATM", "CRYST", "REMARK", "TITLE")):
+        raise ValueError("File does not look like a PDB — expected HEADER/ATOM/HETATM lines.")
+
+    # Use the filename stem (minus extension) as the display id, sanitised.
+    display_raw = (filename or "upload").rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+    display_stem = re.sub(r"\W+", "_", display_raw.rsplit(".", 1)[0])[:24] or "upload"
+    display_id = display_stem.upper()
+
+    root = Path(tempfile.mkdtemp(prefix=f"dock_validate_{display_stem.lower()}_",
+                                 dir="/tmp"))
+    logger.info("validate-upload: %s → %s", display_raw, root)
+
+    pdb_path = root / f"{display_stem}.pdb"
+    pdb_path.write_bytes(file_bytes)
+
+    return await _validate_from_file(root, pdb_path, display_id,
+                                     ligand_resname=ligand_resname,
+                                     exhaustiveness=exhaustiveness)
+
+
+async def _validate_from_file(root: Path, pdb_path: Path, display_id: str,
+                              ligand_resname: Optional[str] = None,
+                              exhaustiveness: int = 8,
+                              ) -> "ValidationResult":
+    """Shared validation pipeline once the PDB is on disk. Extracted so both
+    RCSB-fetch and user-upload code paths share exactly the same logic."""
+    pdb_id = display_id
 
     # 2. Slice native ligand out.
     native_lig_pdb = root / "native_ligand.pdb"

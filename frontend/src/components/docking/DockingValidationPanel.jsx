@@ -12,9 +12,9 @@
 //
 // Frontend-only wrapper around POST /api/docking/validate.
 
-import { useState } from "react";
-import { Loader2, ShieldCheck, Info, ExternalLink, Play, Layers3, Rows3, CheckCircle2, AlertTriangle, XCircle, Sparkles } from "lucide-react";
-import { runDockingValidation, runDockingValidationBatch } from "@/lib/api";
+import { useRef, useState } from "react";
+import { Loader2, ShieldCheck, Info, ExternalLink, Play, Layers3, Rows3, CheckCircle2, AlertTriangle, XCircle, Sparkles, Upload, FileText } from "lucide-react";
+import { runDockingValidation, uploadDockingValidation, runDockingValidationBatch } from "@/lib/api";
 import { toast } from "sonner";
 import PoseOverlayViewer from "@/components/docking/PoseOverlayViewer";
 
@@ -32,11 +32,14 @@ const STATUS_STYLE = {
 };
 
 export default function DockingValidationPanel() {
-  // ── Single-PDB validation state ─────────────────────────────
+  // ── Single validation state (either pdb-id or uploaded file) ──
+  const [mode, setMode] = useState("id");         // "id" | "upload"
   const [pdbId, setPdbId] = useState("1STP");
+  const [uploadFile, setUploadFile] = useState(null);
   const [resname, setResname] = useState("");
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState(null);
+  const fileInputRef = useRef(null);
 
   // ── Overlay modal state ─────────────────────────────────────
   const [overlayFor, setOverlayFor] = useState(null);  // { jobId, pairId, meta }
@@ -46,20 +49,48 @@ export default function DockingValidationPanel() {
   const [batchRunning, setBatchRunning] = useState(false);
   const [batchResult, setBatchResult] = useState(null);
 
-  const run = async () => {
-    const id = pdbId.trim().toUpperCase();
-    if (!/^[0-9A-Z]{4}$/.test(id)) {
-      toast.error("Enter a 4-character PDB ID (e.g. 1STP)");
+  const onFilePick = (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (!/\.(pdb|ent|txt)$/i.test(f.name)) {
+      toast.error("Please pick a .pdb / .ent file.");
       return;
     }
+    if (f.size > 20 * 1024 * 1024) {
+      toast.error("File exceeds the 20 MB limit.");
+      return;
+    }
+    setUploadFile(f);
+  };
+
+  const run = async () => {
     setRunning(true);
     setResult(null);
     try {
-      const r = await runDockingValidation({
-        pdb_id: id,
-        ligand_resname: resname.trim() || null,
-        exhaustiveness: 8,
-      });
+      let r;
+      if (mode === "upload") {
+        if (!uploadFile) {
+          toast.error("Choose a PDB file first.");
+          setRunning(false);
+          return;
+        }
+        r = await uploadDockingValidation(uploadFile, {
+          ligand_resname: resname.trim() || undefined,
+          exhaustiveness: 8,
+        });
+      } else {
+        const id = pdbId.trim().toUpperCase();
+        if (!/^[0-9A-Z]{4}$/.test(id)) {
+          toast.error("Enter a 4-character PDB ID (e.g. 1STP)");
+          setRunning(false);
+          return;
+        }
+        r = await runDockingValidation({
+          pdb_id: id,
+          ligand_resname: resname.trim() || null,
+          exhaustiveness: 8,
+        });
+      }
       setResult(r);
       if (r.validation_status === "excellent") {
         toast.success(`Protocol validated — RMSD ${r.rmsd_angstrom} Å`);
@@ -133,67 +164,125 @@ export default function DockingValidationPanel() {
         </div>
       </header>
 
-      <div className="grid grid-cols-1 gap-5 px-6 py-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <label className="block">
-            <span className="text-[11px] font-semibold uppercase tracking-widest text-[#5139ED]">PDB ID</span>
-            <input
-              data-testid="validate-pdb-id"
-              type="text"
-              maxLength={4}
-              value={pdbId}
-              onChange={(e) => setPdbId(e.target.value.toUpperCase())}
-              disabled={running}
-              placeholder="e.g. 1STP"
-              className="mt-1 w-full rounded-xl border border-[#E7E7F3] bg-white px-3 py-2 font-mono text-[15px] font-semibold tracking-widest text-[#0B0B18] uppercase focus:border-[#5139ED]/40 focus:outline-none focus:ring-2 focus:ring-[#5139ED]/20"
-            />
-          </label>
-          <label className="block">
-            <span className="text-[11px] font-semibold uppercase tracking-widest text-[#5139ED]">Ligand residue <span className="normal-case text-[#94A3B8]">(optional)</span></span>
-            <input
-              data-testid="validate-resname"
-              type="text"
-              maxLength={5}
-              value={resname}
-              onChange={(e) => setResname(e.target.value.toUpperCase())}
-              disabled={running}
-              placeholder="Auto-detect"
-              className="mt-1 w-full rounded-xl border border-[#E7E7F3] bg-white px-3 py-2 font-mono text-[15px] font-semibold tracking-widest text-[#0B0B18] uppercase focus:border-[#5139ED]/40 focus:outline-none focus:ring-2 focus:ring-[#5139ED]/20"
-            />
-          </label>
+      <div className="px-6 py-5">
+        {/* Mode toggle — RCSB PDB ID vs. Upload a file */}
+        <div className="mb-4 inline-flex items-center rounded-full border border-[#E7E7F3] bg-[#F8FAFC] p-1 text-[12px] font-semibold">
+          <button
+            data-testid="validate-mode-id"
+            onClick={() => setMode("id")}
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 transition ${
+              mode === "id" ? "bg-white text-[#5139ED] shadow-sm" : "text-[#64748B] hover:text-[#0B0B18]"
+            }`}
+          >
+            <FileText className="h-3.5 w-3.5" /> RCSB PDB ID
+          </button>
+          <button
+            data-testid="validate-mode-upload"
+            onClick={() => setMode("upload")}
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 transition ${
+              mode === "upload" ? "bg-white text-[#5139ED] shadow-sm" : "text-[#64748B] hover:text-[#0B0B18]"
+            }`}
+          >
+            <Upload className="h-3.5 w-3.5" /> Upload PDB file
+          </button>
         </div>
 
-        <button
-          data-testid="validate-run"
-          onClick={run}
-          disabled={running || !pdbId.trim()}
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#5139ED] via-[#395AED] to-[#8139ED] px-6 text-sm font-semibold text-white shadow-[0_10px_28px_-8px_rgba(81,57,237,0.55)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-          {running ? "Redocking…" : "Run validation"}
-        </button>
-      </div>
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {mode === "id" ? (
+              <label className="block">
+                <span className="text-[11px] font-semibold uppercase tracking-widest text-[#5139ED]">PDB ID</span>
+                <input
+                  data-testid="validate-pdb-id"
+                  type="text"
+                  maxLength={4}
+                  value={pdbId}
+                  onChange={(e) => setPdbId(e.target.value.toUpperCase())}
+                  disabled={running}
+                  placeholder="e.g. 1STP"
+                  className="mt-1 w-full rounded-xl border border-[#E7E7F3] bg-white px-3 py-2 font-mono text-[15px] font-semibold tracking-widest text-[#0B0B18] uppercase focus:border-[#5139ED]/40 focus:outline-none focus:ring-2 focus:ring-[#5139ED]/20"
+                />
+              </label>
+            ) : (
+              <label className="block">
+                <span className="text-[11px] font-semibold uppercase tracking-widest text-[#5139ED]">PDB file</span>
+                <input
+                  ref={fileInputRef}
+                  data-testid="validate-file-input"
+                  type="file"
+                  accept=".pdb,.ent,.txt,chemical/x-pdb"
+                  onChange={onFilePick}
+                  disabled={running}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={running}
+                  data-testid="validate-file-pick"
+                  className="mt-1 flex w-full items-center gap-2 truncate rounded-xl border border-dashed border-[#5139ED]/40 bg-[#F5F5FC] px-3 py-2 text-[13px] font-semibold text-[#0B0B18] hover:border-[#5139ED] hover:bg-[#EFEDFB] disabled:opacity-50"
+                >
+                  <Upload className="h-4 w-4 shrink-0 text-[#5139ED]" />
+                  <span className="min-w-0 truncate">
+                    {uploadFile ? uploadFile.name : "Choose a .pdb file (max 20 MB)"}
+                  </span>
+                </button>
+                {uploadFile && (
+                  <p className="mt-1 truncate text-[11px] text-[#64748B]">
+                    {(uploadFile.size / 1024).toFixed(1)} KB · Ready to validate
+                  </p>
+                )}
+              </label>
+            )}
+            <label className="block">
+              <span className="text-[11px] font-semibold uppercase tracking-widest text-[#5139ED]">Ligand residue <span className="normal-case text-[#94A3B8]">(optional)</span></span>
+              <input
+                data-testid="validate-resname"
+                type="text"
+                maxLength={5}
+                value={resname}
+                onChange={(e) => setResname(e.target.value.toUpperCase())}
+                disabled={running}
+                placeholder="Auto-detect"
+                className="mt-1 w-full rounded-xl border border-[#E7E7F3] bg-white px-3 py-2 font-mono text-[15px] font-semibold tracking-widest text-[#0B0B18] uppercase focus:border-[#5139ED]/40 focus:outline-none focus:ring-2 focus:ring-[#5139ED]/20"
+              />
+            </label>
+          </div>
 
-      {/* Example presets */}
-      <div className="border-t border-[#F1F1FA] bg-[#FBFBFF] px-6 py-4">
-        <p className="text-[10.5px] font-semibold uppercase tracking-widest text-[#94A3B8]">Try a benchmark case</p>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {EXAMPLE_PDBS.map((e) => (
-            <button
-              key={e.id}
-              data-testid={`validate-example-${e.id}`}
-              onClick={() => { setPdbId(e.id); setResname(""); }}
-              disabled={running}
-              className="inline-flex items-center gap-2 rounded-xl border border-[#E7E7F3] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#0B0B18] hover:border-[#5139ED]/40 hover:text-[#5139ED] disabled:opacity-50"
-            >
-              <span className="font-mono">{e.id}</span>
-              <span className="text-[#64748B]">·</span>
-              <span>{e.label}</span>
-              <span className="text-[11px] text-[#94A3B8]">{e.hint}</span>
-            </button>
-          ))}
+          <button
+            data-testid="validate-run"
+            onClick={run}
+            disabled={running || (mode === "id" ? !pdbId.trim() : !uploadFile)}
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#5139ED] via-[#395AED] to-[#8139ED] px-6 text-sm font-semibold text-white shadow-[0_10px_28px_-8px_rgba(81,57,237,0.55)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+            {running ? "Redocking…" : "Run validation"}
+          </button>
         </div>
       </div>
+
+      {/* Example presets — only useful for RCSB ID mode */}
+      {mode === "id" && (
+        <div className="border-t border-[#F1F1FA] bg-[#FBFBFF] px-6 py-4">
+          <p className="text-[10.5px] font-semibold uppercase tracking-widest text-[#94A3B8]">Try a benchmark case</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {EXAMPLE_PDBS.map((e) => (
+              <button
+                key={e.id}
+                data-testid={`validate-example-${e.id}`}
+                onClick={() => { setPdbId(e.id); setResname(""); }}
+                disabled={running}
+                className="inline-flex items-center gap-2 rounded-xl border border-[#E7E7F3] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#0B0B18] hover:border-[#5139ED]/40 hover:text-[#5139ED] disabled:opacity-50"
+              >
+                <span className="font-mono">{e.id}</span>
+                <span className="text-[#64748B]">·</span>
+                <span>{e.label}</span>
+                <span className="text-[11px] text-[#94A3B8]">{e.hint}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Result card */}
       {result && (
@@ -209,7 +298,7 @@ export default function DockingValidationPanel() {
                 <span className="text-[10.5px] font-bold uppercase tracking-widest">
                   {style.label}
                 </span>
-                {result.pdb_id && (
+                {result.pdb_id && /^[0-9A-Z]{4}$/.test(result.pdb_id) && (
                   <a
                     href={`https://www.rcsb.org/structure/${result.pdb_id}`}
                     target="_blank" rel="noopener noreferrer"
@@ -217,6 +306,11 @@ export default function DockingValidationPanel() {
                   >
                     {result.pdb_id} <ExternalLink className="h-3 w-3" />
                   </a>
+                )}
+                {result.pdb_id && !/^[0-9A-Z]{4}$/.test(result.pdb_id) && (
+                  <span className="ml-1 inline-flex items-center gap-1 rounded-full border border-current/30 px-2 py-0.5 text-[10.5px] font-semibold">
+                    <Upload className="h-3 w-3" /> {result.pdb_id}
+                  </span>
                 )}
               </div>
 

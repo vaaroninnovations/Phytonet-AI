@@ -87,6 +87,15 @@ export const targetResolve = (query, organism = "Homo sapiens") =>
 // ── Docking Validation API ─────────────────────────────────────────
 export const runDockingValidation = (payload) =>
   api.post("/docking/validate", payload).then((r) => r.data);
+export const uploadDockingValidation = (file, { ligand_resname, exhaustiveness } = {}) => {
+  const fd = new FormData();
+  fd.append("file", file);
+  if (ligand_resname) fd.append("ligand_resname", ligand_resname);
+  if (exhaustiveness) fd.append("exhaustiveness", String(exhaustiveness));
+  return api.post("/docking/validate/upload", fd, {
+    headers: { "Content-Type": "multipart/form-data" },
+  }).then((r) => r.data);
+};
 export const getDockingValidationOverlay = (job_id, pair_id) =>
   api.get(`/docking/validate/${encodeURIComponent(job_id)}/${encodeURIComponent(pair_id)}/overlay`).then((r) => r.data);
 export const runDockingValidationBatch = (payload) =>

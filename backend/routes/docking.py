@@ -5,7 +5,7 @@ import logging
 import time
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, File, Form, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 
@@ -124,6 +124,42 @@ def build_router() -> APIRouter:
             raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
             logging.exception("Docking validation failed")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @router.post("/docking/validate/upload")
+    async def docking_validate_upload(
+        file: UploadFile = File(...),
+        ligand_resname: Optional[str] = Form(None),
+        exhaustiveness: int = Form(8),
+    ):
+        """Same as `/docking/validate` but takes a user-uploaded PDB file
+        instead of a 4-character RCSB id. Ideal for modified receptors,
+        homology models, or unreleased crystal structures."""
+        _check_deps()
+        try:
+            data = await file.read()
+            r = await docking_validation.validate_uploaded_pdb(
+                file_bytes=data,
+                filename=file.filename or "upload.pdb",
+                ligand_resname=(ligand_resname or None),
+                exhaustiveness=exhaustiveness,
+            )
+            return {
+                "pdb_id": r.pdb_id,
+                "ligand_resname": r.ligand_resname,
+                "ligand_smiles": r.ligand_smiles,
+                "ligand_heavy_atoms": r.ligand_heavy_atoms,
+                "redocked_affinity": r.redocked_affinity,
+                "rmsd_angstrom": r.rmsd_angstrom,
+                "validation_status": r.validation_status,
+                "notes": r.notes,
+                "job_id": r.job_id,
+                "pair_id": r.pair_id,
+            }
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            logging.exception("Docking validation (upload) failed")
             raise HTTPException(status_code=500, detail=str(e))
 
     @router.get("/docking/validate/{job_id}/{pair_id}/overlay")
