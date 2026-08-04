@@ -1,5 +1,5 @@
 import "@/App.css";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation, Navigate } from "react-router-dom";
 import Home from "@/pages/Home";
 import PhytoNetAI from "@/pages/PhytoNetAI";
 import PlantDatabase from "@/pages/PlantDatabase";
@@ -15,7 +15,6 @@ import MyProjects from "@/pages/MyProjects";
 import VerifyEmail from "@/pages/VerifyEmail";
 import PhytoNet from "@/pages/PhytoNet";
 import GoogleCallback from "@/pages/GoogleCallback";
-import DatabasesHub from "@/pages/DatabasesHub";
 import Dashboard from "@/pages/Dashboard";
 import Profile from "@/pages/Profile";
 import Settings from "@/pages/Settings";
@@ -86,7 +85,7 @@ function App() {
                         path="/disease-target-identification"
                         element={<DiseaseTargets />}
                       />
-                      <Route path="/databases" element={<DatabasesHub />} />
+                      <Route path="/databases" element={<Navigate to="/#resources" replace />} />
                       <Route path="/dashboard" element={<Dashboard />} />
                       <Route path="/profile" element={<Profile />} />
                       <Route path="/settings" element={<Settings />} />

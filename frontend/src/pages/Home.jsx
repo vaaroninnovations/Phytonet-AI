@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import HeroVisual from "@/components/HeroVisual";
 import BrandLogo from "@/components/BrandLogo";
+import ResourcesSection from "@/components/home/ResourcesSection";
 import { useAuth } from "@/context/AuthContext";
 import { useNodes } from "@/context/NodeContext";
 
@@ -951,6 +952,7 @@ export default function Home() {
       <HowItWorks />
       <Trust />
       <Testimonials />
+      <ResourcesSection />
       <Pricing />
       <FAQ />
       <FinalCTA />

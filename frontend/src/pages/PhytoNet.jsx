@@ -75,7 +75,7 @@ const RESEARCH_MODULES = [
     title: "Databases",
     desc: "Central index of every biological, chemical and pharmacological source we integrate.",
     cta: "Browse Databases",
-    to: "/databases",
+    to: "/#resources",
     icon: Database,
     tint: "#0F172A",
     accent: "from-[#0F172A]/8 to-[#0F172A]/3",

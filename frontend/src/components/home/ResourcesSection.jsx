@@ -1,5 +1,5 @@
-// PhytoNet AI — Databases Hub
-// A central knowledge index of every biological, chemical, pharmacological,
+// PhytoNet AI — Resources section (mounted on the homepage as #resources).
+// Central knowledge index of every biological, chemical, pharmacological,
 // structural, pathway, disease and phytochemical data source integrated
 // into PhytoNet AI. Users can browse, filter and inspect each database
 // (purpose, supported data, update cadence, API availability, citation,
@@ -398,8 +398,8 @@ function DBCard({ db, index }) {
   );
 }
 
-/* ───────────────────────── Page ───────────────────────── */
-export default function DatabasesHub() {
+/* ───────────────────────── Section ───────────────────────── */
+export default function ResourcesSection() {
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("all");
 
@@ -423,9 +423,13 @@ export default function DatabasesHub() {
   }, []);
 
   return (
-    <main data-testid="databases-hub-page" className="relative overflow-hidden bg-white">
+    <section
+      id="resources"
+      data-testid="resources-section"
+      className="relative scroll-mt-24 overflow-hidden bg-white"
+    >
       {/* ── Header ── */}
-      <section className="relative overflow-hidden border-b border-[#E7E7F3] bg-gradient-to-b from-[#F5F3FF] via-white to-white pb-16 pt-16">
+      <div className="relative overflow-hidden border-b border-[#E7E7F3] bg-gradient-to-b from-[#F5F3FF] via-white to-white pb-14 pt-16">
         <div aria-hidden className="brand-blur absolute -left-32 top-0 h-[360px] w-[360px] bg-[#5139ED]" />
         <div aria-hidden className="brand-blur absolute -right-24 top-24 h-[300px] w-[300px] bg-[#2BB673]" />
         <div className="relative mx-auto max-w-7xl px-6">
@@ -433,9 +437,9 @@ export default function DatabasesHub() {
             <DatabaseIcon className="h-3.5 w-3.5" />
             Central Knowledge Hub
           </div>
-          <h1 className="font-headline mt-3 text-[36px] font-bold tracking-[-0.02em] text-[#111827] sm:text-[44px]">
+          <h2 className="font-headline mt-3 text-[36px] font-bold tracking-[-0.02em] text-[#111827] sm:text-[44px]">
             Every database <span className="gradient-text">that powers PhytoNet AI</span>
-          </h1>
+          </h2>
           <p className="mt-4 max-w-3xl text-[15px] leading-relaxed text-[#4B5563]">
             Browse each biological, chemical, pharmacological, structural, pathway and phytochemical
             data source integrated into the platform. Every entry tells you what it stores, how often
@@ -481,10 +485,10 @@ export default function DatabasesHub() {
             </div>
           </div>
         </div>
-      </section>
+      </div>
 
       {/* ── Grid ── */}
-      <section className="mx-auto max-w-7xl px-6 py-14">
+      <div className="mx-auto max-w-7xl px-6 py-14">
         <div className="mb-5 flex items-center justify-between text-[13px] text-[#64748B]">
           <span data-testid="db-count">
             Showing <strong className="text-[#111827]">{filtered.length}</strong> of {DBS.length} databases
@@ -509,15 +513,15 @@ export default function DatabasesHub() {
             ))}
           </div>
         )}
-      </section>
+      </div>
 
       {/* ── Footer CTA ── */}
-      <section className="border-t border-[#E7E7F3] bg-[#F8FAFC] py-14">
+      <div className="border-t border-[#E7E7F3] bg-[#F8FAFC] py-14">
         <div className="mx-auto max-w-5xl px-6 text-center">
           <ShieldCheck className="mx-auto h-8 w-8 text-[#2BB673]" />
-          <h2 className="font-headline mt-3 text-[24px] font-bold tracking-tight text-[#111827]">
+          <h3 className="font-headline mt-3 text-[24px] font-bold tracking-tight text-[#111827]">
             Missing a database you'd like to see indexed?
-          </h2>
+          </h3>
           <p className="mt-3 text-[14px] text-[#4B5563]">
             Every integration in PhytoNet AI is peer-reviewed and cross-linked. If your workflow
             relies on a source we haven't listed, let us know and we'll evaluate it for the next release.
@@ -530,16 +534,9 @@ export default function DatabasesHub() {
             >
               Launch AI Workflow <ArrowRight className="h-4 w-4" />
             </Link>
-            <Link
-              to="/"
-              data-testid="db-footer-home"
-              className="inline-flex items-center gap-2 rounded-full border border-[#E7E7F3] bg-white px-5 py-2.5 text-[13px] font-semibold text-[#111827] transition hover:border-[#5139ED]/40 hover:text-[#5139ED]"
-            >
-              Back to home
-            </Link>
           </div>
         </div>
-      </section>
-    </main>
+      </div>
+    </section>
   );
 }
