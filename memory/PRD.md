@@ -870,6 +870,36 @@ Every standalone module (`/plant-database`, `/admet`, `/compound-target-predicti
 
 
 
+## Implemented (2026-02-04) — Contact Spam Guard (P0)
+
+Three defense layers added to public `POST /api/contact`:
+
+1. **Per-IP rate limit** — 5 messages / rolling hour, 20 / rolling day. Returns
+   HTTP 429 with a friendly retry message. Trusts `X-Forwarded-For` first hop.
+2. **Honeypot field** — hidden `website` input that only bots auto-fill.
+   Submissions with a non-empty value silently return 200 `{ok: true, id:
+   "honeypot"}` and are never persisted.
+3. **Friendly math captcha** — `GET /api/contact/challenge` issues a signed
+   challenge (`{challenge_id, question: "What is 9 − 2?"}`). Answer verified
+   server-side, single-use, 10-minute TTL (`contact_challenges` collection
+   with TTL index). Frontend fetches a fresh captcha on mount and after each
+   successful submit, with a Refresh button.
+
+**Files changed**
+- `/app/backend/routes/contact.py` — added challenge endpoint, honeypot check,
+  rate-limit guard, and `initialize(db)` for the TTL index.
+- `/app/backend/server.py` — startup calls `_contact_routes.initialize(db)`.
+- `/app/frontend/src/pages/Home.jsx` — `ContactForm` fetches the challenge,
+  renders an inline captcha widget + hidden honeypot, and sends both fields.
+
+**Verification**: curl tests confirmed:
+- Missing captcha → 422
+- Valid submit → 200 (persisted)
+- Captcha replay → 400 "Captcha expired or invalid"
+- Honeypot filled → 200 with id="honeypot" (not persisted)
+- Wrong captcha answer → 400 "Incorrect captcha answer"
+- 6th submit from same IP in an hour → 429 rate-limited
+
 ## Implemented (2026-02-04) — Homepage FAQ Redesign & Contact System (P0)
 
 **Frontend**

@@ -1391,6 +1391,12 @@ async def _startup():
     except Exception as e:
         logger.warning(f"Assistant init failed (non-fatal): {e}")
 
+    # Initialize contact-message indexes (TTL for captcha challenges)
+    try:
+        await _contact_routes.initialize(db)
+    except Exception as e:
+        logger.warning(f"Contact init failed (non-fatal): {e}")
+
     # ── Scientific-tool dependency check (fails GRACEFULLY, never installs) ──
     # AutoDock Vina, Open Babel, GROMACS, RDKit, Meeko must be baked into the
     # image (see /app/Dockerfile). If missing we log a clear diagnostic; the

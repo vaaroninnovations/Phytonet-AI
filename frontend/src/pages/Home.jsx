@@ -598,8 +598,23 @@ function ContactForm() {
   const API = process.env.REACT_APP_BACKEND_URL;
   const [form, setForm] = useState({
     name: "", email: "", institution: "", subject: "", message: "",
+    captcha_answer: "", website: "",  // website = hidden honeypot
   });
   const [status, setStatus] = useState({ state: "idle", msg: "" });
+  const [challenge, setChallenge] = useState({ id: "", question: "…" });
+
+  // Fetch a fresh math captcha on mount + every successful submit
+  const loadChallenge = async () => {
+    try {
+      const res = await fetch(`${API}/api/contact/challenge`);
+      if (!res.ok) throw new Error("challenge failed");
+      const data = await res.json();
+      setChallenge({ id: data.challenge_id, question: data.question });
+    } catch {
+      setChallenge({ id: "", question: "Unable to load captcha" });
+    }
+  };
+  useEffect(() => { loadChallenge(); /* eslint-disable-next-line */ }, []);
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
@@ -611,19 +626,34 @@ function ContactForm() {
       setStatus({ state: "error", msg: "Please fill in your name, email, subject and message (5+ characters)." });
       return;
     }
+    if (!challenge.id || form.captcha_answer === "" || Number.isNaN(Number(form.captcha_answer))) {
+      setStatus({ state: "error", msg: "Please solve the captcha before sending." });
+      return;
+    }
     setStatus({ state: "sending", msg: "" });
     try {
+      const body = {
+        name: form.name, email: form.email, institution: form.institution,
+        subject: form.subject, message: form.message,
+        challenge_id: challenge.id,
+        challenge_answer: Number(form.captcha_answer),
+        website: form.website,   // honeypot passthrough
+      };
       const res = await fetch(`${API}/api/contact`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
+        // Refresh captcha on any 4xx so the user can retry immediately
+        if (res.status >= 400 && res.status < 500) loadChallenge();
         throw new Error(err?.detail || `HTTP ${res.status}`);
       }
       setStatus({ state: "success", msg: "Thanks! We've received your message and will be in touch soon." });
-      setForm({ name: "", email: "", institution: "", subject: "", message: "" });
+      setForm({ name: "", email: "", institution: "", subject: "", message: "",
+                captcha_answer: "", website: "" });
+      loadChallenge();
     } catch (err) {
       setStatus({ state: "error", msg: err?.message || "Failed to send. Please try again." });
     }
@@ -671,6 +701,47 @@ function ContactForm() {
         className="mt-3 w-full min-h-[130px] resize-y rounded-lg border border-[#E7E7F3] bg-white px-3.5 py-2.5 text-[14px] text-[#111827] placeholder:text-slate-400 focus:border-[#5139ED] focus:outline-none focus:ring-2 focus:ring-[#5139ED]/15"
         placeholder="How can we help? *" value={form.message} onChange={set("message")} required minLength={5} maxLength={5000}
       />
+
+      {/* Honeypot — hidden from real users. Bots that auto-fill every field
+          will populate this and get their submission silently discarded. */}
+      <input
+        type="text"
+        tabIndex={-1}
+        autoComplete="off"
+        aria-hidden="true"
+        value={form.website}
+        onChange={set("website")}
+        style={{ position: "absolute", left: "-9999px", top: "-9999px",
+                 width: 1, height: 1, opacity: 0, pointerEvents: "none" }}
+        name="website"
+      />
+
+      {/* Friendly math captcha */}
+      <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-[#E7E7F3] bg-[#F8FAFF] px-3.5 py-2.5">
+        <div className="flex items-center gap-2 text-[13px] text-[#111827]">
+          <ShieldCheck className="h-4 w-4 text-[#2BB673]" />
+          <span data-testid="contact-captcha-question" className="font-medium">
+            {challenge.question}
+          </span>
+        </div>
+        <input
+          data-testid="contact-captcha-answer"
+          type="number"
+          inputMode="numeric"
+          className="w-24 rounded-md border border-[#E7E7F3] bg-white px-2.5 py-1.5 text-[13px] text-[#111827] placeholder:text-slate-400 focus:border-[#5139ED] focus:outline-none focus:ring-2 focus:ring-[#5139ED]/15"
+          placeholder="Answer"
+          value={form.captcha_answer}
+          onChange={set("captcha_answer")}
+        />
+        <button
+          type="button"
+          data-testid="contact-captcha-refresh"
+          onClick={loadChallenge}
+          className="ml-auto text-[11px] font-semibold uppercase tracking-wide text-[#5139ED] hover:text-[#3f2be0]"
+        >
+          Refresh
+        </button>
+      </div>
 
       {status.state === "success" && (
         <div data-testid="contact-success" className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-[13px] text-emerald-800">
