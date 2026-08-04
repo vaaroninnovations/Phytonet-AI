@@ -5,12 +5,11 @@
 // (purpose, supported data, update cadence, API availability, citation,
 // and how PhytoNet AI consumes it).
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
-  Search, ExternalLink, ArrowRight, BookOpen, Database as DatabaseIcon,
+  Search, ExternalLink, BookOpen, Database as DatabaseIcon,
   Atom, Dna, FlaskConical, Beaker, Leaf, Pill, Microscope, Network,
-  Layers, ShieldCheck, Cpu, Copy, Check,
+  Layers, Cpu, Copy, Check,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
@@ -426,115 +425,81 @@ export default function ResourcesSection() {
     <section
       id="resources"
       data-testid="resources-section"
-      className="relative scroll-mt-24 overflow-hidden bg-white"
+      className="relative scroll-mt-24 overflow-hidden bg-white py-20"
     >
-      {/* ── Header ── */}
-      <div className="relative overflow-hidden border-b border-[#E7E7F3] bg-gradient-to-b from-[#F5F3FF] via-white to-white pb-14 pt-16">
-        <div aria-hidden className="brand-blur absolute -left-32 top-0 h-[360px] w-[360px] bg-[#5139ED]" />
-        <div aria-hidden className="brand-blur absolute -right-24 top-24 h-[300px] w-[300px] bg-[#2BB673]" />
-        <div className="relative mx-auto max-w-7xl px-6">
-          <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-[#5139ED]">
-            <DatabaseIcon className="h-3.5 w-3.5" />
-            Central Knowledge Hub
+      <div className="mx-auto max-w-7xl px-6">
+        {/* ── Section heading (matches Pricing / Testimonials style) ── */}
+        <div className="mx-auto max-w-3xl text-center">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[#E7E7F3] bg-white/70 px-3 py-1 text-[11px] font-bold uppercase tracking-widest text-[#5139ED] backdrop-blur">
+            <DatabaseIcon className="h-3 w-3" />
+            Resources · Central Knowledge Hub
           </div>
-          <h2 className="font-headline mt-3 text-[36px] font-bold tracking-[-0.02em] text-[#111827] sm:text-[44px]">
+          <h2 className="font-display mt-4 text-4xl font-bold tracking-tight text-[#0B0B18] sm:text-5xl">
             Every database <span className="gradient-text">that powers PhytoNet AI</span>
           </h2>
-          <p className="mt-4 max-w-3xl text-[15px] leading-relaxed text-[#4B5563]">
-            Browse each biological, chemical, pharmacological, structural, pathway and phytochemical
-            data source integrated into the platform. Every entry tells you what it stores, how often
-            it updates, whether it exposes an API, and exactly where PhytoNet AI consumes it.
+          <p className="mt-4 text-[15px] leading-relaxed text-[#4B5563]">
+            Every biological, chemical, pharmacological, structural, pathway and phytochemical
+            data source integrated into the platform — with the update cadence, API availability,
+            citation, and exactly where PhytoNet AI consumes each one.
           </p>
-
-          {/* Search + category chips */}
-          <div className="mt-8 flex flex-col gap-4 md:flex-row md:items-center">
-            <div className="relative flex-1 max-w-xl">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94A3B8]" />
-              <Input
-                data-testid="db-search"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Search databases (e.g. KEGG, target, structure)…"
-                className="h-11 rounded-full border-[#E7E7F3] bg-white pl-10 text-[14px] shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
-              />
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {CATEGORIES.map((c) => {
-                const Ic = c.icon;
-                const active = cat === c.id;
-                return (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => setCat(c.id)}
-                    data-testid={`db-cat-${c.id}`}
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-semibold transition ${
-                      active
-                        ? "border-[#5139ED] bg-[#5139ED] text-white shadow-[0_10px_24px_-14px_rgba(81,57,237,0.7)]"
-                        : "border-[#E7E7F3] bg-white/70 text-[#374151] hover:border-[#5139ED]/40 hover:text-[#5139ED]"
-                    }`}
-                  >
-                    <Ic className="h-3.5 w-3.5" />
-                    {c.label}
-                    <span className={`ml-1 rounded-full px-1.5 text-[10px] ${active ? "bg-white/20 text-white" : "bg-[#F1F5F9] text-[#64748B]"}`}>
-                      {countByCat[c.id] ?? 0}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
         </div>
-      </div>
 
-      {/* ── Grid ── */}
-      <div className="mx-auto max-w-7xl px-6 py-14">
-        <div className="mb-5 flex items-center justify-between text-[13px] text-[#64748B]">
-          <span data-testid="db-count">
-            Showing <strong className="text-[#111827]">{filtered.length}</strong> of {DBS.length} databases
+        {/* ── Compact filter bar ── */}
+        <div className="mt-10 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="relative w-full max-w-md">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94A3B8]" />
+            <Input
+              data-testid="db-search"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search databases (e.g. KEGG, target, structure)…"
+              className="h-10 rounded-full border-[#E7E7F3] bg-white pl-10 text-[14px] shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+            />
+          </div>
+          <span data-testid="db-count" className="text-[12.5px] font-semibold text-[#64748B]">
+            Showing <strong className="text-[#111827]">{filtered.length}</strong> of {DBS.length}
           </span>
-          <Link
-            to="/phytonet-ai"
-            data-testid="db-cta-launch-ai"
-            className="inline-flex items-center gap-1.5 rounded-full border border-[#E7E7F3] bg-white px-3.5 py-1.5 text-[12px] font-semibold text-[#111827] transition hover:border-[#5139ED]/40 hover:text-[#5139ED]"
-          >
-            Launch AI Workflow <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
         </div>
 
-        {filtered.length === 0 ? (
-          <div data-testid="db-empty" className="rounded-2xl border border-dashed border-[#E7E7F3] bg-white/70 p-16 text-center">
-            <p className="text-[14px] text-[#64748B]">No databases match your filters.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {filtered.map((db, i) => (
-              <DBCard key={db.name} db={db} index={i} />
-            ))}
-          </div>
-        )}
-      </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {CATEGORIES.map((c) => {
+            const Ic = c.icon;
+            const active = cat === c.id;
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setCat(c.id)}
+                data-testid={`db-cat-${c.id}`}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-semibold transition ${
+                  active
+                    ? "border-[#5139ED] bg-[#5139ED] text-white shadow-[0_10px_24px_-14px_rgba(81,57,237,0.7)]"
+                    : "border-[#E7E7F3] bg-white/70 text-[#374151] hover:border-[#5139ED]/40 hover:text-[#5139ED]"
+                }`}
+              >
+                <Ic className="h-3.5 w-3.5" />
+                {c.label}
+                <span className={`ml-1 rounded-full px-1.5 text-[10px] ${active ? "bg-white/20 text-white" : "bg-[#F1F5F9] text-[#64748B]"}`}>
+                  {countByCat[c.id] ?? 0}
+                </span>
+              </button>
+            );
+          })}
+        </div>
 
-      {/* ── Footer CTA ── */}
-      <div className="border-t border-[#E7E7F3] bg-[#F8FAFC] py-14">
-        <div className="mx-auto max-w-5xl px-6 text-center">
-          <ShieldCheck className="mx-auto h-8 w-8 text-[#2BB673]" />
-          <h3 className="font-headline mt-3 text-[24px] font-bold tracking-tight text-[#111827]">
-            Missing a database you'd like to see indexed?
-          </h3>
-          <p className="mt-3 text-[14px] text-[#4B5563]">
-            Every integration in PhytoNet AI is peer-reviewed and cross-linked. If your workflow
-            relies on a source we haven't listed, let us know and we'll evaluate it for the next release.
-          </p>
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-            <Link
-              to="/phytonet-ai"
-              data-testid="db-footer-launch"
-              className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#5139ED] via-[#395AED] to-[#8139ED] px-5 py-2.5 text-[13px] font-bold text-white shadow-[0_10px_28px_-10px_rgba(81,57,237,0.65)] transition-transform hover:-translate-y-0.5"
-            >
-              Launch AI Workflow <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
+        {/* ── Grid ── */}
+        <div className="mt-8">
+          {filtered.length === 0 ? (
+            <div data-testid="db-empty" className="rounded-2xl border border-dashed border-[#E7E7F3] bg-white/70 p-16 text-center">
+              <p className="text-[14px] text-[#64748B]">No databases match your filters.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {filtered.map((db, i) => (
+                <DBCard key={db.name} db={db} index={i} />
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </section>
