@@ -870,6 +870,29 @@ Every standalone module (`/plant-database`, `/admet`, `/compound-target-predicti
 
 
 
+## Fix (2026-02-04) — Welcome mail delivery unblocked
+
+**Root cause**: Resend account was in sandbox mode (`onboarding@resend.dev`
+FROM), which blocks delivery to any recipient other than the account owner
+(SMTP 550). Verification + welcome emails were dispatched from the app but
+rejected by Resend.
+
+**Fix**: Verified `phytonetai.com` on Resend, rotated to a new API key, and
+updated `backend/.env`:
+```
+EMAIL_PROVIDER="resend"
+EMAIL_FROM="PhytoNet AI <hello@phytonetai.com>"
+SMTP_USERNAME="resend"
+SMTP_PASSWORD="REDACTED_RESEND_KEY"
+```
+
+**Verified**: End-to-end signup delivers both emails:
+- `[EMAIL] Sent to vaaroninnovations@gmail.com via resend (Verify your PhytoNet AI account)`
+- `[EMAIL] Sent to vaaroninnovations@gmail.com via resend (Welcome to PhytoNet AI — your workspace is ready)`
+
+Also unblocks: password-reset emails, 2FA/OTP mail, and admin replies to
+contact-form submitters.
+
 ## Implemented (2026-02-04) — Admin Reply From Inbox + Welcome Email (P0)
 
 **Welcome email on signup**
