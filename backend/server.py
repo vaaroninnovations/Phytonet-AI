@@ -1313,6 +1313,13 @@ api_router_admin = APIRouter(prefix="/api")
 api_router_admin.include_router(_admin_router)
 app.include_router(api_router_admin)
 
+# ─── Contact messages — public POST /api/contact + admin /api/admin/contact/* ───
+from routes import contact as _contact_routes  # noqa: E402
+api_router_contact = APIRouter(prefix="/api")
+api_router_contact.include_router(_contact_routes.build_public_router(db))
+api_router_contact.include_router(_contact_routes.build_admin_router(db))
+app.include_router(api_router_contact)
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,

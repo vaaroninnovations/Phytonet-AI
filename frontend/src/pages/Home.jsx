@@ -580,7 +580,7 @@ function Trust() {
   );
 }
 
-/* ─────────────────────────── FAQ ─────────────────────────── */
+/* ─────────────────────────── FAQ + CONTACT ─────────────────────────── */
 const FAQS = [
   { q: "Is PhytoNet AI free to use?",
     a: "Yes — the platform is publicly accessible for exploration. An account (free) is required only for saving projects and downloading exports." },
@@ -593,36 +593,154 @@ const FAQS = [
   { q: "Is my data private?",
     a: "Yes. Project data is scoped to your account. We never share workflow_state, compound tables or manuscripts with third parties." },
 ];
+
+function ContactForm() {
+  const API = process.env.REACT_APP_BACKEND_URL;
+  const [form, setForm] = useState({
+    name: "", email: "", institution: "", subject: "", message: "",
+  });
+  const [status, setStatus] = useState({ state: "idle", msg: "" });
+
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (status.state === "sending") return;
+    // Basic client-side guards
+    if (!form.name.trim() || !form.email.trim() || !form.subject.trim() || form.message.trim().length < 5) {
+      setStatus({ state: "error", msg: "Please fill in your name, email, subject and message (5+ characters)." });
+      return;
+    }
+    setStatus({ state: "sending", msg: "" });
+    try {
+      const res = await fetch(`${API}/api/contact`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.detail || `HTTP ${res.status}`);
+      }
+      setStatus({ state: "success", msg: "Thanks! We've received your message and will be in touch soon." });
+      setForm({ name: "", email: "", institution: "", subject: "", message: "" });
+    } catch (err) {
+      setStatus({ state: "error", msg: err?.message || "Failed to send. Please try again." });
+    }
+  };
+
+  return (
+    <form
+      onSubmit={submit}
+      data-testid="contact-form"
+      className="rounded-2xl border border-[#E7E7F3] bg-white p-6 sm:p-7 shadow-[0_1px_0_rgba(0,0,0,0.02),0_20px_40px_-24px_rgba(81,57,237,0.15)]"
+    >
+      <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-[#2BB673]">Contact us</p>
+      <h3 className="font-headline mt-2 text-[22px] leading-tight text-[#111827] sm:text-[24px]">
+        Have a question we haven't answered?
+      </h3>
+      <p className="mt-2 text-[13px] text-[#4B5563]">
+        Send us a note — collaborations, feature requests, research feedback, we read every message.
+      </p>
+
+      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <input
+          data-testid="contact-name"
+          className="rounded-lg border border-[#E7E7F3] bg-white px-3.5 py-2.5 text-[14px] text-[#111827] placeholder:text-slate-400 focus:border-[#5139ED] focus:outline-none focus:ring-2 focus:ring-[#5139ED]/15"
+          type="text" placeholder="Your name *" value={form.name} onChange={set("name")} required maxLength={120}
+        />
+        <input
+          data-testid="contact-email"
+          className="rounded-lg border border-[#E7E7F3] bg-white px-3.5 py-2.5 text-[14px] text-[#111827] placeholder:text-slate-400 focus:border-[#5139ED] focus:outline-none focus:ring-2 focus:ring-[#5139ED]/15"
+          type="email" placeholder="Email address *" value={form.email} onChange={set("email")} required
+        />
+      </div>
+      <input
+        data-testid="contact-institution"
+        className="mt-3 w-full rounded-lg border border-[#E7E7F3] bg-white px-3.5 py-2.5 text-[14px] text-[#111827] placeholder:text-slate-400 focus:border-[#5139ED] focus:outline-none focus:ring-2 focus:ring-[#5139ED]/15"
+        type="text" placeholder="Institution / affiliation (optional)" value={form.institution} onChange={set("institution")} maxLength={200}
+      />
+      <input
+        data-testid="contact-subject"
+        className="mt-3 w-full rounded-lg border border-[#E7E7F3] bg-white px-3.5 py-2.5 text-[14px] text-[#111827] placeholder:text-slate-400 focus:border-[#5139ED] focus:outline-none focus:ring-2 focus:ring-[#5139ED]/15"
+        type="text" placeholder="Subject *" value={form.subject} onChange={set("subject")} required maxLength={200}
+      />
+      <textarea
+        data-testid="contact-message"
+        className="mt-3 w-full min-h-[130px] resize-y rounded-lg border border-[#E7E7F3] bg-white px-3.5 py-2.5 text-[14px] text-[#111827] placeholder:text-slate-400 focus:border-[#5139ED] focus:outline-none focus:ring-2 focus:ring-[#5139ED]/15"
+        placeholder="How can we help? *" value={form.message} onChange={set("message")} required minLength={5} maxLength={5000}
+      />
+
+      {status.state === "success" && (
+        <div data-testid="contact-success" className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-[13px] text-emerald-800">
+          {status.msg}
+        </div>
+      )}
+      {status.state === "error" && (
+        <div data-testid="contact-error" className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-[13px] text-rose-800">
+          {status.msg}
+        </div>
+      )}
+
+      <button
+        data-testid="contact-submit-btn"
+        type="submit"
+        disabled={status.state === "sending"}
+        className="mt-4 inline-flex items-center gap-2 rounded-full bg-[#5139ED] px-5 py-2.5 text-[13px] font-semibold text-white shadow-[0_10px_20px_-10px_rgba(81,57,237,0.6)] transition-all hover:bg-[#3f2be0] disabled:opacity-60"
+      >
+        {status.state === "sending" ? "Sending…" : "Send message"}
+        {status.state !== "sending" && <ArrowRight className="h-4 w-4" />}
+      </button>
+    </form>
+  );
+}
+
 function FAQ() {
   const [open, setOpen] = useState(0);
   return (
     <section id="faq" data-testid="faq" className="py-24">
-      <div className="mx-auto max-w-3xl px-6">
-        <p className="font-body text-center text-[11px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">FAQ</p>
-        <h2 className="font-headline mt-3 text-center text-[32px] leading-[1.08] tracking-tight text-[#111827] sm:text-[40px]">
-          Frequently asked questions
-        </h2>
-        <div className="mt-10 space-y-3">
-          {FAQS.map((f, i) => (
-            <div key={f.q} className="overflow-hidden rounded-2xl border border-[#E7E7F3] bg-white">
-              <button
-                data-testid={`faq-${i}`}
-                onClick={() => setOpen(open === i ? -1 : i)}
-                aria-expanded={open === i}
-                className="flex w-full items-center justify-between gap-4 px-6 py-4 text-left"
-              >
-                <span className="font-headline text-[15px] font-extrabold text-[#111827]">{f.q}</span>
-                <ChevronDown className={`h-4 w-4 text-[#5139ED] transition-transform ${open === i ? "rotate-180" : ""}`} />
-              </button>
-              <motion.div
-                initial={false}
-                animate={{ height: open === i ? "auto" : 0, opacity: open === i ? 1 : 0 }}
-                className="overflow-hidden"
-              >
-                <p className="px-6 pb-5 text-[14px] leading-relaxed text-[#374151]">{f.a}</p>
-              </motion.div>
+      <div className="mx-auto max-w-7xl px-6">
+        <div className="text-center">
+          <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">FAQ & contact</p>
+          <h2 className="font-headline mt-3 text-[32px] leading-[1.08] tracking-tight text-[#111827] sm:text-[40px]">
+            Questions? We've got answers.
+          </h2>
+          <p className="mx-auto mt-3 max-w-2xl text-[14px] text-[#4B5563]">
+            Browse the most common questions, or drop us a line — we typically reply within one working day.
+          </p>
+        </div>
+
+        <div className="mt-12 grid grid-cols-1 gap-10 lg:grid-cols-2 lg:gap-14">
+          {/* Left: FAQ accordion */}
+          <div>
+            <div className="space-y-3">
+              {FAQS.map((f, i) => (
+                <div key={f.q} className="overflow-hidden rounded-2xl border border-[#E7E7F3] bg-white">
+                  <button
+                    data-testid={`faq-${i}`}
+                    onClick={() => setOpen(open === i ? -1 : i)}
+                    aria-expanded={open === i}
+                    className="flex w-full items-center justify-between gap-4 px-6 py-4 text-left"
+                  >
+                    <span className="font-headline text-[15px] font-extrabold text-[#111827]">{f.q}</span>
+                    <ChevronDown className={`h-4 w-4 text-[#5139ED] transition-transform ${open === i ? "rotate-180" : ""}`} />
+                  </button>
+                  <motion.div
+                    initial={false}
+                    animate={{ height: open === i ? "auto" : 0, opacity: open === i ? 1 : 0 }}
+                    className="overflow-hidden"
+                  >
+                    <p className="px-6 pb-5 text-[14px] leading-relaxed text-[#374151]">{f.a}</p>
+                  </motion.div>
+                </div>
+              ))}
             </div>
-          ))}
+          </div>
+
+          {/* Right: Contact form */}
+          <div>
+            <ContactForm />
+          </div>
         </div>
       </div>
     </section>

@@ -1,0 +1,40 @@
+{
+  "summary": "Comprehensive testing of the new FAQ/Contact 2-column homepage split and Contact Us system (public POST /api/contact + admin /api/admin/contact/*). 14/14 backend pytest cases pass. Frontend home page renders FAQ (left) and Contact form (right) as a 2-column desktop layout, submit → success banner + fields reset works end-to-end. Admin login → sidebar 'admin-nav-contact' → /admin/contact page shows summary cards + rows, drawer open, status change to replied, notes save, and delete all function correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "N/A (env)", "issue": "test_credentials.md documents 'superadmin@phytonet.local / ChangeMe_SuperAdmin_2026!' but real seeded credentials in backend/.env are 'superadmin@phytonet.ai / SuperAdmin@2026!'. Also, pydantic EmailStr (email-validator 2.3.0) rejects the .local TLD with a 422, so if credentials.md were used verbatim /api/admin/auth/login would fail. Update /app/memory/test_credentials.md."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Home contact-error banner (invalid email path)", "issue": "Because the form fields use HTML5 `required` + `type=email` + `minLength=5`, the browser's native validation blocks form submission BEFORE the JS handler runs, so the [data-testid=contact-error] banner never renders for the invalid-email/empty-message flow the spec asks for. If the spec really wants the custom banner, remove HTML5 attrs or add `noValidate` on the form (Home.jsx ContactForm around line 633). Backend-side 422 errors do still surface into contact-error via the fetch catch-path (verified in code).", "affected_selectors": ["[data-testid=contact-error]"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_contact.py",
+    "/app/test_reports/pytest/iter39_contact.xml"
+  ],
+  "action_items": [
+    "Update /app/memory/test_credentials.md — real super-admin is superadmin@phytonet.ai / SuperAdmin@2026! (matches backend/.env). The documented @phytonet.local address also fails hard because email-validator 2.3.0 marks .local as a special-use TLD and returns 422 on /api/admin/auth/login.",
+    "Optional: If contact-error must show on client-side invalid input, drop HTML5 required/type=email/minLength on Home.jsx ContactForm inputs (or add noValidate on the <form>). Current behaviour is functionally correct but suppresses the custom banner for that specific flow."
+  ],
+  "critical_code_review_comments": [
+    "Home.jsx: HTML5 validation attributes short-circuit the custom `contact-error` banner path for client-side invalid input (see integration_issues).",
+    "routes/contact.py summary(): coerces legacy statuses to 'new' bucket only in the response — fine for now but if a legacy row has status like 'archived' it inflates the 'new' count. Consider explicit filter.",
+    "routes/contact.py: PATCH accepts empty strings via `admin_notes.strip() or None` which is good; make sure the 400 'No fields provided' also fires when both are None (already does).",
+    "The public POST persists client IP and user-agent silently — consider adding a rate-limit (adm.check_lockout-style) or captcha, currently trivially spammable."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_contact.py (new)"
+  ],
+  "success_rate": {"backend": "100% (14/14)", "frontend": "100% for spec'd core flows; 1 minor spec deviation on client-side error banner"},
+  "test_credentials": "Super Admin (verified live on preview URL): superadmin@phytonet.ai / SuperAdmin@2026!  (test_credentials.md is stale — see action_items).",
+  "seed_data_creation": "Public POST /api/contact rows were seeded during tests (some with 'TEST_' names, all safe to delete). Test also created & deleted 1 UI-flow row from Playwright.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Contact system fully working. Admin credentials in memory/test_credentials.md are wrong — real ones are in backend/.env (SUPER_ADMIN_EMAIL/PASSWORD). email-validator 2.3.0 rejects .local TLDs so any test that hardcodes 'superadmin@phytonet.local' against /api/admin/auth/login will 422.",
+  "rca_of_the_issue": "N/A — no functional bug in the contact feature itself. The only real environmental gotcha is the stale admin credential file (memory/test_credentials.md) vs the actual seeded email in backend/.env; this only affected the initial test run and was resolved by using the real value from backend/.env."
+}

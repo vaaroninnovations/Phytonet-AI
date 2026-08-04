@@ -25,6 +25,7 @@ import AdminDashboard from "@/pages/admin/AdminDashboard";
 import AdminUsers from "@/pages/admin/AdminUsers";
 import AdminAuditLog from "@/pages/admin/AdminAuditLog";
 import AdminFeedback from "@/pages/admin/AdminFeedback";
+import AdminContact from "@/pages/admin/AdminContact";
 import AdminSettings from "@/pages/admin/AdminSettings";
 import AdminProfile from "@/pages/admin/AdminProfile";
 import { AdminForgotPassword, AdminResetPassword } from "@/pages/admin/AdminPasswordReset";
@@ -117,6 +118,7 @@ function App() {
                         <Route path="users" element={<AdminUsers />} />
                         <Route path="audit-log" element={<AdminAuditLog />} />
                         <Route path="feedback" element={<AdminFeedback />} />
+                        <Route path="contact" element={<AdminContact />} />
                         <Route path="settings" element={<AdminSettings />} />
                         <Route path="profile" element={<AdminProfile />} />
                       </Route>
