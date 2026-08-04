@@ -150,6 +150,14 @@ def build_router(db, auth_service):
             res = await db["users"].insert_one(doc)
             doc["_id"] = res.inserted_id
             user = doc
+            # New Google-OAuth signup → send the welcome email (fire-and-forget).
+            try:
+                auth_service.dispatch_welcome_email(
+                    None, os.environ.get("FRONTEND_URL", ""), email,
+                    doc.get("first_name", ""),
+                )
+            except Exception as e:
+                logger.warning(f"[google_oauth] welcome email dispatch failed: {e}")
 
         # Issue standard access+refresh cookies (same as password auth)
         access = auth_service.create_access_token(str(user["_id"]), user["email"])

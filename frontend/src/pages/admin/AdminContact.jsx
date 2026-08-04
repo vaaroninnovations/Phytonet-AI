@@ -6,6 +6,7 @@ import { adminApi } from "@/context/AdminAuthContext";
 import {
   Mail, Loader2, X, Filter, Search, Trash2, Inbox, Eye, CheckCircle2,
   Circle, MessageSquareReply, Building2, User, Clock, ExternalLink,
+  Send, MailCheck, AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -47,6 +48,9 @@ export default function AdminContact() {
   const [detail, setDetail] = useState(null);
   const [savingDetail, setSavingDetail] = useState(false);
   const [notes, setNotes] = useState("");
+  const [replyBody, setReplyBody] = useState("");
+  const [replySubject, setReplySubject] = useState("");
+  const [sendingReply, setSendingReply] = useState(false);
 
   const params = useMemo(() => {
     const p = {};
@@ -79,10 +83,42 @@ export default function AdminContact() {
       const { data } = await adminApi.get(`/contact/messages/${id}`);
       setDetail(data);
       setNotes(data.admin_notes || "");
+      setReplyBody("");
+      setReplySubject(`Re: ${data.subject || ""}`);
       // Reload list so status may flip to 'read'
       load();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Failed to open message");
+    }
+  };
+
+  const sendReply = async () => {
+    if (!detail) return;
+    if (replyBody.trim().length < 2) {
+      toast.error("Please write a reply before sending.");
+      return;
+    }
+    setSendingReply(true);
+    try {
+      const { data } = await adminApi.post(`/contact/messages/${detail.id}/reply`, {
+        subject: replySubject.trim() || undefined,
+        body: replyBody,
+      });
+      setDetail(data.message);
+      setReplyBody("");
+      if (data.delivered) {
+        toast.success(`Reply sent via ${data.provider || "email"}`);
+      } else {
+        toast.warning(
+          `Reply saved but delivery failed${data.delivery_note ? `: ${data.delivery_note}` : "."} ` +
+          `Check SMTP settings.`
+        );
+      }
+      load();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to send reply");
+    } finally {
+      setSendingReply(false);
     }
   };
 
@@ -279,6 +315,78 @@ export default function AdminContact() {
             {/* Message body */}
             <div className="mt-5 rounded-lg border border-slate-800 bg-slate-950/50 p-4 text-sm leading-relaxed text-slate-200 whitespace-pre-wrap">
               {detail.message}
+            </div>
+
+            {/* Reply thread — previous outgoing replies */}
+            {detail.replies && detail.replies.length > 0 && (
+              <div className="mt-6" data-testid="reply-thread">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  Sent replies ({detail.replies.length})
+                </div>
+                <div className="mt-2 space-y-2">
+                  {detail.replies.map((r, i) => (
+                    <div key={i} data-testid={`reply-item-${i}`}
+                         className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-400">
+                        {r.delivered ? (
+                          <span className="inline-flex items-center gap-1 text-emerald-300">
+                            <MailCheck size={11} /> Delivered
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-amber-300">
+                            <AlertTriangle size={11} /> Delivery failed
+                          </span>
+                        )}
+                        <span>by {r.by}</span>
+                        <span>· {fmtDate(r.sent_at)}</span>
+                        {r.provider && <span>· via {r.provider}</span>}
+                      </div>
+                      <div className="mt-1.5 text-[12px] font-semibold text-slate-100">{r.subject}</div>
+                      <div className="mt-1 whitespace-pre-wrap text-[13px] leading-relaxed text-slate-300">{r.body}</div>
+                      {r.delivery_note && !r.delivered && (
+                        <div className="mt-2 rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1 text-[11px] text-amber-200">
+                          {r.delivery_note}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Reply composer — send email + record thread */}
+            <div className="mt-6" data-testid="reply-composer">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                Reply to {detail.email}
+              </div>
+              <input
+                data-testid="reply-subject"
+                value={replySubject}
+                onChange={(e) => setReplySubject(e.target.value)}
+                placeholder="Subject"
+                maxLength={200}
+                className="mt-2 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-amber-500/40 focus:outline-none"
+              />
+              <textarea
+                data-testid="reply-body"
+                value={replyBody}
+                onChange={(e) => setReplyBody(e.target.value)}
+                placeholder="Write your reply — the recipient will get an email with the original message quoted."
+                maxLength={10000}
+                className="mt-2 min-h-[120px] w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-amber-500/40 focus:outline-none"
+              />
+              <div className="mt-2 flex items-center justify-between">
+                <span className="text-[11px] text-slate-500">{replyBody.length}/10000</span>
+                <button
+                  data-testid="send-reply-btn"
+                  onClick={sendReply}
+                  disabled={sendingReply || replyBody.trim().length < 2}
+                  className="inline-flex items-center gap-2 rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-emerald-400 disabled:opacity-60"
+                >
+                  {sendingReply ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+                  {sendingReply ? "Sending…" : "Send reply"}
+                </button>
+              </div>
             </div>
 
             {/* Status actions */}

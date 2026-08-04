@@ -34,6 +34,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 import admin_service as adm
+import email_service
 
 logger = logging.getLogger(__name__)
 
@@ -76,8 +77,28 @@ class ContactUpdatePayload(BaseModel):
     admin_notes: Optional[str] = Field(None, max_length=2000)
 
 
+class ContactReplyPayload(BaseModel):
+    subject: Optional[str] = Field(None, max_length=200)
+    body: str = Field(..., min_length=2, max_length=10000)
+
+
 # ─────────────────────── serializer ───────────────────────────
 def _serialize(d: dict) -> dict:
+    replies = d.get("replies") or []
+    serialized_replies = []
+    for r in replies:
+        sent_at = r.get("sent_at")
+        if hasattr(sent_at, "isoformat"):
+            sent_at = sent_at.isoformat()
+        serialized_replies.append({
+            "by":              r.get("by"),
+            "subject":         r.get("subject"),
+            "body":            r.get("body"),
+            "sent_at":         sent_at,
+            "delivered":       bool(r.get("delivered", False)),
+            "provider":        r.get("provider"),
+            "delivery_note":   r.get("delivery_note"),
+        })
     return {
         "id": str(d["_id"]),
         "name": d.get("name"),
@@ -87,6 +108,7 @@ def _serialize(d: dict) -> dict:
         "message": d.get("message"),
         "status": d.get("status", "new"),
         "admin_notes": d.get("admin_notes"),
+        "replies": serialized_replies,
         "created_at": (d.get("created_at") or datetime.now(timezone.utc)).isoformat(),
         "updated_at": (d.get("updated_at").isoformat() if d.get("updated_at") else None),
     }
@@ -308,6 +330,68 @@ def build_admin_router(db) -> APIRouter:
             request=request,
         )
         return _serialize(fresh)
+
+    @router.post("/messages/{mid}/reply")
+    async def send_reply(mid: str, payload: ContactReplyPayload,
+                         request: Request, admin=Depends(require_admin)):
+        """Send an email reply to the message's submitter and record the
+        outgoing note against the thread. Also flips status to 'replied'."""
+        try:
+            oid = ObjectId(mid)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid message id")
+        d = await col.find_one({"_id": oid})
+        if not d:
+            raise HTTPException(status_code=404, detail="Message not found")
+
+        # Compose subject — either explicit, or "Re: <original>"
+        original_subject = d.get("subject") or "Your inquiry"
+        subject = (payload.subject or "").strip() or f"Re: {original_subject}"
+        first_name = (d.get("name") or "").split()[0] if d.get("name") else ""
+        html = email_service.admin_reply_email_html(
+            "PhytoNet AI", first_name, original_subject,
+            payload.body, d.get("message", ""),
+        )
+        result = email_service.send_email(d["email"], subject, html)
+
+        # Persist the reply on the thread regardless of delivery outcome so
+        # admins have a permanent audit trail.
+        now = datetime.now(timezone.utc)
+        reply_doc = {
+            "by":            admin.get("email"),
+            "subject":       subject,
+            "body":          payload.body.strip(),
+            "sent_at":       now,
+            "delivered":     bool(result.get("delivered", result.get("ok", False))),
+            "provider":      result.get("provider"),
+            "delivery_note": result.get("reason"),
+        }
+        await col.update_one(
+            {"_id": oid},
+            {
+                "$push": {"replies": reply_doc},
+                "$set":  {"status": "replied", "updated_at": now},
+            },
+        )
+        fresh = await col.find_one({"_id": oid})
+        await adm.record_audit(
+            db, actor_email=admin["email"],
+            action="admin.contact_message_replied",
+            target=d.get("email"),
+            details={
+                "message_id": mid,
+                "subject": subject,
+                "delivered": reply_doc["delivered"],
+                "provider":  reply_doc["provider"],
+            },
+            request=request,
+        )
+        return {
+            "message": _serialize(fresh),
+            "delivered": reply_doc["delivered"],
+            "provider":  reply_doc["provider"],
+            "delivery_note": reply_doc["delivery_note"],
+        }
 
     @router.delete("/messages/{mid}")
     async def delete_message(mid: str, request: Request,

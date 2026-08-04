@@ -168,6 +168,18 @@ def _dispatch_verification(background: BackgroundTasks, base_url: str, token: st
         email_service.send_email(email, subject, html)
 
 
+def dispatch_welcome_email(background, base_url: str, email: str,
+                           first_name: str = ""):
+    """Send the onboarding email right after a user is created.
+    Safe for password + OAuth signups. Never blocks the caller."""
+    html = email_service.welcome_email_html(APP_NAME, first_name, base_url)
+    subject = f"Welcome to {APP_NAME} — your workspace is ready"
+    if background is not None:
+        background.add_task(email_service.send_email, email, subject, html)
+    else:
+        email_service.send_email(email, subject, html)
+
+
 async def _record_login_attempt(db, key: str, success: bool):
     coll = db["login_attempts"]
     if success:
@@ -307,6 +319,7 @@ def build_router(db, frontend_url: str = ""):
         })
         base = frontend_url or str(request.base_url).rstrip("/")
         _dispatch_verification(background, base, vtoken, email, payload.first_name)
+        dispatch_welcome_email(background, base, email, payload.first_name)
         # Auto-login upon register (verification is required only for downloads)
         access = create_access_token(uid, email)
         refresh = create_refresh_token(uid)

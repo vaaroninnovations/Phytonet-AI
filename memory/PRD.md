@@ -870,6 +870,49 @@ Every standalone module (`/plant-database`, `/admet`, `/compound-target-predicti
 
 
 
+## Implemented (2026-02-04) — Admin Reply From Inbox + Welcome Email (P0)
+
+**Welcome email on signup**
+- New `welcome_email_html()` template in `email_service.py` — warm onboarding
+  card matching the brand palette, mentions the 10-node welcome bonus, links
+  to the four core modules, and prompts a reply.
+- `auth_service.dispatch_welcome_email()` helper (public) fires:
+  - Right after password register (`POST /api/auth/register`) via
+    BackgroundTasks (so registration returns instantly).
+  - Right after Google OAuth first-time signup in `google_oauth.py` (sync,
+    since OAuth returns a 302 redirect).
+- Verified: two SMTP send attempts (verification + welcome) are logged on
+  every fresh signup.
+
+**Admin reply from inbox**
+- New endpoint `POST /api/admin/contact/messages/{id}/reply` with body
+  `{subject?, body}`. Sends the email via the existing multi-provider
+  `email_service.send_email()`, appends a reply record to the message's
+  `replies` array `{by, subject, body, sent_at, delivered, provider,
+  delivery_note}`, flips status to `replied`, and audit-logs the action.
+- `admin_reply_email_html()` template quotes the original inquiry so
+  recipients get full context.
+- Reply persistence is unconditional — even when the SMTP provider fails the
+  outgoing note is stored with `delivered:false` + `delivery_note` so the
+  thread never loses history.
+- Frontend: `AdminContact.jsx` drawer now shows a "Sent replies (N)" thread
+  (delivered / failed badges, timestamp, provider) plus a reply composer
+  (subject + body + Send reply). Toast surfaces delivery outcome.
+- Verified end-to-end: admin login → open message → send reply → email
+  delivered via Resend → thread updated, status becomes `replied`.
+
+**Files changed**
+- `/app/backend/email_service.py` — added `welcome_email_html()` and
+  `admin_reply_email_html()` templates.
+- `/app/backend/auth_service.py` — added `dispatch_welcome_email()`; called
+  in `POST /api/auth/register`.
+- `/app/backend/google_oauth.py` — welcome email fires on new Google signups.
+- `/app/backend/routes/contact.py` — `ContactReplyPayload`,
+  `POST .../reply`, `replies[]` in the serializer, top-level
+  `import email_service`.
+- `/app/frontend/src/pages/admin/AdminContact.jsx` — reply thread UI +
+  composer + delivery-status toast.
+
 ## Implemented (2026-02-04) — Contact Spam Guard (P0)
 
 Three defense layers added to public `POST /api/contact`:

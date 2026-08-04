@@ -139,3 +139,90 @@ def verification_email_html(app_name: str, verify_link: str, first_name: str = "
   </table>
 </body></html>
 """.strip()
+
+
+def welcome_email_html(app_name: str, first_name: str = "",
+                       app_url: str = "") -> str:
+    """Warm onboarding email sent immediately after signup (email + Google)."""
+    greet = f"Welcome, {first_name}!" if first_name else "Welcome!"
+    cta = app_url or "https://phytonet.ai"
+    return f"""
+<!DOCTYPE html>
+<html><body style="font-family:'Inter',Helvetica,Arial,sans-serif;background:#FAFAFF;padding:32px 0;color:#0B0B18;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #E7E7F3;border-radius:16px;overflow:hidden;">
+    <tr><td style="padding:26px 28px;background:linear-gradient(135deg,#5139ED 0%,#395AED 55%,#2BB673 100%);color:#ffffff;">
+      <h1 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.01em;">{greet}</h1>
+      <p style="margin:6px 0 0;font-size:12px;opacity:0.92;">Your PhytoNet AI account is ready.</p>
+    </td></tr>
+    <tr><td style="padding:30px 28px;">
+      <p style="font-size:14px;line-height:1.6;color:#1E1E33;margin:0 0 16px;">
+        Thanks for joining <strong>{app_name}</strong> — the explainable AI platform for
+        computational network pharmacology. Your workspace is set up and you've
+        been credited with <strong>10 welcome nodes</strong> to try every module,
+        from the Plant Database to the AI Scientific Report generator.
+      </p>
+      <h2 style="font-size:14px;font-weight:800;color:#111827;margin:22px 0 10px;">Start here</h2>
+      <ul style="font-size:13px;line-height:1.7;color:#374151;padding-left:18px;margin:0;">
+        <li><strong>Plant Database</strong> — resolve compounds across IMPPAT, LOTUS, PubChem &amp; ChEBI</li>
+        <li><strong>ADMET Prediction</strong> — physchem + drug-likeness in one click</li>
+        <li><strong>Molecular Docking</strong> — validated Vina pipeline with 3D pose overlay</li>
+        <li><strong>PhytoNet AI Agent</strong> — orchestrates the full workflow end-to-end</li>
+      </ul>
+      <p style="text-align:center;margin:28px 0 6px;">
+        <a href="{cta}"
+           style="display:inline-block;padding:12px 26px;background:#5139ED;color:#ffffff;
+                  text-decoration:none;font-weight:700;font-size:14px;border-radius:999px;">
+          Open the platform
+        </a>
+      </p>
+      <p style="font-size:12px;color:#64748B;margin:22px 0 0;line-height:1.55;">
+        Have a research collaboration in mind or need a walkthrough? Just reply
+        to this email — a human on our team reads every message.
+      </p>
+    </td></tr>
+    <tr><td style="padding:16px 28px;border-top:1px solid #E7E7F3;background:#FAFAFF;">
+      <p style="font-size:11px;color:#94A3B8;margin:0;">© PhytoNet AI · Computational Pharmacology Platform</p>
+    </td></tr>
+  </table>
+</body></html>
+""".strip()
+
+
+def admin_reply_email_html(app_name: str, first_name: str,
+                           original_subject: str, reply_body: str,
+                           original_message: str) -> str:
+    """Email sent to a contact-form submitter when an admin replies from the
+    dashboard. Includes the original inquiry as a quoted block."""
+    greet = f"Hi {first_name}," if first_name else "Hello,"
+    # Preserve line breaks from the plaintext reply body inside <p>
+    body_html = "".join(
+        f"<p style='font-size:14px;line-height:1.6;color:#1E1E33;margin:0 0 12px;'>{line}</p>"
+        for line in (reply_body or "").split("\n") if line.strip()
+    ) or f"<p style='font-size:14px;color:#1E1E33;'>{reply_body}</p>"
+    quoted = (original_message or "").replace("\n", "<br/>")
+    return f"""
+<!DOCTYPE html>
+<html><body style="font-family:'Inter',Helvetica,Arial,sans-serif;background:#FAFAFF;padding:32px 0;color:#0B0B18;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #E7E7F3;border-radius:16px;overflow:hidden;">
+    <tr><td style="padding:22px 28px;background:linear-gradient(135deg,#5139ED 0%,#395AED 60%,#8139ED 100%);color:#ffffff;">
+      <h1 style="margin:0;font-size:18px;font-weight:800;letter-spacing:-0.01em;">{app_name} · Support Reply</h1>
+      <p style="margin:6px 0 0;font-size:12px;opacity:0.92;">Re: {original_subject}</p>
+    </td></tr>
+    <tr><td style="padding:28px;">
+      <p style="font-size:15px;margin:0 0 14px;">{greet}</p>
+      {body_html}
+      <hr style="border:none;border-top:1px solid #E7E7F3;margin:22px 0;" />
+      <p style="font-size:12px;color:#64748B;margin:0 0 8px;">Your original message:</p>
+      <blockquote style="margin:0;padding:12px 14px;border-left:3px solid #5139ED;background:#FAFAFF;font-size:13px;color:#374151;line-height:1.55;">
+        {quoted}
+      </blockquote>
+      <p style="font-size:12px;color:#64748B;margin:22px 0 0;">
+        You can reply directly to this email — it goes straight to our support inbox.
+      </p>
+    </td></tr>
+    <tr><td style="padding:16px 28px;border-top:1px solid #E7E7F3;background:#FAFAFF;">
+      <p style="font-size:11px;color:#94A3B8;margin:0;">© PhytoNet AI · Computational Pharmacology Platform</p>
+    </td></tr>
+  </table>
+</body></html>
+""".strip()
