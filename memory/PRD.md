@@ -883,7 +883,7 @@ updated `backend/.env`:
 EMAIL_PROVIDER="resend"
 EMAIL_FROM="PhytoNet AI <hello@phytonetai.com>"
 SMTP_USERNAME="resend"
-SMTP_PASSWORD="REDACTED_RESEND_KEY"
+SMTP_PASSWORD="<set-on-vps-only>"
 ```
 
 **Verified**: End-to-end signup delivers both emails:
