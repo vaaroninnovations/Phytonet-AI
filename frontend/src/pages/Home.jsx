@@ -1,6 +1,6 @@
 // PhytoNet AI — Premium homepage.
 // Full rewrite (Iter 21). Sections: Hero · Stats · Features · Workflow · Why ·
-// Screenshot · Plant Preview · Modules · How It Works · Trust · Testimonials ·
+// Screenshot · Plant Preview · Modules · How It Works · Trust · Resources ·
 // FAQ · Final CTA. Design: minimal white background, Manrope headlines,
 // Plus Jakarta Sans body, soft gradients + glassmorphism only where appropriate.
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -11,7 +11,7 @@ import {
   Sparkles, ShieldCheck, GitBranch, Layers, Atom, Dna, Network,
   Search, FlaskConical, FileText, Video, Image as ImageIcon, Beaker,
   Microscope, Brain, Zap, BookOpen, Github, Linkedin, Twitter,
-  Play, PlayCircle, Leaf, Cpu, Activity, Database, Workflow, Star, Quote,
+  Play, PlayCircle, Leaf, Cpu, Activity, Database, Workflow, Star,
   Target, HeartPulse, Waves, Coins, Bot, Clock, BarChart3, FileSearch,
 } from "lucide-react";
 import HeroVisual from "@/components/HeroVisual";
@@ -580,60 +580,6 @@ function Trust() {
   );
 }
 
-/* ─────────────────────────── TESTIMONIALS ─────────────────────────── */
-const TESTIMONIALS = [
-  { name: "Dr. Priya Menon",     inst: "IISc Bengaluru · Computational Biology", initials: "PM",
-    body: "PhytoNet AI collapsed a 4-week manual pipeline into one afternoon. The provenance trail alone is worth the switch." },
-  { name: "Prof. Marc Wallach",  inst: "ETH Zürich · Systems Pharmacology",      initials: "MW",
-    body: "Best AI-generated methods sections I've seen. Every claim is linked to a real dataset — that's rare." },
-  { name: "Dr. Yuki Tanaka",     inst: "Osaka Uni · Drug Discovery",             initials: "YT",
-    body: "The docking priority matrix combined with hub scoring is a genuinely new way to triage compounds." },
-];
-function Testimonials() {
-  const [idx, setIdx] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setIdx((v) => (v + 1) % TESTIMONIALS.length), 6000);
-    return () => clearInterval(t);
-  }, []);
-  return (
-    <section data-testid="testimonials" className="bg-[#F8FAFC] py-24">
-      <div className="mx-auto max-w-4xl px-6 text-center">
-        <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">Testimonials</p>
-        <h2 className="font-headline mt-3 text-[32px] leading-[1.08] tracking-tight text-[#111827] sm:text-[40px]">
-          Loved by working scientists
-        </h2>
-
-        <div className="relative mt-10 overflow-hidden">
-          <motion.div className="flex" animate={{ x: `${-idx * 100}%` }} transition={{ duration: 0.6, ease: "easeInOut" }}>
-            {TESTIMONIALS.map((t) => (
-              <div key={t.name} className="w-full shrink-0 px-2">
-                <div className="mx-auto max-w-2xl rounded-3xl border border-[#E7E7F3] bg-white p-9 text-left shadow-[0_20px_50px_-20px_rgba(11,11,24,0.15)]">
-                  <Quote className="h-6 w-6 text-[#5139ED]/40" />
-                  <p className="mt-4 text-[17px] leading-relaxed text-[#111827]">"{t.body}"</p>
-                  <div className="mt-6 flex items-center gap-3">
-                    <span className="grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-[#5139ED] to-[#8139ED] text-[13px] font-bold text-white">{t.initials}</span>
-                    <div>
-                      <p className="font-headline text-[13.5px] font-extrabold text-[#111827]">{t.name}</p>
-                      <p className="text-[11.5px] text-[#6B7280]">{t.inst}</p>
-                    </div>
-                    <div className="ml-auto flex text-[#F5B301]">{[0,1,2,3,4].map(i => <Star key={i} className="h-3.5 w-3.5 fill-current" />)}</div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </motion.div>
-          <div className="mt-6 flex justify-center gap-1.5">
-            {TESTIMONIALS.map((_, i) => (
-              <button key={i} onClick={() => setIdx(i)} aria-label={`Show testimonial ${i + 1}`}
-                      className={`h-1.5 rounded-full transition-all ${i === idx ? "w-8 bg-[#5139ED]" : "w-1.5 bg-[#D5D5E8]"}`} />
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 /* ─────────────────────────── FAQ ─────────────────────────── */
 const FAQS = [
   { q: "Is PhytoNet AI free to use?",
@@ -950,7 +896,6 @@ export default function Home() {
       <ScreenshotSection />
       <HowItWorks />
       <Trust />
-      <Testimonials />
       <Pricing />
       <FAQ />
       <FinalCTA />
