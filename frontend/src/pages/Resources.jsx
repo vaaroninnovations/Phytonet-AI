@@ -1,10 +1,10 @@
-// PhytoNet AI — Resources section (mounted on the homepage as #resources).
+// PhytoNet AI — Resources page (/resources)
 // Central knowledge index of every biological, chemical, pharmacological,
 // structural, pathway, disease and phytochemical data source integrated
 // into PhytoNet AI. Users can browse, filter and inspect each database
 // (purpose, supported data, update cadence, API availability, citation,
 // and how PhytoNet AI consumes it).
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   Search, ExternalLink, BookOpen, Database as DatabaseIcon,
@@ -397,10 +397,19 @@ function DBCard({ db, index }) {
   );
 }
 
-/* ───────────────────────── Section ───────────────────────── */
-export default function ResourcesSection() {
+/* ───────────────────────── Page ───────────────────────── */
+export default function Resources() {
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("all");
+
+  useEffect(() => {
+    document.title = "Resources · PhytoNet AI";
+    let m = document.querySelector('meta[name="description"]');
+    if (!m) { m = document.createElement("meta"); m.setAttribute("name", "description"); document.head.appendChild(m); }
+    m.setAttribute("content",
+      "PhytoNet AI Resources — every biological, chemical, pharmacological, structural, pathway and phytochemical data source integrated into the platform, with update cadence, APIs, citations, and where PhytoNet AI consumes each one.");
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }, []);
 
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase();
@@ -422,30 +431,33 @@ export default function ResourcesSection() {
   }, []);
 
   return (
-    <section
-      id="resources"
-      data-testid="resources-section"
-      className="relative scroll-mt-24 overflow-hidden bg-white py-20"
+    <main
+      data-testid="resources-page"
+      className="relative overflow-hidden bg-white"
     >
-      <div className="mx-auto max-w-7xl px-6">
-        {/* ── Section heading (matches Pricing / Testimonials style) ── */}
-        <div className="mx-auto max-w-3xl text-center">
+      {/* ── Page hero ── */}
+      <section className="relative overflow-hidden border-b border-[#E7E7F3] bg-gradient-to-b from-[#F5F3FF] via-white to-white pb-14 pt-16">
+        <div aria-hidden className="brand-blur absolute -left-32 top-0 h-[360px] w-[360px] bg-[#5139ED]" />
+        <div aria-hidden className="brand-blur absolute -right-24 top-24 h-[300px] w-[300px] bg-[#2BB673]" />
+        <div className="relative mx-auto max-w-7xl px-6">
           <div className="inline-flex items-center gap-2 rounded-full border border-[#E7E7F3] bg-white/70 px-3 py-1 text-[11px] font-bold uppercase tracking-widest text-[#5139ED] backdrop-blur">
             <DatabaseIcon className="h-3 w-3" />
-            Resources · Central Knowledge Hub
+            Central Knowledge Hub
           </div>
-          <h2 className="font-display mt-4 text-4xl font-bold tracking-tight text-[#0B0B18] sm:text-5xl">
+          <h1 className="font-headline mt-3 text-[36px] font-bold tracking-[-0.02em] text-[#111827] sm:text-[44px]">
             Every database <span className="gradient-text">that powers PhytoNet AI</span>
-          </h2>
-          <p className="mt-4 text-[15px] leading-relaxed text-[#4B5563]">
-            Every biological, chemical, pharmacological, structural, pathway and phytochemical
-            data source integrated into the platform — with the update cadence, API availability,
-            citation, and exactly where PhytoNet AI consumes each one.
+          </h1>
+          <p className="mt-4 max-w-3xl text-[15px] leading-relaxed text-[#4B5563]">
+            Browse each biological, chemical, pharmacological, structural, pathway and phytochemical
+            data source integrated into the platform. Every entry tells you what it stores, how often
+            it updates, whether it exposes an API, and exactly where PhytoNet AI consumes it.
           </p>
         </div>
+      </section>
 
-        {/* ── Compact filter bar ── */}
-        <div className="mt-10 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      {/* ── Filter bar + grid ── */}
+      <section className="mx-auto max-w-7xl px-6 py-14">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="relative w-full max-w-md">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94A3B8]" />
             <Input
@@ -487,7 +499,6 @@ export default function ResourcesSection() {
           })}
         </div>
 
-        {/* ── Grid ── */}
         <div className="mt-8">
           {filtered.length === 0 ? (
             <div data-testid="db-empty" className="rounded-2xl border border-dashed border-[#E7E7F3] bg-white/70 p-16 text-center">
@@ -501,7 +512,7 @@ export default function ResourcesSection() {
             </div>
           )}
         </div>
-      </div>
-    </section>
+      </section>
+    </main>
   );
 }
