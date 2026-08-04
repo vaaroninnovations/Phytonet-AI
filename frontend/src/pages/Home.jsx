@@ -632,6 +632,7 @@ function ContactForm() {
   return (
     <form
       onSubmit={submit}
+      noValidate
       data-testid="contact-form"
       className="rounded-2xl border border-[#E7E7F3] bg-white p-6 sm:p-7 shadow-[0_1px_0_rgba(0,0,0,0.02),0_20px_40px_-24px_rgba(81,57,237,0.15)]"
     >

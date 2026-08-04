@@ -868,3 +868,41 @@ Every standalone module (`/plant-database`, `/admet`, `/compound-target-predicti
 
 **Verification**: screenshotted all 5 standalone routes at desktop viewport; step highlighting updates live as the researcher progresses (verified on `/plant-database` — Step 1 (Input) → Step 4 (Analysis) after a Withania somnifera search).
 
+
+
+## Implemented (2026-02-04) — Homepage FAQ Redesign & Contact System (P0)
+
+**Frontend**
+- `/app/frontend/src/pages/Home.jsx`: FAQ section rebuilt as a responsive 2-column
+  layout — FAQ accordion (LEFT) + Contact form (RIGHT), single-column on mobile.
+  New `ContactForm()` component POSTs to `/api/contact`, has full validation +
+  success/error banners (form uses `noValidate` so custom JS validation surfaces
+  the `contact-error` banner correctly).
+- `/app/frontend/src/pages/admin/AdminLayout.jsx`: added sidebar entry
+  "Contact Messages" (`data-testid="admin-nav-contact"`).
+- `/app/frontend/src/pages/admin/AdminContact.jsx`: new Super Admin dashboard
+  with summary cards (Total / New / Read / Replied), status + search filters,
+  paginated table, detail drawer with status change, admin-notes save, and
+  permanent delete.
+- `/app/frontend/src/App.js`: registered `/admin/contact` route.
+
+**Backend**
+- `/app/backend/routes/contact.py`: new module exposing two routers:
+  - Public `POST /api/contact` (no auth) → inserts into `contact_messages`.
+  - Admin `GET/PATCH/DELETE /api/admin/contact/*` (cookie-based admin auth).
+  - `GET /admin/contact/messages/{id}` auto-flips status `new → read` on first
+    open. All mutations are audit-logged.
+- `/app/backend/server.py`: mounted both routers under `/api`.
+
+**Schema (`contact_messages`)**: `{name, email, institution, subject, message,
+status: new|read|replied, admin_notes, created_at, updated_at, ip, user_agent}`.
+
+**Verification**: `testing_agent_v3_fork` iteration 39 — 14/14 backend pytest
+cases pass, all admin + public frontend flows pass. `test_credentials.md`
+corrected to `superadmin@phytonet.ai / SuperAdmin@2026!`.
+
+## Backlog (updated 2026-02-04)
+- P1 — Inject ADMET / Docking Validation outputs into the AI Scientific Report.
+- P2 — Molecular Dynamics server-side execution via GROMACS + Celery workers.
+- P2 — PDF Fact Sheet for the Plant Information card (one-click printable).
+- P2 (nice-to-have) — Rate-limit or CAPTCHA on public `POST /api/contact` (currently trivially spammable).
