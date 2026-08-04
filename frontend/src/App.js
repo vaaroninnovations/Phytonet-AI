@@ -24,6 +24,7 @@ import AdminLayout from "@/pages/admin/AdminLayout";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
 import AdminUsers from "@/pages/admin/AdminUsers";
 import AdminAuditLog from "@/pages/admin/AdminAuditLog";
+import AdminFeedback from "@/pages/admin/AdminFeedback";
 import AdminSettings from "@/pages/admin/AdminSettings";
 import AdminProfile from "@/pages/admin/AdminProfile";
 import { AdminForgotPassword, AdminResetPassword } from "@/pages/admin/AdminPasswordReset";
@@ -41,6 +42,7 @@ import { NodeProvider } from "@/context/NodeContext";
 import { AuthModal } from "@/components/AuthModal";
 import ResumeSessionModal from "@/components/ResumeSessionModal";
 import { PurchaseNodesModal, InsufficientNodesModal } from "@/components/nodes/NodeModals";
+import { FeedbackProvider } from "@/components/feedback/FeedbackDialog";
 import { Toaster } from "sonner";
 
 function SiteChrome({ children }) {
@@ -63,6 +65,7 @@ function App() {
         <AdminAuthProvider>
         <AuthProvider>
           <NodeProvider>
+          <FeedbackProvider>
           <SelectionProvider>
             <ResultsProvider>
               <WorkflowProvider>
@@ -113,6 +116,7 @@ function App() {
                         <Route path="dashboard" element={<AdminDashboard />} />
                         <Route path="users" element={<AdminUsers />} />
                         <Route path="audit-log" element={<AdminAuditLog />} />
+                        <Route path="feedback" element={<AdminFeedback />} />
                         <Route path="settings" element={<AdminSettings />} />
                         <Route path="profile" element={<AdminProfile />} />
                       </Route>
@@ -128,6 +132,7 @@ function App() {
               </WorkflowProvider>
             </ResultsProvider>
           </SelectionProvider>
+          </FeedbackProvider>
           </NodeProvider>
         </AuthProvider>
         </AdminAuthProvider>

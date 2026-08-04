@@ -2,7 +2,7 @@
 // Modular per-module selection with 4-toggle include controls
 // (Methods · Tables · Figures · AI Interpretation).
 // See PRD.md for the multi-session roadmap.
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 import WorkflowLayout from "@/components/WorkflowLayout";
 import { useNetwork } from "@/context/NetworkContext";
 import { useResults } from "@/context/ResultsContext";
@@ -17,6 +17,7 @@ import { buildReportDoc } from "@/lib/reportBuilder";
 import { renderReportPdf } from "@/lib/reportPdf";
 import { renderReportDocx } from "@/lib/reportDocx";
 import { reportInterpret } from "@/lib/api";
+import { useFeedbackTrigger } from "@/components/feedback/FeedbackDialog";
 
 /* ─── Module catalogue — all 15 modules from the redesign spec ─── */
 const MODULES = [
@@ -98,6 +99,21 @@ export default function AIScientificReport() {
 
   const includedIds = MODULES.filter((m) => selection[m.id]?.included && availability[m.id]).map((m) => m.id);
   const anyIncluded = includedIds.length > 0;
+
+  // Feedback trigger — fires the moment the AI workflow has enough data to
+  // render a report AND the user has toggled at least one module in.
+  // task_id combines project id + module set so each unique report prompts
+  // the researcher exactly once.
+  const fbTrigger = useFeedbackTrigger("phytonet-ai-agent");
+  const fbFiredRef = useRef(false);
+  useEffect(() => {
+    if (!anyIncluded) { fbFiredRef.current = false; return; }
+    if (fbFiredRef.current) return;
+    fbFiredRef.current = true;
+    const taskId = `report-${workflow?.projectId || "run"}-${includedIds.join("_")}`;
+    fbTrigger.open(taskId, workflow?.projectId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anyIncluded, includedIds.length]);
 
   const reportDoc = useMemo(() => buildReportDoc({
     workflow, user,

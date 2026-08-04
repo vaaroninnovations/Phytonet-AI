@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useIsStandalone } from "@/hooks/useIsStandalone";
 import WorkflowLayout from "@/components/WorkflowLayout";
+import { useFeedbackTrigger } from "@/components/feedback/FeedbackDialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Tooltip,
@@ -244,6 +245,19 @@ export default function DiseaseTargets() {
     if (selectedCount === 0) return 3;
     return 4;
   }, [chosen, loadingTargets, rows.length, selectedCount]);
+
+  const fbTrigger = useFeedbackTrigger("disease-target-prediction");
+  const fbFiredRef = useRef(false);
+  useEffect(() => {
+    if (loadingTargets || rows.length === 0 || !chosen) {
+      if (loadingTargets) fbFiredRef.current = false;
+      return;
+    }
+    if (fbFiredRef.current) return;
+    fbFiredRef.current = true;
+    fbTrigger.open(`disease-${chosen?.name || chosen?.id || "run"}-${rows.length}`);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadingTargets, rows.length, chosen]);
 
   return (
     <WorkflowLayout moduleInfo={moduleInfo} currentStep={currentStep}>

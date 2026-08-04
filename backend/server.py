@@ -1294,6 +1294,15 @@ api_router_nodes = APIRouter(prefix="/api")
 api_router_nodes.include_router(_nodes_router)
 app.include_router(api_router_nodes)
 
+# ─── Feedback (post-task ratings) — mounted at /api/feedback ───
+from routes import feedback as _feedback_routes  # noqa: E402
+_feedback_router = _feedback_routes.build_router(
+    db, get_current_user=auth_service.make_get_current_user(db)
+)
+api_router_feedback = APIRouter(prefix="/api")
+api_router_feedback.include_router(_feedback_router)
+app.include_router(api_router_feedback)
+
 # ─── Super Admin routes — mounted at /api/admin ───
 import admin_service  # noqa: E402
 from routes import admin as _admin_routes  # noqa: E402

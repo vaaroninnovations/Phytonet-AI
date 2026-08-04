@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 import os
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 import jwt
@@ -704,5 +704,221 @@ def build_router(db, frontend_url: str = ""):
                                         "user_email": u.get("email")},
                                request=request)
         return {"ok": True}
+
+    # ═════════════════════════════════════════════════════════════════
+    # Feedback dashboard — list, summary, detail, export
+    # ═════════════════════════════════════════════════════════════════
+    feedback_col = db["feedback"]
+
+    def _feedback_query(module: Optional[str], user: Optional[str],
+                        rating: Optional[int], date_from: Optional[str],
+                        date_to: Optional[str]) -> dict:
+        q: dict = {}
+        if module: q["module"] = module
+        if user:
+            q["$or"] = [
+                {"user_email": {"$regex": user, "$options": "i"}},
+                {"user_name":  {"$regex": user, "$options": "i"}},
+                {"user_id":    user},
+            ]
+        if rating: q["ratings.overall"] = rating
+        if date_from or date_to:
+            r = {}
+            try:
+                if date_from: r["$gte"] = datetime.fromisoformat(date_from.replace("Z", "+00:00"))
+                if date_to:   r["$lte"] = datetime.fromisoformat(date_to.replace("Z", "+00:00"))
+            except Exception:
+                pass
+            if r: q["created_at"] = r
+        return q
+
+    @router.get("/feedback/summary")
+    async def feedback_summary(admin=Depends(require_admin),
+                               module: Optional[str] = None,
+                               user: Optional[str] = None,
+                               rating: Optional[int] = None,
+                               date_from: Optional[str] = None,
+                               date_to: Optional[str] = None):
+        """Aggregate metrics + timeseries charts (ratings-over-time,
+        by-module, monthly-trend, distribution)."""
+        q = _feedback_query(module, user, rating, date_from, date_to)
+
+        cur = feedback_col.aggregate([
+            {"$match": q},
+            {"$group": {
+                "_id": None,
+                "total": {"$sum": 1},
+                "avg_overall":  {"$avg": "$ratings.overall"},
+                "avg_ease":     {"$avg": "$ratings.ease_of_use"},
+                "avg_accuracy": {"$avg": "$ratings.accuracy"},
+                "avg_speed":    {"$avg": "$ratings.speed"},
+                "recommend_yes": {"$sum": {"$cond": ["$would_recommend", 1, 0]}},
+            }},
+        ])
+        agg = await cur.to_list(length=1)
+        totals = agg[0] if agg else {"total": 0}
+        total = totals.get("total", 0)
+
+        # Distribution
+        dist_cur = feedback_col.aggregate([
+            {"$match": q},
+            {"$group": {"_id": "$ratings.overall", "n": {"$sum": 1}}},
+        ])
+        distribution = {str(d["_id"]): d["n"] for d in await dist_cur.to_list(length=10)}
+
+        # Ratings over time (last 30 days)
+        thirty = datetime.now(timezone.utc) - timedelta(days=30)
+        over_time = await feedback_col.aggregate([
+            {"$match": {**q, "created_at": {"$gte": thirty}}},
+            {"$group": {
+                "_id": {"$dateToString": {"format": "%Y-%m-%d", "date": "$created_at"}},
+                "avg": {"$avg": "$ratings.overall"},
+                "n": {"$sum": 1},
+            }},
+            {"$sort": {"_id": 1}},
+        ]).to_list(length=60)
+
+        # By module
+        by_module = await feedback_col.aggregate([
+            {"$match": q},
+            {"$group": {
+                "_id": "$module",
+                "avg": {"$avg": "$ratings.overall"},
+                "n": {"$sum": 1},
+            }},
+            {"$sort": {"n": -1}},
+        ]).to_list(length=40)
+
+        # Monthly trend (last 12 months)
+        yearly = datetime.now(timezone.utc) - timedelta(days=365)
+        monthly = await feedback_col.aggregate([
+            {"$match": {**q, "created_at": {"$gte": yearly}}},
+            {"$group": {
+                "_id": {"$dateToString": {"format": "%Y-%m", "date": "$created_at"}},
+                "avg": {"$avg": "$ratings.overall"},
+                "n": {"$sum": 1},
+            }},
+            {"$sort": {"_id": 1}},
+        ]).to_list(length=24)
+
+        return {
+            "total":       total,
+            "avg_overall": round(totals.get("avg_overall")  or 0, 2),
+            "avg_ease":    round(totals.get("avg_ease")     or 0, 2),
+            "avg_accuracy":round(totals.get("avg_accuracy") or 0, 2),
+            "avg_speed":   round(totals.get("avg_speed")    or 0, 2),
+            "recommend_pct": round(100.0 * (totals.get("recommend_yes") or 0) / total, 1) if total else 0.0,
+            "distribution": distribution,
+            "over_time":    [{"date": r["_id"], "avg": round(r["avg"], 2), "n": r["n"]} for r in over_time],
+            "by_module":    [{"module": r["_id"], "avg": round(r["avg"], 2), "n": r["n"]} for r in by_module],
+            "monthly":      [{"month": r["_id"], "avg": round(r["avg"], 2), "n": r["n"]} for r in monthly],
+        }
+
+    @router.get("/feedback")
+    async def feedback_list(admin=Depends(require_admin),
+                            module: Optional[str] = None,
+                            user: Optional[str] = None,
+                            rating: Optional[int] = None,
+                            date_from: Optional[str] = None,
+                            date_to: Optional[str] = None,
+                            page: int = 1, page_size: int = 25):
+        q = _feedback_query(module, user, rating, date_from, date_to)
+        page = max(1, int(page)); page_size = min(100, max(1, int(page_size)))
+        total = await feedback_col.count_documents(q)
+        cur = feedback_col.find(q).sort("created_at", -1).skip((page - 1) * page_size).limit(page_size)
+        rows = []
+        async for d in cur:
+            rows.append({
+                "id": str(d["_id"]),
+                "user_email": d.get("user_email"),
+                "user_name":  d.get("user_name"),
+                "user_id":    d.get("user_id"),
+                "module":     d.get("module"),
+                "workflow_id": d.get("workflow_id"),
+                "task_id":    d.get("task_id"),
+                "ratings":    d.get("ratings", {}),
+                "would_recommend": d.get("would_recommend"),
+                "comments":   d.get("comments"),
+                "created_at": (d.get("created_at") or datetime.now(timezone.utc)).isoformat(),
+            })
+        return {"total": total, "page": page, "page_size": page_size, "rows": rows}
+
+    @router.get("/feedback/{fid}")
+    async def feedback_detail(fid: str, admin=Depends(require_admin)):
+        try:
+            oid = ObjectId(fid)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Bad id")
+        d = await feedback_col.find_one({"_id": oid})
+        if not d:
+            raise HTTPException(status_code=404, detail="Not found")
+        d["id"] = str(d.pop("_id"))
+        d["created_at"] = (d.get("created_at") or datetime.now(timezone.utc)).isoformat()
+        return d
+
+    @router.get("/feedback/export/{fmt}")
+    async def feedback_export(fmt: str,
+                              admin=Depends(require_admin),
+                              module: Optional[str] = None,
+                              user: Optional[str] = None,
+                              rating: Optional[int] = None,
+                              date_from: Optional[str] = None,
+                              date_to: Optional[str] = None):
+        """Export the filtered feedback set as CSV or Excel (xlsx)."""
+        if fmt not in ("csv", "xlsx"):
+            raise HTTPException(status_code=400, detail="fmt must be csv or xlsx")
+        q = _feedback_query(module, user, rating, date_from, date_to)
+        rows = []
+        async for d in feedback_col.find(q).sort("created_at", -1):
+            r = d.get("ratings", {})
+            rows.append({
+                "created_at": (d.get("created_at") or datetime.now(timezone.utc)).isoformat(),
+                "user_email": d.get("user_email"),
+                "user_name":  d.get("user_name"),
+                "module":     d.get("module"),
+                "task_id":    d.get("task_id"),
+                "workflow_id": d.get("workflow_id"),
+                "overall":    r.get("overall"),
+                "ease_of_use": r.get("ease_of_use"),
+                "accuracy":   r.get("accuracy"),
+                "speed":      r.get("speed"),
+                "would_recommend": d.get("would_recommend"),
+                "comments":   d.get("comments"),
+            })
+
+        if fmt == "csv":
+            import csv, io
+            buf = io.StringIO()
+            w = csv.DictWriter(buf, fieldnames=list(rows[0].keys()) if rows else [
+                "created_at","user_email","user_name","module","task_id","workflow_id",
+                "overall","ease_of_use","accuracy","speed","would_recommend","comments",
+            ])
+            w.writeheader()
+            for r in rows: w.writerow(r)
+            from fastapi.responses import Response
+            return Response(content=buf.getvalue(), media_type="text/csv",
+                            headers={"Content-Disposition": 'attachment; filename="feedback.csv"'})
+        else:
+            # xlsx via openpyxl
+            from openpyxl import Workbook
+            from openpyxl.utils import get_column_letter
+            import io
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Feedback"
+            headers = ["created_at","user_email","user_name","module","task_id","workflow_id",
+                       "overall","ease_of_use","accuracy","speed","would_recommend","comments"]
+            ws.append(headers)
+            for r in rows:
+                ws.append([r.get(h) for h in headers])
+            for i, h in enumerate(headers, 1):
+                ws.column_dimensions[get_column_letter(i)].width = max(14, min(40, len(h) + 4))
+            buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+            from fastapi.responses import StreamingResponse
+            return StreamingResponse(buf,
+                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                headers={"Content-Disposition": 'attachment; filename="feedback.xlsx"'})
+
+
 
     return router

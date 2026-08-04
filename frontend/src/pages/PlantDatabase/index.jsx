@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useIsStandalone } from "@/hooks/useIsStandalone";
 import WorkflowLayout from "@/components/WorkflowLayout";
+import { useFeedbackTrigger } from "@/components/feedback/FeedbackDialog";
 import {
   searchPlant,
   lotusSimple,
@@ -334,6 +335,20 @@ export default function PlantDatabase({ topRightSlot = null, hasOuterLayout = fa
     if (selectedCount === 0) return 3;                 // Analysis (results shown, none picked)
     return 4;                                           // Results (some picked, ready to export/continue)
   }, [loading, progress, compounds.length, selectedCount]);
+
+  const fbTrigger = useFeedbackTrigger("plant-database");
+  const fbFiredRef = useRef(false);
+  useEffect(() => {
+    if (loading || compounds.length === 0) {
+      if (loading) fbFiredRef.current = false;
+      return;
+    }
+    if (fbFiredRef.current) return;
+    fbFiredRef.current = true;
+    const taskId = `plant-${(plant || "any").toLowerCase()}-${compounds.length}`;
+    fbTrigger.open(taskId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, compounds.length]);
 
   const pageJsx = (
     <main data-testid="plant-database-page" className="relative overflow-hidden">

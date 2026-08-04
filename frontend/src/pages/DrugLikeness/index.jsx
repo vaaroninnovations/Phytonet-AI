@@ -6,6 +6,7 @@ import { useNetwork } from "@/context/NetworkContext";
 import { useIsStandalone } from "@/hooks/useIsStandalone";
 import StandaloneSMILESInput from "@/components/standalone/StandaloneSMILESInput";
 import WorkflowLayout from "@/components/WorkflowLayout";
+import { useFeedbackTrigger } from "@/components/feedback/FeedbackDialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Tooltip,
@@ -409,6 +410,21 @@ export default function DrugLikeness() {
     if (rows.length > 0 && finalCount > 0) return 4;          // Results
     return 0;
   }, [inputCount, status, rows.length, finalCount]);
+
+  // Feedback trigger — fires ONCE per successful ADMET run.
+  const fbTrigger = useFeedbackTrigger("admet");
+  const fbFiredRef = useRef(false);
+  useEffect(() => {
+    if (status !== "done" || rows.length === 0) {
+      // Reset the flag when the user starts a new run so we prompt again next time.
+      if (status === "running" || status === "queued") fbFiredRef.current = false;
+      return;
+    }
+    if (fbFiredRef.current) return;
+    fbFiredRef.current = true;
+    fbTrigger.open(`admet-${rows.length}-${rows[0]?.smiles || "run"}`);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, rows.length]);
 
   if (inputCount === 0) {
     return (

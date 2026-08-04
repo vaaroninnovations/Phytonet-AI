@@ -1,6 +1,6 @@
 // Molecular Docking (AutoDock Vina) — Step 6 of the 9-step workflow.
 // Also mounted at /molecular-docking as a fully standalone research module.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useIsStandalone } from "@/hooks/useIsStandalone";
 import { useNodes } from "@/context/NodeContext";
@@ -9,6 +9,7 @@ import { GoldenLeaf } from "@/components/nodes/NodeBadge";
 import StandaloneDockingInput from "@/components/standalone/StandaloneDockingInput";
 import DockingValidationPanel from "@/components/docking/DockingValidationPanel";
 import WorkflowLayout from "@/components/WorkflowLayout";
+import { useFeedbackTrigger } from "@/components/feedback/FeedbackDialog";
 import { useNetwork } from "@/context/NetworkContext";
 import { useResults } from "@/context/ResultsContext";
 import { useWorkflow } from "@/context/WorkflowContext";
@@ -425,6 +426,19 @@ export default function MolecularDocking() {
     if (selectedComp.length > 0 && selectedGenes.length > 0) return 3;
     return 0;
   }, [noInputs, running, progressDone, result, selectedComp.length, selectedGenes.length]);
+
+  const fbTrigger = useFeedbackTrigger("molecular-docking");
+  const fbFiredRef = useRef(false);
+  useEffect(() => {
+    if (running || !result || !(result.results?.length > 0)) {
+      if (running) fbFiredRef.current = false;
+      return;
+    }
+    if (fbFiredRef.current) return;
+    fbFiredRef.current = true;
+    fbTrigger.open(`dock-${result.job_id || result.results.length}`);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [running, result]);
 
   if (noInputs) {
     if (standalone) {

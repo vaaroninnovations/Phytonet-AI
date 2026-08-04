@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useIsStandalone } from "@/hooks/useIsStandalone";
 import StandaloneSMILESInput from "@/components/standalone/StandaloneSMILESInput";
 import WorkflowLayout from "@/components/WorkflowLayout";
+import { useFeedbackTrigger } from "@/components/feedback/FeedbackDialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Tooltip,
@@ -269,6 +270,19 @@ export default function TargetPrediction() {
     if (rows.length > 0 && selectedCount > 0) return 4;
     return 0;
   }, [selectedCompounds, status, progress.done, rows.length, selectedCount]);
+
+  const fbTrigger = useFeedbackTrigger("target-prediction");
+  const fbFiredRef = useRef(false);
+  useEffect(() => {
+    if (status !== "done" || rows.length === 0) {
+      if (status === "running") fbFiredRef.current = false;
+      return;
+    }
+    if (fbFiredRef.current) return;
+    fbFiredRef.current = true;
+    fbTrigger.open(`target-${rows.length}-${rows[0]?.uniprot_id || "run"}`);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, rows.length]);
 
   if (!selectedCompounds || selectedCompounds.length === 0) {
     if (standalone) {
