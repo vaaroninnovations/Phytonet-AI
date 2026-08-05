@@ -870,6 +870,45 @@ Every standalone module (`/plant-database`, `/admet`, `/compound-target-predicti
 
 
 
+## Implemented (2026-02-04) — Marketing Video Suite
+
+Produced 7 landscape 16:9 (1920×1080) MP4s with narration voice-over, served
+under `/api/videos/*.mp4` via FastAPI StaticFiles mount.
+
+**Pipeline** (`/app/scripts/videos/`):
+1. Narration text scripts per module (`narration_scripts.py`).
+2. gTTS renders each script to `audio/*.mp3` (~150 wpm, US English).
+3. Playwright records live app sessions to `raw/*.webm` at 1920×1080
+   (`record_01_plant_database.py`, `record_all.py`).
+4. `mux.py` runs ffmpeg to pad the video with the last frame until it
+   matches audio length, applies a soft fade in/out, overlays a
+   3-second purple title-card in the top-left corner, transcodes to
+   H.264/AAC MP4 in `final/`.
+
+**Videos delivered**
+| Slug                       | Length | Size   |
+|----------------------------|--------|--------|
+| 01_plant_database.mp4      | 81 s   | 5.2 MB |
+| 02_target_prediction.mp4   | 69 s   | 2.0 MB |
+| 03_disease_targets.mp4     | 64 s   | 2.6 MB |
+| 04_admet.mp4               | 69 s   | 2.2 MB |
+| 05_molecular_docking.mp4   | 71 s   | 2.0 MB |
+| 06_ai_agent.mp4            | 78 s   | 4.4 MB |
+| 07_walkthrough.mp4         | 133 s  | 9.5 MB |
+
+**Files added**
+- `/app/scripts/videos/narration_scripts.py`
+- `/app/scripts/videos/record_01_plant_database.py`
+- `/app/scripts/videos/record_all.py`
+- `/app/scripts/videos/mux.py`
+- `/app/backend/server.py` — mounted `/api/videos` static route.
+
+**Notes**
+- Narration currently uses gTTS. Can be upgraded to OpenAI TTS ("marin"/"cedar")
+  via Emergent LLM Key by swapping the gTTS call in `mux.py`.
+- Sora 2 hero video was requested but not attempted this session (playbook
+  status uncertain for Emergent Universal Key at time of build).
+
 ## Fix (2026-02-04) — Welcome mail delivery unblocked
 
 **Root cause**: Resend account was in sandbox mode (`onboarding@resend.dev`
