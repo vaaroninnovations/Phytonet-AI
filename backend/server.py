@@ -1236,6 +1236,12 @@ disease_cache_col = db["disease_cache_v1"]  # kept for backwards-compat imports
 # ---------------------------------------------------------------------------
 app.include_router(api_router)
 
+# ─── Marketing videos — served at /api/videos/<file>.mp4 ───
+from fastapi.staticfiles import StaticFiles  # noqa: E402
+_videos_dir = Path("/app/scripts/videos/final")
+if _videos_dir.exists():
+    app.mount("/api/videos", StaticFiles(directory=str(_videos_dir)), name="marketing-videos")
+
 # Extracted routers (moved from server.py to /app/backend/routes/*)
 from routes import (  # noqa: E402
     disease as _disease_routes,
