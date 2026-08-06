@@ -214,14 +214,41 @@ async def tool_disease_search(query: str,
 
 
 async def tool_disease_targets(disease_id: str, limit: int = 30,
+                                genes: list[str] | None = None,
                                 progress=_noop_progress, **_) -> dict:
+    """Get the gene panel for a disease. If `genes` is supplied (e.g. from a
+    prior target_predict step), the response is FILTERED to just the overlap
+    — showing which of the predicted compound-targets are already disease-
+    associated. That's the "target → disease chain" the researcher usually
+    wants."""
     await progress("querying",
                    f"Fetching gene panel for disease {disease_id}…")
+    # Fetch a wider panel so we can find overlaps even when only a few match
+    fetch_limit = 500 if genes else limit
+    # The backend endpoint expects `efo_id`; accept either name for input.
     data = await _get("/api/disease/targets",
-                      {"disease_id": disease_id, "limit": limit})
+                      {"efo_id": disease_id, "limit": fetch_limit})
     targets = data if isinstance(data, list) else data.get("targets", []) or []
     await progress("scoring",
                    f"Scoring evidence across Open Targets + CTD…")
+
+    if genes:
+        gene_set = {(g or "").upper() for g in genes if g}
+        overlap = [t for t in targets
+                   if (t.get("gene") or t.get("gene_symbol")
+                       or t.get("symbol") or "").upper() in gene_set]
+        await progress("intersecting",
+                       f"Intersecting {len(gene_set)} predicted targets "
+                       f"with {len(targets)} disease genes → {len(overlap)} hits.")
+        return {"status": "ok",
+                "card": "target_table",
+                "message": (f"{len(overlap)} of your predicted targets are "
+                            f"disease-associated in {disease_id} "
+                            f"(out of {len(targets)} total disease genes)."),
+                "data": {"disease_id": disease_id,
+                         "genes_queried": sorted(gene_set),
+                         "targets": overlap[:limit]}}
+
     await progress("building", f"Building target table ({len(targets)} rows)…")
     return {"status": "ok",
             "card": "target_table",
@@ -356,8 +383,12 @@ TOOL_REGISTRY: dict[str, dict[str, Any]] = {
                          "desc": "Search DisGeNET / Open Targets for a "
                                  "disease. Args: {query: str}."},
     "disease_targets":  {"fn": tool_disease_targets,
-                         "desc": "Get disease-associated gene panel. "
-                                 "Args: {disease_id: str, limit?: int}."},
+                         "desc": "Get disease-associated gene panel. When a "
+                                 "prior target_predict step exists, pass "
+                                 "`genes: \"$prev.targets\"` to intersect — "
+                                 "returning ONLY predicted targets that are "
+                                 "also disease genes. Args: {disease_id: str, "
+                                 "limit?: int, genes?: list[str]}."},
     "admet_predict":    {"fn": tool_admet_predict,
                          "desc": "Predict ADMET + drug-likeness (RDKit-derived "
                                  "physchem, Ro5, QED, permeability, toxicity). "
@@ -435,6 +466,20 @@ User: "Predict protein targets for phytochemicals of Curcuma longa."
 Plan:
   step_1  plant_search      {{"query": "Curcuma longa", "limit": 200}}
   step_2  target_predict    {{"compounds": "$prev.compounds"}}
+
+User: "Map the predicted targets to Type 2 diabetes."
+Plan:
+  step_1  disease_search    {{"query": "Type 2 diabetes"}}
+  step_2  disease_targets   {{"disease_id": "$step_1.hits[0].id"}}
+  (the executor auto-injects `genes` from the most recent target_predict)
+
+User: "Study anti-inflammatory potential of Withania somnifera."
+Plan:
+  step_1  plant_search      {{"query": "Withania somnifera", "limit": 200}}
+  step_2  target_predict    {{"compounds": "$step_1.compounds"}}
+  step_3  disease_search    {{"query": "inflammation"}}
+  step_4  disease_targets   {{"disease_id": "$step_3.hits[0].id"}}
+  step_5  admet_predict     {{"compounds": "$step_1.compounds"}}
 
 User (follow-up on an existing project): "Now run ADMET on the top 25."
 Plan (SAFEST):
@@ -704,6 +749,18 @@ async def execute_step(step: dict,
             logger.info(f"[research] {tool_name} auto-injected "
                         f"{len(found)} compounds from project context")
 
+    # ── Disease chain: target_predict → disease_targets ───────────
+    # If disease_targets is called with a disease_id but no `genes` filter,
+    # auto-inject the gene list from the most recent target_predict /
+    # target_resolve step so the response is intersected — showing the
+    # overlap between predicted targets and disease-associated genes.
+    if tool_name == "disease_targets" and args.get("disease_id") and not args.get("genes"):
+        genes = _auto_pick_genes(prior_results or [], project_context or [])
+        if genes:
+            args["genes"] = genes
+            logger.info(f"[research] disease_targets auto-injected "
+                        f"{len(genes)} genes from prior target step")
+
     # Wire live progress callback into the tool call so stage-by-stage
     # sub-status is persisted for the frontend poller to display.
     if progress is not None:
@@ -749,6 +806,38 @@ def _auto_pick_compounds(prior_results: list[dict],
         if isinstance(smis, list) and smis:
             picked = [{"smiles": s} for s in smis]
             return picked if limit is None else picked[:limit]
+    return []
+
+
+def _auto_pick_genes(prior_results: list[dict],
+                      project_context: list[dict]) -> list[str]:
+    """Return the most-recent unique list of gene symbols from a target_predict
+    (compound → target predictions) or a bare target_resolve step."""
+    def _extract(step: dict) -> list[str]:
+        data = (step.get("result") or {}).get("data") or {}
+        if isinstance(data.get("targets"), list):
+            seen: set[str] = set()
+            out: list[str] = []
+            for t in data["targets"]:
+                g = (t.get("gene") or t.get("gene_symbol") or
+                     t.get("symbol") or "").strip().upper()
+                if g and g not in seen:
+                    seen.add(g); out.append(g)
+            return out
+        # target_resolve returns a single-target payload
+        g = (data.get("gene") or data.get("gene_symbol") or
+             data.get("symbol") or "").strip().upper()
+        return [g] if g else []
+
+    for pool in (prior_results, project_context):
+        for step in reversed(pool):
+            if step.get("status") != "done":
+                continue
+            if step.get("tool") not in ("target_predict", "target_resolve"):
+                continue
+            genes = _extract(step)
+            if genes:
+                return genes
     return []
 
 
