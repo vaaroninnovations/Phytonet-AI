@@ -499,7 +499,7 @@ function ResultCard({ result, onOpen }) {
 // ═════════════════════════════════════════════════════════════════
 // CHAT MESSAGE
 // ═════════════════════════════════════════════════════════════════
-function ChatMessage({ msg, run, onExecute, executing, onOpenRun }) {
+function ChatMessage({ msg, run, onExecute, executing, onOpenRun, onSend }) {
   const isUser = msg.role === "user";
   const Icon = isUser ? User : Bot;
   return (
@@ -518,6 +518,24 @@ function ChatMessage({ msg, run, onExecute, executing, onOpenRun }) {
         }`}>
           {msg.text}
         </div>
+        {/* Suggested next steps — surfaces after an interpretation message */}
+        {!isUser && (msg.next_steps || []).length > 0 && (
+          <div data-testid="next-steps" className="mt-2 flex flex-wrap gap-1.5">
+            <div className="w-full text-[10px] font-bold uppercase tracking-widest text-[#a48bff]">
+              Suggested next steps
+            </div>
+            {(msg.next_steps || []).map((s, i) => (
+              <button key={i}
+                      data-testid={`next-step-${i}`}
+                      onClick={() => onSend && onSend(s)}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-[#5139ED]/40 bg-[#5139ED]/10 px-3 py-1 text-[12px] text-slate-100 hover:bg-[#5139ED]/25 hover:border-[#5139ED]/70 transition-colors">
+                <Sparkles size={11} className="text-[#a48bff]" />
+                {s}
+                <ArrowRight size={11} className="text-slate-400" />
+              </button>
+            ))}
+          </div>
+        )}
         {msg.mode === "plan" && run && (
           <PlanCard
             plan={run.plan || msg.plan || []}
@@ -543,7 +561,7 @@ function ChatMessage({ msg, run, onExecute, executing, onOpenRun }) {
 // ═════════════════════════════════════════════════════════════════
 // RIGHT VIZ PANEL
 // ═════════════════════════════════════════════════════════════════
-function VizPanel({ activeRun, onClose }) {
+function VizPanel({ activeRun, onClose, onSend }) {
   if (!activeRun) return null;
   return (
     <aside data-testid="viz-panel"
@@ -564,6 +582,26 @@ function VizPanel({ activeRun, onClose }) {
           <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-[13px] leading-relaxed text-slate-200">
             <div className="text-[10px] font-bold uppercase tracking-widest text-emerald-300 mb-1">Interpretation</div>
             {activeRun.interpretation}
+          </div>
+        )}
+        {(activeRun.next_steps || []).length > 0 && (
+          <div data-testid="viz-next-steps"
+               className="rounded-xl border border-[#5139ED]/30 bg-[#5139ED]/5 p-3">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-[#a48bff] mb-2">
+              Suggested next steps
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {(activeRun.next_steps || []).map((s, i) => (
+                <button key={i}
+                        data-testid={`viz-next-step-${i}`}
+                        onClick={() => onSend && onSend(s)}
+                        className="group flex items-start gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-left text-[12.5px] text-slate-200 hover:bg-[#5139ED]/15 hover:border-[#5139ED]/50 transition-colors">
+                  <Sparkles size={12} className="mt-0.5 text-[#a48bff] flex-shrink-0" />
+                  <span className="flex-1">{s}</span>
+                  <ArrowRight size={12} className="mt-0.5 text-slate-400 group-hover:text-slate-100" />
+                </button>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -858,6 +896,7 @@ export default function ResearchWorkspace() {
                   onExecute={(rid) => execute(activeProject.id, rid)}
                   executing={executing}
                   onOpenRun={setVizRun}
+                  onSend={send}
                 />
               ))}
               {sending && (
@@ -879,7 +918,7 @@ export default function ResearchWorkspace() {
         />
       </main>
 
-      <VizPanel activeRun={vizRun} onClose={() => setVizRun(null)} />
+      <VizPanel activeRun={vizRun} onClose={() => setVizRun(null)} onSend={send} />
     </div>
   );
 }

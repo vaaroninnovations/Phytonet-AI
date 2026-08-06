@@ -77,6 +77,7 @@ def _serialize_run(r: dict) -> dict:
         "plan":   r.get("plan") or [],
         "results": r.get("results") or [],
         "interpretation": r.get("interpretation"),
+        "next_steps": r.get("next_steps") or [],
         "created_at": r.get("created_at"),
         "completed_at": r.get("completed_at"),
     }
@@ -343,8 +344,10 @@ async def _execute_in_background(db, oid_str: str, pid: str, run_id: str):
         if status == "error":
             break
 
-    # Ask Claude for a natural-language interpretation of the run
+    # Ask Claude for a natural-language interpretation of the run + a set
+    # of personalised follow-up suggestions the researcher could click.
     interpretation = ""
+    next_steps: list[str] = []
     try:
         interpretation = await research_service.interpret(
             {"title": run.get("title"),
@@ -354,6 +357,13 @@ async def _execute_in_background(db, oid_str: str, pid: str, run_id: str):
         )
     except Exception as e:
         logger.warning(f"[research] interpret error: {e}")
+    try:
+        next_steps = await research_service.suggest_next_steps(
+            {"title": run.get("title"), "plan": plan_steps},
+            results, pid,
+        )
+    except Exception as e:
+        logger.warning(f"[research] next_steps error: {e}")
 
     final_status = "completed" if all(
         r["status"] == "done" for r in results) else "failed"
@@ -363,6 +373,7 @@ async def _execute_in_background(db, oid_str: str, pid: str, run_id: str):
         {"$set": {
             "runs.$.status":         final_status,
             "runs.$.interpretation": interpretation,
+            "runs.$.next_steps":     next_steps,
             "runs.$.completed_at":   now_iso,
         }},
     )
@@ -375,6 +386,7 @@ async def _execute_in_background(db, oid_str: str, pid: str, run_id: str):
                 "text": interpretation,
                 "mode": "interpretation",
                 "run_id": run_id,
+                "next_steps": next_steps,
                 "created_at": now_iso,
             }},
              "$set": {"updated_at": datetime.now(timezone.utc)}},

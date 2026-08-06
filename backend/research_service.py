@@ -406,6 +406,26 @@ Do NOT mention 'tools', 'API', 'plan', or 'JSON'. Speak like a scientist \
 briefing a colleague."""
 
 
+_SYSTEM_NEXT_STEPS = """You are a research strategist. Given a completed \
+computational pharmacology workflow (its plan + raw tool outputs), propose \
+EXACTLY 3-4 useful next actions the researcher could take.
+
+RULES
+─────
+1. Each suggestion is a SHORT natural-language prompt the user could paste \
+into the chat as their next message — start with an imperative verb.
+2. Suggestions must be actionable against the available modules \
+(plant_search, target_resolve, disease_search, disease_targets, admet_predict, \
+compound_lookup, lotus_search). Do NOT suggest anything not in that set.
+3. Reference specific entities returned by the run (a compound name, a target, \
+a disease) whenever possible so the suggestion feels personalised.
+4. Keep each suggestion under 90 characters.
+5. Return ONLY a JSON array of strings — no prose, no code fences.
+
+Example:
+  ["Predict targets for the top 5 Withanolides", "Identify inflammation-related targets", "Run ADMET on the top-QED compounds", "Compare Withania somnifera with Withania coagulans"]"""
+
+
 def _emergent_key() -> str:
     key = os.environ.get("EMERGENT_LLM_KEY")
     if not key:
@@ -479,6 +499,51 @@ async def interpret(plan: dict, results: list[dict], project_id: str) -> str:
     except Exception as e:
         logger.warning(f"[research] interpretation failed: {e}")
         return "Workflow complete. See the results panel for details."
+
+
+async def suggest_next_steps(plan: dict, results: list[dict],
+                              project_id: str) -> list[str]:
+    """Ask Claude for 3-4 personalised next-step prompts based on what just
+    ran. Return an empty list on any failure — this is a UX nicety, not
+    critical to the workflow."""
+    chat = _new_chat(f"research:{project_id}:next", _SYSTEM_NEXT_STEPS)
+    payload = {
+        "title":  plan.get("title"),
+        "steps":  [{"tool": s.get("tool"), "label": s.get("label")}
+                   for s in (plan.get("plan") or [])],
+        "results": [{
+            "tool":  r.get("tool"),
+            "status": r.get("status"),
+            "summary": (r.get("result") or {}).get("message"),
+            "data_preview": _preview((r.get("result") or {}).get("data")),
+        } for r in results],
+    }
+    try:
+        resp = await chat.send_message(UserMessage(
+            text=json.dumps(payload, default=str)[:8000]
+        ))
+        parsed = _parse_json_response(resp)
+        if isinstance(parsed, list):
+            suggestions = parsed
+        elif isinstance(parsed, dict):
+            # Some Claude responses wrap in {suggestions: [...]}
+            for k in ("suggestions", "next_steps", "actions"):
+                if isinstance(parsed.get(k), list):
+                    suggestions = parsed[k]
+                    break
+            else:
+                suggestions = []
+        else:
+            suggestions = []
+        # Sanitize — keep only clean strings, cap length
+        out = []
+        for s in suggestions[:4]:
+            if isinstance(s, str) and 4 <= len(s.strip()) <= 140:
+                out.append(s.strip())
+        return out
+    except Exception as e:
+        logger.warning(f"[research] next-steps failed: {e}")
+        return []
 
 
 def _preview(data: Any) -> Any:
