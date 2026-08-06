@@ -237,18 +237,34 @@ async def tool_disease_search(query: str,
             "data": {"query": query, "hits": hits}}
 
 
-async def tool_pathway_enrichment(genes: list[str] | None = None,
+async def tool_pathway_enrichment(genes: list | None = None,
                                     library: str = "KEGG_2021_Human",
                                     progress=_noop_progress, **_) -> dict:
     """Run KEGG + GO pathway enrichment on a gene list. Auto-chains from a
     prior target_predict / target_resolve step."""
-    if not genes:
-        return {"status": "error",
-                "message": "Enrichment needs a gene list. Provide `genes` "
-                           "or run target_predict first so it can auto-chain."}
-    gene_list = [g for g in genes if isinstance(g, str) and g.strip()]
+    # Coerce whatever the planner passes into a list of clean HGNC symbols.
+    def _sym(item):
+        if isinstance(item, str):
+            return item.strip().upper()
+        if isinstance(item, dict):
+            for k in ("gene", "gene_symbol", "symbol", "hgnc_symbol", "name"):
+                v = item.get(k)
+                if isinstance(v, str) and v.strip():
+                    return v.strip().upper()
+        return ""
+    seen: set[str] = set()
+    gene_list: list[str] = []
+    for g in (genes or []):
+        s = _sym(g)
+        if s and s not in seen:
+            seen.add(s); gene_list.append(s)
+
     if not gene_list:
-        return {"status": "error", "message": "No valid gene symbols provided."}
+        return {"status": "error",
+                "message": ("Enrichment needs a list of gene symbols "
+                            "(e.g. ['AKT1','EGFR']). Run target_predict or "
+                            "target_resolve first so the assistant can "
+                            "auto-chain the gene list.")}
     await progress("querying",
                    f"Running Enrichr KEGG on {len(gene_list)} genes…")
     kegg = await _post("/api/kegg/enrich",
@@ -867,12 +883,24 @@ async def execute_step(step: dict,
                         f"{len(genes)} genes from prior target step")
 
     # ── Enrichment chain: target_predict → pathway_enrichment ─────
-    if tool_name == "pathway_enrichment" and not args.get("genes"):
-        genes = _auto_pick_genes(prior_results or [], project_context or [])
-        if genes:
-            args["genes"] = genes
-            logger.info(f"[research] pathway_enrichment auto-injected "
-                        f"{len(genes)} genes")
+    # Fire even if the planner *did* pass `genes` when those items don't
+    # normalize to any HGNC symbols (e.g. it passed target objects
+    # verbatim). We test the payload via the same coercion tool_pathway_
+    # enrichment uses.
+    if tool_name == "pathway_enrichment":
+        supplied = args.get("genes") or []
+        cleaned = [g for g in supplied
+                    if (isinstance(g, str) and g.strip())
+                       or (isinstance(g, dict) and any(
+                            isinstance(g.get(k), str) and g[k].strip()
+                            for k in ("gene", "gene_symbol", "symbol",
+                                      "hgnc_symbol", "name")))]
+        if not cleaned:
+            genes = _auto_pick_genes(prior_results or [], project_context or [])
+            if genes:
+                args["genes"] = genes
+                logger.info(f"[research] pathway_enrichment auto-injected "
+                            f"{len(genes)} genes")
 
     # Wire live progress callback into the tool call so stage-by-stage
     # sub-status is persisted for the frontend poller to display.
@@ -1015,6 +1043,20 @@ def resolve_args(args: dict,
             return None
         payload = (step_res.get("result") or {}).get("data") or {}
         value = payload.get(path) if path else payload
+        # Compat aliases — Claude sometimes asks for "smiles" while
+        # compound_lookup stores the SMILES under `canonical_smiles`, etc.
+        if path and (value is None or value == ""):
+            _ALIASES = {
+                "smiles":       ("canonical_smiles", "isomeric_smiles"),
+                "gene":         ("gene_symbol", "symbol"),
+                "gene_symbol":  ("gene", "symbol"),
+                "name":         ("iupac_name", "compound_name"),
+                "compound_name": ("name", "iupac_name"),
+            }
+            for alt in _ALIASES.get(path, ()):
+                if payload.get(alt) not in (None, ""):
+                    value = payload[alt]
+                    break
         if isinstance(value, list) and slice_spec:
             try:
                 start, stop = (slice_spec.split(":") + [""])[:2]
