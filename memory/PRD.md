@@ -1349,3 +1349,36 @@ result · t=10 s: interpretation + 164 compounds table · No flicker.
 **Files touched**
 - `frontend/src/components/workspace/ProjectTab.jsx`
 - `frontend/src/hooks/useTabState.js`
+
+## 2026-02-06 (very late) — Unified /app Header ✅
+
+Bug/UX: `/app` was showing two stacked headers — the outer white `SiteHeader`
+with brand + top nav + right-side controls, then a separate dark tabbar
+below it. Users wanted ONE combined header.
+
+**Fix**
+- `SiteChrome` (`App.js`) now also hides `SiteHeader` + `SiteFooter` on any
+  `/app*` path (same treatment as `/admin`).
+- `AppWorkspace` root switched from `fixed inset-0 top-16` → `fixed inset-0`
+  now that no outer header takes 4rem.
+- `components/workspace/TabBar.jsx` rewritten as the single unified header:
+  - **Left**: `BrandLogo` + "PhytoNet AI" wordmark, linked to `/`.
+  - **Middle**: horizontally-scrollable tab strip (Home + N project/module
+    tabs).
+  - **Right**: `Search ⌘K` button, `SaveProjectMenu`, `NodeBadge`, and an
+    `AvatarMenu` dropdown carrying the exact same links as SiteHeader
+    (Dashboard, My Projects, Downloads, Profile, Settings, Logout).
+
+Verified visually: one clean dark bar with brand → tabs → right controls, no
+stacked-header duplication. Testids preserved (`site-header` no longer
+present, `app-header` is the sole source).
+
+**Files touched**
+- `frontend/src/App.js` (SiteChrome hides on `/app*`)
+- `frontend/src/pages/AppWorkspace.jsx` (removed top-16 offset)
+- `frontend/src/components/workspace/TabBar.jsx` (unified header with all
+  right-side controls)
+
+**Next Action Items**
+- Wire ⌘K Search to actually search projects/modules.
+- Consider a subtle drop-shadow under the header when scrolling long tabs.

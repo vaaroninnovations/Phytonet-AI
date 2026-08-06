@@ -70,7 +70,7 @@ export default function AppWorkspace() {
 
   if (loading || !user) {
     return (
-      <div className="fixed inset-0 top-16 flex items-center justify-center bg-gradient-to-br from-[#0B0B18] via-[#141024] to-[#1A0F2E]">
+      <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-[#0B0B18] via-[#141024] to-[#1A0F2E]">
         <Loader2 className="animate-spin text-[#a48bff]" size={26} />
       </div>
     );
@@ -78,7 +78,7 @@ export default function AppWorkspace() {
 
   return (
     <div data-testid="app-workspace"
-         className="fixed inset-0 top-16 flex flex-col bg-gradient-to-br from-[#0B0B18] via-[#141024] to-[#1A0F2E] text-slate-100">
+         className="fixed inset-0 flex flex-col bg-gradient-to-br from-[#0B0B18] via-[#141024] to-[#1A0F2E] text-slate-100">
       <TabBar tabs={tabs} activeId={activeId}
               onActivate={activate} onClose={closeTab} />
 
