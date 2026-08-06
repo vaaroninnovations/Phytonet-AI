@@ -10,15 +10,25 @@ import {
 
 const RESEARCH_MODULES = [
   {
-    id: "ai-agent",
-    title: "PhytoNet AI Agent",
-    desc: "Full end-to-end workflow — from plant selection through docking to a publication-ready AI report.",
-    cta: "Launch AI Workflow",
-    to: "/phytonet-ai",
+    id: "ai-research",
+    title: "AI Research Assistant",
+    desc: "Chat-first research workspace — describe your goal in natural language and the AI orchestrates every module for you.",
+    cta: "Open Research Chat",
+    to: "/research",
     icon: Sparkles,
     tint: "#5139ED",
     accent: "from-[#5139ED]/12 to-[#8139ED]/6",
     flagship: true,
+  },
+  {
+    id: "ai-agent",
+    title: "PhytoNet AI Agent (Classic)",
+    desc: "Step-based linear workflow — from plant selection through docking to a publication-ready AI report.",
+    cta: "Launch Classic Workflow",
+    to: "/phytonet-ai",
+    icon: Sparkles,
+    tint: "#8139ED",
+    accent: "from-[#8139ED]/12 to-[#8139ED]/4",
   },
   {
     id: "plant-database",
@@ -155,11 +165,11 @@ export default function PhytoNet() {
                 </p>
               </div>
               <Link
-                to="/phytonet-ai"
+                to="/research"
                 data-testid="phytonet-run-all"
-                className="inline-flex items-center gap-1.5 rounded-full border border-[#E7E7F3] bg-white/70 px-4 py-2.5 text-[13px] font-semibold text-[#111827] backdrop-blur transition hover:border-[#5139ED]/40 hover:text-[#5139ED]"
+                className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#5139ED] to-[#8139ED] px-5 py-2.5 text-[13px] font-semibold text-white shadow-lg shadow-purple-500/30 transition hover:shadow-xl"
               >
-                Run the full workflow <ArrowRight className="h-4 w-4" />
+                Open Research Chat <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
 

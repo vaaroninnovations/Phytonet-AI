@@ -1,0 +1,48 @@
+{
+  "summary": "Backend AI Research Assistant is fully functional (11/11 pytest passing incl. plan → execute → interpretation flow, upload/CSV SMILES extraction, intent chat/followup/plan, CRUD, auth guard, and regressions). Frontend /research workspace is COMPLETELY BROKEN due to a double '/api/api/' URL prefix bug — every research endpoint returns 404 in the browser. As a result none of the Phase-1/Phase-2 UI features (project list, plan card, execute, viz panel, interpretation) can be exercised end-to-end from the UI. Existing pages (/, /phytonet, /phytonet-ai, /plant-database) still render.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "tool_disease_search in research_service.py", "issue": "Wrapper calls GET /api/disease/search with param 'query' but the endpoint requires 'q' (routes/disease.py line 16). Any plan whose Claude output selects disease_search will 422. Also passes 'limit' which the endpoint does not accept."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ResearchWorkspace.jsx", "issue": "All research API calls hit '/api/api/research/*' → 404. authApi in /app/frontend/src/context/AuthContext.jsx sets baseURL=`${REACT_APP_BACKEND_URL}/api`, but ResearchWorkspace.jsx prepends '/api/' again in ~12 places (authApi.get('/api/research/projects'), authApi.post('/api/research/projects/{pid}/message'), etc.). Fix: drop the leading '/api' from every research URL in ResearchWorkspace.jsx (should be '/research/projects', '/research/projects/${pid}/message', etc.). Verified in browser: fetch('/api/api/research/projects')→404, fetch('/api/research/projects')→200.", "selector": "n/a — network layer", "priority": "CRITICAL"},
+      {"component": "ResearchWorkspace.jsx testids vs spec", "issue": "Task spec expects data-testid values workspace, sidebar, suggested-prompt-*, new-research-btn. Actual code uses research-workspace, research-sidebar, suggestion-{i}, research-new-project. Consider aligning names or updating the spec — either way the elements exist.", "selector": "[data-testid='research-workspace'], [data-testid='research-sidebar'], [data-testid^='suggestion-']", "priority": "LOW"},
+      {"component": "SiteChrome / hydration", "issue": "React warning: '<span> cannot be a child of <%s>' hydration warning (recurring). Non-blocking but should be cleaned up.", "selector": "n/a", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "New Research → project appears in sidebar", "issue": "POST fails with 404 (double /api prefix). Sidebar stays at 'No projects yet'.", "affected_selectors": ["[data-testid='research-new-project']", "[data-testid^='project-row-']"]},
+      {"flow": "Send prompt → plan card → auto-execute → compound table → viz panel + interpretation", "issue": "None of these render because the project cannot be created and message POST also 404s.", "affected_selectors": ["[data-testid='plan-card']", "[data-testid='compound-table']", "[data-testid='viz-panel']"]},
+      {"flow": "Suggested-prompt tile click", "issue": "Same 404 chain — tile handler creates a project first, which fails.", "affected_selectors": ["[data-testid^='suggestion-']"]},
+      {"flow": "Paperclip CSV attachment", "issue": "Cannot be reached — depends on active project which cannot be created.", "affected_selectors": ["[data-testid='composer-attach-btn']", "[data-testid^='attach-chip-']"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_research.py",
+    "/app/test_reports/pytest/research_results.xml"
+  ],
+  "action_items": [
+    "CRITICAL: Remove the redundant '/api' prefix from every authApi call in /app/frontend/src/pages/ResearchWorkspace.jsx (approx lines 450, 464, 475, 488, 506, 514, 518, 536, 549, 563, 576, 586). Change '/api/research/...' to '/research/...' so baseURL='${REACT_APP_BACKEND_URL}/api' produces correct URLs. Alternatively, change authApi baseURL — but many other files depend on it, so fix ResearchWorkspace.jsx.",
+    "MEDIUM: Fix research_service.tool_disease_search — send 'q' instead of 'query' and drop 'limit' (matches routes/disease.py signature).",
+    "OPTIONAL: Align data-testid names in ResearchWorkspace.jsx with the spec (workspace, sidebar, suggested-prompt-*) or update task/spec to match code (research-workspace, research-sidebar, suggestion-*)."
+  ],
+  "critical_code_review_comments": [
+    "URL prefixing bug in ResearchWorkspace.jsx — the single highest-impact issue; the whole feature is non-functional in the UI even though the backend is solid.",
+    "tool_disease_search parameter mismatch — silent failure risk once Claude picks that tool.",
+    "research_service._preview: line 308 assumes list values are indexable but any non-list dict-value uses `v[:5]` only when isinstance list — fine, no bug (verify).",
+    "ResearchWorkspace.jsx executes execute() immediately after posting the message via a client-side refetch → if the message POST partially succeeds but refetch fails, the run may become orphaned. Consider using the returned run_id from the POST directly."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_research.py (new — full backend coverage)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "~10% (page renders + testids exist, but every API call 404s)"},
+  "test_credentials": "rtest1785979513@phytonetai.com / TestPass123! (verified working via /api/auth/login → 200)",
+  "seed_data_creation": "Created transient research projects during pytest; all deleted via fixture teardown. No residual seed data.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend is confirmed 100% working via /app/backend/tests/test_research.py. If main agent fixes the /api/api/ double-prefix bug in ResearchWorkspace.jsx, re-run the UI script: login via POST /api/auth/login (no /login route exists — auth is via modal/API), then visit /research, click data-testid='research-new-project' (NOT 'new-research-btn'), then use data-testid='composer-input'. Look for data-testid='plan-card', 'plan-step-0', 'compound-table', 'viz-panel'. Also verify the disease_search tool param fix.",
+  "rca of the issue": "authApi (axios instance in AuthContext.jsx) has baseURL = `${REACT_APP_BACKEND_URL}/api`. ResearchWorkspace.jsx calls authApi.get('/api/research/projects') → axios concatenates baseURL + path → `${BACKEND}/api/api/research/projects` → FastAPI has no such route → 404. Reproduce: open /research authenticated → observe 'Not Found' toast + Uncaught runtime error overlay. In devtools Network, all XHR to /api/api/research/* return 404. Mitigation: drop the leading '/api' in ResearchWorkspace.jsx paths (or drop it from authApi.baseURL — but that would break every other consumer). Recommendation: fix in ResearchWorkspace.jsx only."
+}

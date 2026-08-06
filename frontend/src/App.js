@@ -2,6 +2,7 @@ import "@/App.css";
 import { BrowserRouter, Routes, Route, useLocation, Navigate } from "react-router-dom";
 import Home from "@/pages/Home";
 import PhytoNetAI from "@/pages/PhytoNetAI";
+import ResearchWorkspace from "@/pages/ResearchWorkspace";
 import PlantDatabase from "@/pages/PlantDatabase";
 import DrugLikeness from "@/pages/DrugLikeness";
 import ComingSoon from "@/pages/ComingSoon";
@@ -77,6 +78,7 @@ function App() {
                     <Routes>
                       <Route path="/" element={<Home />} />
                       <Route path="/phytonet-ai" element={<PhytoNetAI />} />
+                      <Route path="/research" element={<ResearchWorkspace />} />
                       <Route path="/plant-database" element={<PlantDatabase />} />
                       <Route path="/drug-likeness" element={<DrugLikeness />} />
                       <Route path="/admet" element={<DrugLikeness />} />

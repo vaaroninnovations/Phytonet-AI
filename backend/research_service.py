@@ -1,0 +1,358 @@
+"""AI Research Assistant — planner + tool registry + executor.
+
+The Research Assistant is an orchestration layer ONLY. It never fabricates
+scientific results — every result comes from an existing backend endpoint
+invoked here as an HTTP call to the running FastAPI service.
+
+Public surface
+──────────────
+  plan(prompt, history, context) → ExecutionPlan
+      Ask Claude Sonnet 4.5 (via Emergent LLM Key) to translate a natural
+      language prompt into a structured JSON plan referencing tools in the
+      TOOL_REGISTRY.
+
+  interpret(plan, results) → str
+      A short scientific interpretation paragraph based on tool outputs.
+
+  execute_step(step, project_ctx) → dict
+      Dispatch a plan step by calling its tool with the given arguments.
+
+Tool registry
+─────────────
+Each tool is a coroutine `async def _tool(**kwargs) -> dict` that returns
+{status: "ok" | "error", data: <structured JSON>, message: str}. Tools call
+the local FastAPI endpoints via httpx.AsyncClient so they respect the same
+caching, rate-limits, and DB writes as the standalone modules.
+"""
+from __future__ import annotations
+
+import json
+import logging
+import os
+from typing import Any, Optional
+
+import httpx
+from emergentintegrations.llm.chat import LlmChat, UserMessage
+
+logger = logging.getLogger(__name__)
+
+
+# ═══════════════════════════════════════════════════════════════
+# Tool registry — thin wrappers around existing /api endpoints
+# ═══════════════════════════════════════════════════════════════
+INTERNAL_BASE = os.environ.get("INTERNAL_API_BASE", "http://localhost:8001")
+
+
+async def _get(path: str, params: dict | None = None, timeout: float = 90.0) -> dict:
+    async with httpx.AsyncClient(base_url=INTERNAL_BASE, timeout=timeout) as c:
+        r = await c.get(path, params=params or {})
+        r.raise_for_status()
+        return r.json()
+
+
+async def _post(path: str, json_body: dict | None = None, timeout: float = 120.0) -> dict:
+    async with httpx.AsyncClient(base_url=INTERNAL_BASE, timeout=timeout) as c:
+        r = await c.post(path, json=json_body or {})
+        r.raise_for_status()
+        return r.json()
+
+
+async def tool_plant_search(query: str, limit: int = 25, **_) -> dict:
+    data = await _get("/api/plant/search",
+                      {"plant": query, "limit": min(int(limit), 50)})
+    # `data` is a list of compounds — reshape for the UI's compound-table card
+    compounds = data if isinstance(data, list) else data.get("compounds", []) or []
+    return {"status": "ok",
+            "card": "compound_table",
+            "message": f"Retrieved {len(compounds)} compounds for '{query}'.",
+            "data":    {"query": query, "compounds": compounds[:limit]}}
+
+
+async def tool_lotus_search(query: str, limit: int = 25, **_) -> dict:
+    data = await _get("/api/lotus/simple", {"query": query, "limit": limit})
+    hits = data if isinstance(data, list) else data.get("compounds", []) or []
+    return {"status": "ok",
+            "card": "compound_table",
+            "message": f"LOTUS returned {len(hits)} compounds for '{query}'.",
+            "data": {"query": query, "compounds": hits[:limit]}}
+
+
+async def tool_compound_lookup(compound: str, **_) -> dict:
+    """Look up a compound by name or SMILES → PubChem/ChEBI details."""
+    key = "smiles" if any(c in compound for c in "()=[]#@\\/") else "name"
+    data = await _get("/api/compound/lookup", {key: compound})
+    return {"status": "ok",
+            "card": "compound_details",
+            "message": f"Resolved '{compound}' — PubChem CID "
+                       f"{data.get('pubchem_cid') or 'n/a'}.",
+            "data": data}
+
+
+async def tool_target_resolve(query: str, **_) -> dict:
+    """Resolve a protein target (gene symbol / uniprot) to full annotation."""
+    data = await _get("/api/target/resolve", {"query": query})
+    return {"status": "ok",
+            "card": "target_details",
+            "message": f"Resolved target '{query}' → {data.get('uniprot_id') or 'n/a'}.",
+            "data": data}
+
+
+async def tool_disease_search(query: str, **_) -> dict:
+    data = await _get("/api/disease/search", {"query": query, "limit": 15})
+    hits = data if isinstance(data, list) else data.get("results", []) or []
+    return {"status": "ok",
+            "card": "disease_table",
+            "message": f"Found {len(hits)} matching diseases for '{query}'.",
+            "data": {"query": query, "hits": hits}}
+
+
+async def tool_disease_targets(disease_id: str, limit: int = 30, **_) -> dict:
+    data = await _get("/api/disease/targets",
+                      {"disease_id": disease_id, "limit": limit})
+    targets = data if isinstance(data, list) else data.get("targets", []) or []
+    return {"status": "ok",
+            "card": "target_table",
+            "message": f"Retrieved {len(targets)} disease-associated targets.",
+            "data": {"disease_id": disease_id, "targets": targets[:limit]}}
+
+
+async def tool_admet_predict(smiles: list[str] | str, **_) -> dict:
+    smi_list = [smiles] if isinstance(smiles, str) else list(smiles)
+    # POST /api/admet/predict expects a payload with a list; poll for status
+    job = await _post("/api/admet/predict", {"smiles_list": smi_list})
+    job_id = job.get("job_id") or job.get("id")
+    if not job_id:
+        return {"status": "error", "message": "ADMET job did not return an id."}
+    # Poll for up to 60s
+    import asyncio
+    for _ in range(30):
+        s = await _get(f"/api/admet/status/{job_id}")
+        if s.get("status") in ("done", "success", "completed"):
+            return {"status": "ok",
+                    "card": "admet_table",
+                    "message": f"ADMET prediction complete for "
+                               f"{len(smi_list)} compound(s).",
+                    "data": s}
+        if s.get("status") in ("error", "failed"):
+            return {"status": "error",
+                    "message": s.get("error") or "ADMET job failed."}
+        await asyncio.sleep(2)
+    return {"status": "error", "message": "ADMET job timed out after 60s."}
+
+
+TOOL_REGISTRY: dict[str, dict[str, Any]] = {
+    "plant_search":     {"fn": tool_plant_search,
+                         "desc": "Search medicinal plants (IMPPAT + LOTUS). "
+                                 "Args: {query: str, limit?: int}."},
+    "lotus_search":     {"fn": tool_lotus_search,
+                         "desc": "Search LOTUS natural-product database by "
+                                 "compound name. Args: {query: str, limit?: int}."},
+    "compound_lookup":  {"fn": tool_compound_lookup,
+                         "desc": "Look up a compound by name or SMILES "
+                                 "→ PubChem CID + ChEBI. Args: {compound: str}."},
+    "target_resolve":   {"fn": tool_target_resolve,
+                         "desc": "Resolve a protein target (gene symbol / "
+                                 "UniProt) → full annotation. Args: {query: str}."},
+    "disease_search":   {"fn": tool_disease_search,
+                         "desc": "Search DisGeNET / Open Targets for a "
+                                 "disease. Args: {query: str}."},
+    "disease_targets":  {"fn": tool_disease_targets,
+                         "desc": "Get disease-associated gene panel. "
+                                 "Args: {disease_id: str, limit?: int}."},
+    "admet_predict":    {"fn": tool_admet_predict,
+                         "desc": "Predict ADMET + drug-likeness for a list of "
+                                 "SMILES. Args: {smiles: list[str] | str}."},
+}
+
+
+# ═══════════════════════════════════════════════════════════════
+# Claude Planner
+# ═══════════════════════════════════════════════════════════════
+_MODEL_PROVIDER = "anthropic"
+_MODEL_NAME     = "claude-sonnet-4-5-20250929"
+
+_SYSTEM_PLANNER = f"""You are the PhytoNet AI Research Assistant — a workflow \
+orchestrator for computational network pharmacology. You NEVER fabricate \
+scientific results. Every result must come from calling one of these tools:
+
+{chr(10).join(f'  • {name}: {t["desc"]}' for name, t in TOOL_REGISTRY.items())}
+
+RULES
+─────
+1. Analyse the user's message + prior conversation. Decide whether:
+   a) You have enough information to build an execution plan (respond mode=plan)
+   b) You need one clarifying question (respond mode=followup)
+   c) The request is conversational and no tool is needed (respond mode=chat)
+2. Plans must be minimal and ordered. Only include steps that answer the \
+question. Do not over-plan.
+3. Reference tools ONLY by the exact names above. Never invent a tool.
+4. Arguments must match the tool signature. Where the user has already given \
+values in earlier messages, reuse them without re-asking.
+5. Never mention that you are calling APIs, backend services or tools by name \
+in your `interpretation`. Speak like a research scientist.
+
+OUTPUT FORMAT
+─────────────
+Return ONLY a JSON object matching this exact schema — no prose before or \
+after, no code fences:
+
+{{
+  "mode": "plan" | "followup" | "chat",
+  "title": "Short 3-6 word title for the plan",
+  "reasoning": "One-sentence justification (<=140 chars).",
+  "followup_question": "Only if mode=followup. Concise, single question.",
+  "reply": "Only if mode=chat. Short conversational reply.",
+  "plan": [
+    {{
+      "id": "step_1",
+      "tool": "plant_search",
+      "label": "Retrieve phytochemicals from Withania somnifera",
+      "args": {{"query": "Withania somnifera", "limit": 25}}
+    }}
+  ]
+}}
+"""
+
+
+_SYSTEM_INTERPRETER = """You are a research scientist writing a concise \
+scientific interpretation of a completed workflow. Given the plan and its \
+raw tool outputs, produce a short natural-language summary (3-6 sentences) \
+that highlights the key numeric findings, cites the source databases named \
+in the tool outputs, and suggests one logical next step. Do NOT invent data. \
+Do NOT mention 'tools', 'API', 'plan', or 'JSON'. Speak like a scientist \
+briefing a colleague."""
+
+
+def _emergent_key() -> str:
+    key = os.environ.get("EMERGENT_LLM_KEY")
+    if not key:
+        raise RuntimeError("EMERGENT_LLM_KEY missing in environment")
+    return key
+
+
+def _new_chat(session_id: str, system: str) -> LlmChat:
+    return LlmChat(
+        api_key=_emergent_key(),
+        session_id=session_id,
+        system_message=system,
+    ).with_model(_MODEL_PROVIDER, _MODEL_NAME)
+
+
+async def plan(prompt: str, history: list[dict], project_id: str,
+               attachments: list[dict] | None = None) -> dict:
+    """Ask Claude to produce a plan for the user's request.
+    `history` is a list of prior {role, content} messages within the same
+    project — used verbatim as extra context.
+    """
+    chat = _new_chat(f"research:{project_id}:planner", _SYSTEM_PLANNER)
+    # Fold history into the user message so the planner sees continuity.
+    lines: list[str] = []
+    for msg in history[-10:]:
+        role = msg.get("role", "user").upper()
+        content = (msg.get("text") or msg.get("content") or "").strip()
+        if content:
+            lines.append(f"[{role}] {content}")
+    if attachments:
+        lines.append(f"[USER-ATTACHMENTS] {json.dumps(attachments)[:800]}")
+    lines.append(f"[USER] {prompt.strip()}")
+
+    resp = await chat.send_message(UserMessage(text="\n".join(lines)))
+    parsed = _parse_json_response(resp)
+    # Sanitize plan steps
+    steps = []
+    for i, step in enumerate(parsed.get("plan", []) or []):
+        tool = step.get("tool")
+        if tool not in TOOL_REGISTRY:
+            continue
+        steps.append({
+            "id":    step.get("id") or f"step_{i+1}",
+            "tool":  tool,
+            "label": step.get("label") or tool.replace("_", " ").title(),
+            "args":  step.get("args") or {},
+            "status": "pending",
+        })
+    parsed["plan"] = steps
+    return parsed
+
+
+async def interpret(plan: dict, results: list[dict], project_id: str) -> str:
+    chat = _new_chat(f"research:{project_id}:interp", _SYSTEM_INTERPRETER)
+    payload = {
+        "title": plan.get("title"),
+        "reasoning": plan.get("reasoning"),
+        "steps": [{"label": s.get("label"), "tool": s.get("tool")} for s in plan.get("plan", [])],
+        "results": [{
+            "label":  r.get("label"),
+            "status": r.get("status"),
+            "summary": (r.get("result") or {}).get("message"),
+            "data_preview": _preview((r.get("result") or {}).get("data")),
+        } for r in results],
+    }
+    try:
+        resp = await chat.send_message(UserMessage(
+            text=json.dumps(payload, default=str)[:8000]
+        ))
+        return resp.strip()
+    except Exception as e:
+        logger.warning(f"[research] interpretation failed: {e}")
+        return "Workflow complete. See the results panel for details."
+
+
+def _preview(data: Any) -> Any:
+    """Trim large payloads before feeding them into the interpreter prompt."""
+    if isinstance(data, list):
+        return data[:5]
+    if isinstance(data, dict):
+        out = {}
+        for k, v in list(data.items())[:6]:
+            out[k] = v[:5] if isinstance(v, list) else v
+        return out
+    return data
+
+
+def _parse_json_response(text: str) -> dict:
+    """Claude sometimes wraps JSON in ```json fences — strip them robustly."""
+    if not text:
+        return {"mode": "chat", "reply": "I couldn't produce a response."}
+    t = text.strip()
+    # Strip ```json ... ``` fences (with or without the `json` label)
+    if t.startswith("```"):
+        # Drop the opening fence line
+        t = t.split("\n", 1)[1] if "\n" in t else t[3:]
+        # Drop the closing fence
+        if t.rstrip().endswith("```"):
+            t = t.rstrip()[:-3]
+        t = t.strip()
+    try:
+        return json.loads(t)
+    except json.JSONDecodeError:
+        # Attempt to extract the first {...} block
+        start = t.find("{"); end = t.rfind("}")
+        if start >= 0 and end > start:
+            try:
+                return json.loads(t[start:end + 1])
+            except Exception:
+                pass
+        logger.warning(f"[research] planner returned non-JSON: {text[:200]!r}")
+        return {"mode": "chat", "reply": text[:800]}
+
+
+async def execute_step(step: dict) -> dict:
+    tool_name = step.get("tool")
+    entry = TOOL_REGISTRY.get(tool_name)
+    if not entry:
+        return {"status": "error", "message": f"Unknown tool: {tool_name}"}
+    fn = entry["fn"]
+    try:
+        return await fn(**(step.get("args") or {}))
+    except httpx.HTTPStatusError as e:
+        detail = ""
+        try:
+            detail = e.response.json().get("detail", "")
+        except Exception:
+            detail = e.response.text[:200]
+        return {"status": "error",
+                "message": f"{tool_name} HTTP {e.response.status_code}: {detail}"}
+    except Exception as e:
+        logger.exception(f"[research] tool {tool_name} error")
+        return {"status": "error", "message": f"{tool_name}: {e}"}
