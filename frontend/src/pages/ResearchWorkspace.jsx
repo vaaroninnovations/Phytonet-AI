@@ -327,7 +327,7 @@ function VizPanel({ activeRun, onClose }) {
   if (!activeRun) return null;
   return (
     <aside data-testid="viz-panel"
-           className="hidden xl:flex w-[420px] flex-shrink-0 flex-col border-l border-white/10 bg-black/25 backdrop-blur-xl">
+           className="hidden lg:flex w-[380px] xl:w-[420px] flex-shrink-0 flex-col border-l border-white/10 bg-black/25 backdrop-blur-xl">
       <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
         <div className="min-w-0">
           <div className="text-[10px] font-bold uppercase tracking-widest text-[#a48bff]">Viz Panel</div>
@@ -559,10 +559,13 @@ export default function ResearchWorkspace() {
           clearInterval(pollRef.current);
           pollRef.current = null;
           setExecuting(null);
-          // Refetch to get any final assistant interpretation message
+          // Refetch to get any final assistant interpretation message + full run
           const { data: fresh } = await authApi.get(`/research/projects/${pid}`);
           setActiveProject(fresh);
-          setVizRun(status);
+          // Prefer the full run doc from the refetched project — the /status
+          // payload can be lean and miss the interpretation string.
+          const fullRun = (fresh.runs || []).find((r) => r.id === runId) || status;
+          setVizRun(fullRun);
         }
       } catch { /* ignore transient */ }
     }, 2000);

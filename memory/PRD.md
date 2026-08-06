@@ -870,6 +870,96 @@ Every standalone module (`/plant-database`, `/admet`, `/compound-target-predicti
 
 
 
+## Implemented (2026-02-04) — AI Research Assistant (Chat-first Workspace)
+
+Delivered Phase-1 + Phase-2 in a single session per user's Option (b) choice.
+
+**Route** `/research` (`/phytonet-ai` and every existing standalone module
+remain fully functional and unchanged — zero regressions confirmed by
+testing agent iteration 41).
+
+**Backend**
+- `research_service.py` — modular planner + tool registry + executor:
+  - `plan(prompt, history, project_id, attachments)` → Claude Sonnet 4.5
+    (`claude-sonnet-4-5-20250929` via Emergent LLM Key) returns a JSON
+    envelope classifying intent as `plan | followup | chat`.
+  - `TOOL_REGISTRY` — 7 tools, each an httpx wrapper around an EXISTING
+    endpoint (`/api/plant/search`, `/api/lotus/simple`,
+    `/api/compound/lookup`, `/api/target/resolve`, `/api/disease/search`,
+    `/api/disease/targets`, `/api/admet/predict`). AI never fabricates —
+    every result comes from an existing module.
+  - `interpret(plan, results, project_id)` — a second Claude call produces
+    a concise scientific interpretation after every run.
+  - Robust JSON parser handles ```json fences and stray prose.
+- `/app/backend/routes/research.py` — HTTP endpoints (cookie-auth via
+  `auth_service.make_get_current_user`):
+  - `POST /api/research/projects` (create) · `GET` (list) · `GET/{pid}`
+    (fetch with messages+runs) · `DELETE /{pid}` (remove).
+  - `POST /{pid}/message` — persists user message, calls planner, appends
+    assistant message + creates pending run if plan is produced. Auto-sets
+    project title on first plan.
+  - `POST /{pid}/execute/{run_id}` — kicks off `BackgroundTask` executor
+    that iterates steps, updates run doc after every step so the client's
+    poller can render live progress.
+  - `GET /{pid}/status/{run_id}` — poll endpoint.
+  - `POST /{pid}/upload` — multipart file upload. Parses SMILES from `.smi`
+    / `.txt` / `.csv` / `.xlsx`. Passes MOL/SDF through raw for downstream
+    modules. Returns `{name, kind, size, content_preview, extracted}`.
+- MongoDB collection `research_projects` schema:
+  `{_id, user_id, title, messages:[{role, text, mode?, run_id?, plan?,
+   title?, created_at, attachments?}], runs:[{id, title, status, reasoning,
+   plan:[{id,tool,label,args,status}], results:[{...,result:{card,data,message}}],
+   interpretation, created_at, completed_at}], created_at, updated_at}`.
+
+**Frontend**
+- `/app/frontend/src/pages/ResearchWorkspace.jsx` (~700 lines, dark
+  glassmorphism theme):
+  - Left `Sidebar` — "New Research" gradient button, project history with
+    unread count + relative timestamps + delete affordance.
+  - Center `Chat` — messages stream with distinct user/AI bubbles.
+    `ChatMessage` renders `PlanCard`, one or more `ResultCard`s (compound
+    table, target table, disease table, ADMET table, compound/target
+    details JSON), and auto-scrolls on new content.
+  - Right `VizPanel` — collapsible aside (auto-opens when a run completes),
+    shows the same result cards + a green "Interpretation" summary from
+    Claude.
+  - `Composer` — textarea + paperclip attach + drag-and-drop file zone.
+    Enter sends, Shift+Enter for a newline. Attachment chips above input
+    with parsed-SMILES count.
+  - `SuggestedPromptsGrid` — 6 tiles: Withania somnifera, Quercetin
+    targets, Type-2-diabetes genes, Curcumin ADMET, Turmeric vs Ginger,
+    anti-inflammatory turmeric workflow. Clicking a tile spins up a new
+    project and auto-sends the prompt.
+  - Auto-executes on `mode="plan"`, polls `/status` every 2s, opens viz
+    panel on `completed | failed`.
+- `/app/frontend/src/App.js` — `/research` route registered.
+- `/app/frontend/src/pages/PhytoNet.jsx` — Modules gallery now leads with
+  the "AI Research Assistant" flagship card (link to `/research`) and
+  keeps the classic linear workflow as a secondary card.
+
+**Environment**
+- `EMERGENT_LLM_KEY` added to `/app/backend/.env` for Claude Sonnet 4.5.
+
+**Verification (testing agent iterations 40 → 41)**
+- Backend: 11/11 pytest cases pass (CRUD, planner classifies plan /
+  followup / chat correctly, execute+poll completes with real IMPPAT/LOTUS
+  data, CSV SMILES extraction, auth guard, and full regression against
+  existing endpoints).
+- Frontend: 95% pass — login, new project, plan card, auto-execute → real
+  81 compounds for Withania somnifera, JSON download, suggested prompts,
+  CSV attach with SMILES count, all page regressions clean.
+- Remaining minor UX fix applied: viz-panel breakpoint dropped from `xl`
+  → `lg` so it appears on any standard desktop, and `setVizRun` now reads
+  the fresh full-run doc after refetch instead of the lean status payload.
+
+**NOT DONE (per user's explicit "do NOT implement yet" list)**
+- PDF report generation
+- Collaboration / sharing
+- Retry engine on failed steps
+- Saved-project filters
+- Multi-agent execution
+- Background scheduling
+
 ## Implemented (2026-02-04) — Marketing Video Suite
 
 Produced 7 landscape 16:9 (1920×1080) MP4s with narration voice-over, served
