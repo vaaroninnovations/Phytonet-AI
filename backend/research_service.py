@@ -283,6 +283,18 @@ recent SUCCESSFUL step
   "$prev.targets"             → the `data.targets` array from a target step
   "$prev.hits"                → the `data.hits` array from a disease search
 
+DO NOT use `{{...}}` Jinja templates. Use only the `$name.field` syntax above.
+
+FOLLOW-UP PROMPTS ACROSS TURNS
+──────────────────────────────
+If the user says "now run ADMET on the top 25" AFTER a prior plant search \
+already completed in an earlier message, you MAY still use `$prev.compounds` \
+— the executor falls back to the previous completed run's compound list. \
+BUT to be safe, if the prior step's data isn't guaranteed, ALWAYS include a \
+plant_search step FIRST in the same plan and chain from it. Never emit a \
+single-step admet_predict whose only source is `$prev` unless you are \
+certain a prior run has compounds ready.
+
 TYPICAL CHAINS
 ──────────────
 User: "Show me phytochemicals from Withania somnifera and run ADMET on the top 25."
@@ -295,11 +307,23 @@ Plan:
   step_1  plant_search      {{"query": "Ashwagandha", "limit": 200}}
   step_2  admet_predict     {{"compounds": "$prev.compounds"}}
 
+User (follow-up on an existing project): "Now run ADMET on the top 25."
+Plan (SAFEST):
+  step_1  plant_search      {{"query": "<plant from earlier turn>", "limit": 200}}
+  step_2  admet_predict     {{"compounds": "$step_1.compounds[:25]"}}
+
 DEFAULT LIMITS
 ──────────────
 • plant_search: default limit=200 (returns 100-200 compounds per plant).
 • admet_predict: when chaining after plant_search, DEFAULT TO TOP 25 unless \
 the user explicitly asks for all. ADMET can be slow at scale.
+
+HARD RULES FOR admet_predict
+────────────────────────────
+• You MUST NEVER emit an admet_predict step whose `args` is empty or whose \
+compound source cannot be traced to (a) an earlier step in the SAME plan, \
+(b) a prior completed run in the SAME conversation, or (c) explicit SMILES \
+provided by the user. Prefer inserting a plant_search step in the same plan.
 
 OUTPUT FORMAT
 ─────────────
@@ -453,13 +477,16 @@ def _parse_json_response(text: str) -> dict:
         return {"mode": "chat", "reply": text[:800]}
 
 
-async def execute_step(step: dict, prior_results: list[dict] | None = None) -> dict:
+async def execute_step(step: dict,
+                       prior_results: list[dict] | None = None,
+                       project_context: list[dict] | None = None) -> dict:
     tool_name = step.get("tool")
     entry = TOOL_REGISTRY.get(tool_name)
     if not entry:
         return {"status": "error", "message": f"Unknown tool: {tool_name}"}
     fn = entry["fn"]
-    args = resolve_args(step.get("args") or {}, prior_results or [])
+    args = resolve_args(step.get("args") or {},
+                        prior_results or [], project_context or [])
     try:
         return await fn(**args)
     except httpx.HTTPStatusError as e:
@@ -478,34 +505,39 @@ async def execute_step(step: dict, prior_results: list[dict] | None = None) -> d
 # ═══════════════════════════════════════════════════════════════
 # Result forwarding — resolve "$prev.<path>" / "$step_id.<path>" placeholders
 # in a plan step's args from prior successful results.
+# Also handles Claude's {{...}} Jinja-style templates by rewriting them.
 # ═══════════════════════════════════════════════════════════════
-def resolve_args(args: dict, prior_results: list[dict]) -> dict:
+_PLACEHOLDER_KEYS = ("compounds", "targets", "hits", "results")
+
+
+def resolve_args(args: dict,
+                 prior_results: list[dict],
+                 project_context: list[dict] | None = None) -> dict:
     """Walk a step's args and replace any `$prev.<path>` or `$step_<id>.<path>`
     reference with the corresponding value from prior step results.
 
-    `prior_results` shape (as produced by _execute_in_background):
-      [{ id, label, tool, args, status, result: {status, card, message, data} }]
-
-    Supported placeholder grammar:
-      "$prev.compounds"        → last SUCCESSFUL step's result.data.compounds
-      "$prev.compounds[:25]"   → first 25 items of that array
-      "$step_1.hits"           → step whose `id` == 'step_1' → result.data.hits
+    If a placeholder cannot be resolved from the CURRENT plan's `prior_results`,
+    we fall back to `project_context` — the flat list of results from previous
+    COMPLETED runs of the same project. This makes follow-up prompts like
+    "now run ADMET on the top 25" work even when Claude produces a single-step
+    plan that references `$prev.compounds`.
     """
     def _lookup(source: str) -> Any:
-        # source examples: "prev.compounds", "step_1.compounds[:25]"
         target, *rest = source.split(".", 1)
         path = rest[0] if rest else ""
-        # Slice suffix?
         slice_spec = None
         if path.endswith("]") and "[" in path:
             path, _, slc = path.rpartition("[")
             slice_spec = slc.rstrip("]")
-        # Find the source step
+        # 1) In-run lookup
         if target == "prev":
             candidates = [r for r in prior_results if (r.get("status") == "done")]
             step_res = candidates[-1] if candidates else None
         else:
             step_res = next((r for r in prior_results if r.get("id") == target), None)
+        # 2) Cross-run fallback — reach into the previous completed run
+        if step_res is None and (target in ("prev", "last") or target.startswith("step_")):
+            step_res = _pick_from_project_context(project_context or [], path)
         if not step_res:
             return None
         payload = (step_res.get("result") or {}).get("data") or {}
@@ -520,9 +552,33 @@ def resolve_args(args: dict, prior_results: list[dict]) -> dict:
                 pass
         return value
 
+    def _rewrite_jinja(s: str) -> str:
+        """Best-effort: convert `{{previous_plant_search_results}}` → `$prev.compounds`,
+        `{{prev.compounds}}` → `$prev.compounds`, etc."""
+        raw = s.strip()
+        if not (raw.startswith("{{") and raw.endswith("}}")):
+            return s
+        inner = raw[2:-2].strip()
+        # Common aliases Claude tends to use
+        aliases = {
+            "previous_plant_search_results": "prev.compounds",
+            "plant_search_results":          "prev.compounds",
+            "prior_compounds":               "prev.compounds",
+            "previous_compounds":            "prev.compounds",
+            "previous_results":              "prev.compounds",
+            "prev_compounds":                "prev.compounds",
+            "compounds":                     "prev.compounds",
+        }
+        target = aliases.get(inner, inner.replace(" ", ""))
+        return f"${target}"
+
     def _walk(v: Any) -> Any:
-        if isinstance(v, str) and v.startswith("$"):
-            return _lookup(v[1:])
+        if isinstance(v, str):
+            if v.startswith("{{") and v.endswith("}}"):
+                v = _rewrite_jinja(v)
+            if v.startswith("$"):
+                return _lookup(v[1:])
+            return v
         if isinstance(v, list):
             return [_walk(x) for x in v]
         if isinstance(v, dict):
@@ -530,3 +586,38 @@ def resolve_args(args: dict, prior_results: list[dict]) -> dict:
         return v
 
     return _walk(args)
+
+
+def _pick_from_project_context(project_context: list[dict], path: str) -> dict | None:
+    """Given a flat list of prior-run step results (chronological order),
+    return the most recent one whose result payload contains `path`. If
+    `path` is empty, return the most recent one that has any data.
+    """
+    # Search newest → oldest
+    for step in reversed(project_context):
+        if step.get("status") != "done":
+            continue
+        data = (step.get("result") or {}).get("data") or {}
+        if not data:
+            continue
+        if path and path in data and data.get(path):
+            return step
+        if not path:
+            return step
+    # Fallback: any step whose data has ANY known compound-ish key
+    for step in reversed(project_context):
+        if step.get("status") != "done":
+            continue
+        data = (step.get("result") or {}).get("data") or {}
+        for k in _PLACEHOLDER_KEYS:
+            if data.get(k):
+                # Rebuild a step-like doc but with the payload keyed by the
+                # requested path so the caller can still `.get(path)`.
+                return {
+                    **step,
+                    "result": {**(step.get("result") or {}),
+                               "data": {path or k: data[k]}}
+                    if path and path != k
+                    else step["result"],
+                }
+    return None

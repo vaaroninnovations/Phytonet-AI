@@ -248,6 +248,19 @@ async def _execute_in_background(db, oid_str: str, pid: str, run_id: str):
     run = next(r for r in d.get("runs", []) if r.get("id") == run_id)
     plan_steps = run.get("plan") or []
 
+    # Cross-run context — flat list of every step from earlier COMPLETED runs.
+    # Placeholder resolution falls back to this when `$prev.<path>` cannot be
+    # satisfied from within the current run (e.g. single-step follow-ups).
+    project_context: list[dict] = []
+    for prior_run in (d.get("runs") or []):
+        if prior_run.get("id") == run_id:
+            break
+        if prior_run.get("status") != "completed":
+            continue
+        for r in (prior_run.get("results") or []):
+            if r.get("status") == "done":
+                project_context.append(r)
+
     results: list[dict] = []
     for idx, step in enumerate(plan_steps):
         step_id = step.get("id")
@@ -256,7 +269,9 @@ async def _execute_in_background(db, oid_str: str, pid: str, run_id: str):
             {"_id": oid, "runs.id": run_id},
             {"$set": {f"runs.$.plan.{idx}.status": "running"}},
         )
-        result = await research_service.execute_step(step, prior_results=results)
+        result = await research_service.execute_step(
+            step, prior_results=results, project_context=project_context,
+        )
         status = "done" if result.get("status") == "ok" else "error"
         step_out = {
             "id": step_id,
