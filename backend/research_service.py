@@ -224,8 +224,12 @@ async def tool_disease_search(query: str,
                                progress=_noop_progress, **_) -> dict:
     await progress("querying",
                    f"Searching Open Targets + DisGeNET for '{query}'…")
-    data = await _get("/api/disease/search", {"query": query, "limit": 15})
-    hits = data if isinstance(data, list) else data.get("results", []) or []
+    # Endpoint expects `q`, not `query`, and returns {"query", "hits"}.
+    data = await _get("/api/disease/search", {"q": query})
+    if isinstance(data, list):
+        hits = data
+    else:
+        hits = data.get("hits") or data.get("results") or []
     await progress("building", f"Building disease table ({len(hits)} rows)…")
     return {"status": "ok",
             "card": "disease_table",
