@@ -128,13 +128,33 @@ function PlanCard({ plan, title, onExecute, executing, executed }) {
                       : state === "error" ? "text-rose-400"
                       : state === "running" ? "text-amber-300"
                       : "text-slate-500";
+          const progress = s.progress;
           return (
             <li key={s.id || i} data-testid={`plan-step-${i}`}
                 className="flex items-start gap-2 text-[13px]">
               <Icon size={14} className={`${color} mt-0.5 flex-shrink-0 ${state === "running" ? "animate-spin" : ""}`} />
               <div className="flex-1">
-                <span className="text-slate-200">{s.label}</span>
-                <span className="ml-2 text-[10px] uppercase tracking-wider text-slate-500">{s.tool}</span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-slate-200">{s.label}</span>
+                  <span className="text-[10px] uppercase tracking-wider text-slate-500">{s.tool}</span>
+                </div>
+                {state === "running" && progress?.detail && (
+                  <div data-testid={`plan-step-${i}-progress`}
+                       className="mt-0.5 flex items-center gap-1.5 text-[11.5px] text-amber-200/90">
+                    <span className="inline-block h-1 w-1 rounded-full bg-amber-300 animate-pulse" />
+                    {progress.detail}
+                  </div>
+                )}
+                {state === "done" && progress?.detail && (
+                  <div className="mt-0.5 text-[11.5px] text-emerald-400/80">
+                    {progress.detail}
+                  </div>
+                )}
+                {state === "error" && progress?.detail && (
+                  <div className="mt-0.5 text-[11.5px] text-rose-300">
+                    {progress.detail}
+                  </div>
+                )}
               </div>
             </li>
           );
@@ -673,7 +693,7 @@ export default function ResearchWorkspace() {
           setVizRun(fullRun);
         }
       } catch { /* ignore transient */ }
-    }, 2000);
+    }, 1000);
   };
   useEffect(() => () => pollRef.current && clearInterval(pollRef.current), []);
 
@@ -748,7 +768,7 @@ export default function ResearchWorkspace() {
               {sending && (
                 <div className="flex items-center gap-2 text-[13px] text-slate-400">
                   <Loader2 size={14} className="animate-spin text-[#a48bff]" />
-                  Thinking through your request…
+                  Planning workflow with Claude Sonnet 4.5…
                 </div>
               )}
             </div>

@@ -285,10 +285,34 @@ async def _execute_in_background(db, oid_str: str, pid: str, run_id: str):
         # Mark running on this step
         await col.update_one(
             {"_id": oid, "runs.id": run_id},
-            {"$set": {f"runs.$.plan.{idx}.status": "running"}},
+            {"$set": {
+                f"runs.$.plan.{idx}.status":   "running",
+                f"runs.$.plan.{idx}.progress": {"stage": "starting",
+                                                "detail": "Starting…"},
+            }},
         )
+
+        # Progress callback — updates Mongo so the frontend poller sees
+        # live sub-status (e.g. "Querying IMPPAT…", "Removing duplicates…").
+        async def _step_progress(stage: str, detail: str = "",
+                                   _idx=idx):
+            try:
+                await col.update_one(
+                    {"_id": oid, "runs.id": run_id},
+                    {"$set": {
+                        f"runs.$.plan.{_idx}.progress": {
+                            "stage": stage,
+                            "detail": detail,
+                            "at": datetime.now(timezone.utc).isoformat(),
+                        }
+                    }},
+                )
+            except Exception as e:
+                logger.warning(f"[research] progress persist failed: {e}")
+
         result = await research_service.execute_step(
             step, prior_results=results, project_context=project_context,
+            progress=_step_progress,
         )
         status = "done" if result.get("status") == "ok" else "error"
         step_out = {
@@ -304,7 +328,14 @@ async def _execute_in_background(db, oid_str: str, pid: str, run_id: str):
         await col.update_one(
             {"_id": oid, "runs.id": run_id},
             {"$set": {
-                f"runs.$.plan.{idx}.status": status,
+                f"runs.$.plan.{idx}.status":   status,
+                f"runs.$.plan.{idx}.progress": {
+                    "stage":  "completed" if status == "done" else "failed",
+                    "detail": (result.get("message")
+                               if status == "done"
+                               else result.get("message") or "Failed"),
+                    "at": datetime.now(timezone.utc).isoformat(),
+                },
                 "runs.$.results": results,
             }},
         )

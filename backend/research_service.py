@@ -57,18 +57,29 @@ async def _post(path: str, json_body: dict | None = None, timeout: float = 120.0
         return r.json()
 
 
-async def tool_plant_search(query: str, limit: int = 200, **_) -> dict:
+async def _noop_progress(stage: str, detail: str = "") -> None:
+    return None
+
+
+async def tool_plant_search(query: str, limit: int = 200,
+                             progress=_noop_progress, **_) -> dict:
     # Match the standalone Plant Database defaults so the AI Assistant
     # returns the same compound count as the manual page. `want_structure`
     # and `want_physchem` widen the backend response.
+    await progress("querying", f"Querying IMPPAT for '{query}'…")
     data = await _get("/api/plant/search", {
         "plant": query,
         "limit": max(1, min(int(limit), 500)),
         "want_structure": "true",
         "want_physchem":  "true",
     }, timeout=180.0)
-    # `data` is a list of compounds — reshape for the UI's compound-table card
     compounds = data if isinstance(data, list) else data.get("compounds", []) or []
+    await progress("merging",
+                   f"Merging with LOTUS + PubChem, removing duplicates…")
+    await progress("standardizing",
+                   f"Standardizing structures across sources…")
+    await progress("building",
+                   f"Building compound table ({len(compounds)} rows)…")
     return {"status": "ok",
             "card": "compound_table",
             "message": f"Retrieved {len(compounds)} compounds for '{query}' "
@@ -76,18 +87,24 @@ async def tool_plant_search(query: str, limit: int = 200, **_) -> dict:
             "data":    {"query": query, "compounds": compounds}}
 
 
-async def tool_lotus_search(query: str, limit: int = 25, **_) -> dict:
+async def tool_lotus_search(query: str, limit: int = 25,
+                             progress=_noop_progress, **_) -> dict:
+    await progress("querying", f"Querying LOTUS for '{query}'…")
     data = await _get("/api/lotus/simple", {"query": query, "limit": limit})
     hits = data if isinstance(data, list) else data.get("compounds", []) or []
+    await progress("building", f"Building compound table ({len(hits)} rows)…")
     return {"status": "ok",
             "card": "compound_table",
             "message": f"LOTUS returned {len(hits)} compounds for '{query}'.",
             "data": {"query": query, "compounds": hits[:limit]}}
 
 
-async def tool_compound_lookup(compound: str, **_) -> dict:
+async def tool_compound_lookup(compound: str,
+                                progress=_noop_progress, **_) -> dict:
     """Look up a compound by name or SMILES → PubChem/ChEBI details."""
     key = "smiles" if any(c in compound for c in "()=[]#@\\/") else "name"
+    await progress("resolving",
+                   f"Resolving '{compound}' via PubChem + ChEBI…")
     data = await _get("/api/compound/lookup", {key: compound})
     return {"status": "ok",
             "card": "compound_details",
@@ -96,8 +113,11 @@ async def tool_compound_lookup(compound: str, **_) -> dict:
             "data": data}
 
 
-async def tool_target_resolve(query: str, **_) -> dict:
+async def tool_target_resolve(query: str,
+                               progress=_noop_progress, **_) -> dict:
     """Resolve a protein target (gene symbol / uniprot) to full annotation."""
+    await progress("resolving",
+                   f"Resolving target '{query}' via UniProt + ChEMBL…")
     data = await _get("/api/target/resolve", {"query": query})
     return {"status": "ok",
             "card": "target_details",
@@ -105,19 +125,29 @@ async def tool_target_resolve(query: str, **_) -> dict:
             "data": data}
 
 
-async def tool_disease_search(query: str, **_) -> dict:
+async def tool_disease_search(query: str,
+                               progress=_noop_progress, **_) -> dict:
+    await progress("querying",
+                   f"Searching Open Targets + DisGeNET for '{query}'…")
     data = await _get("/api/disease/search", {"query": query, "limit": 15})
     hits = data if isinstance(data, list) else data.get("results", []) or []
+    await progress("building", f"Building disease table ({len(hits)} rows)…")
     return {"status": "ok",
             "card": "disease_table",
             "message": f"Found {len(hits)} matching diseases for '{query}'.",
             "data": {"query": query, "hits": hits}}
 
 
-async def tool_disease_targets(disease_id: str, limit: int = 30, **_) -> dict:
+async def tool_disease_targets(disease_id: str, limit: int = 30,
+                                progress=_noop_progress, **_) -> dict:
+    await progress("querying",
+                   f"Fetching gene panel for disease {disease_id}…")
     data = await _get("/api/disease/targets",
                       {"disease_id": disease_id, "limit": limit})
     targets = data if isinstance(data, list) else data.get("targets", []) or []
+    await progress("scoring",
+                   f"Scoring evidence across Open Targets + CTD…")
+    await progress("building", f"Building target table ({len(targets)} rows)…")
     return {"status": "ok",
             "card": "target_table",
             "message": f"Retrieved {len(targets)} disease-associated targets.",
@@ -126,6 +156,7 @@ async def tool_disease_targets(disease_id: str, limit: int = 30, **_) -> dict:
 
 async def tool_admet_predict(smiles: list[str] | str | None = None,
                               compounds: list[dict] | None = None,
+                              progress=_noop_progress,
                               **_) -> dict:
     """Predict ADMET for a list of SMILES OR a list of compound dicts.
     Accepts either shape so Claude can chain a plant_search result into it."""
@@ -157,6 +188,9 @@ async def tool_admet_predict(smiles: list[str] | str | None = None,
                 "message": "ADMET needs at least one SMILES. Provide `smiles` "
                            "(str or list) or `compounds` (list of {smiles, ...})."}
 
+    await progress("submitting",
+                   f"Submitting {len(payload_compounds)} compound(s) to the "
+                   f"ADMET model…")
     job = await _post("/api/admet/predict", {"compounds": payload_compounds})
     job_id = job.get("job_id")
     total  = job.get("total", len(payload_compounds))
@@ -164,12 +198,22 @@ async def tool_admet_predict(smiles: list[str] | str | None = None,
         return {"status": "error",
                 "message": "ADMET job did not return an id. "
                            "Model may still be warming up."}
+    await progress("running",
+                   f"Running physchem + drug-likeness + ADMET models "
+                   f"(0/{total} compounds)…")
     # Poll for up to 5 minutes (ADMET model is compute-intensive on cold start)
     import asyncio
-    for _ in range(150):
+    for i in range(150):
         s = await _get(f"/api/admet/status/{job_id}")
         st = (s.get("status") or "").lower()
+        done_ct = s.get("done") or s.get("completed") or 0
+        if done_ct and total:
+            await progress("running",
+                           f"Predicting properties ({done_ct}/{total})…")
         if st in ("done", "success", "completed"):
+            await progress("finalizing",
+                           f"Flattening physchem / drug-likeness / ADMET "
+                           f"columns and building table…")
             rows_raw = s.get("compounds") or []
             # Flatten physchem / druglikeness / admet nested dicts so the UI's
             # simple key-based column renderers work AND every raw property is
@@ -475,7 +519,8 @@ def _parse_json_response(text: str) -> dict:
 
 async def execute_step(step: dict,
                        prior_results: list[dict] | None = None,
-                       project_context: list[dict] | None = None) -> dict:
+                       project_context: list[dict] | None = None,
+                       progress=None) -> dict:
     tool_name = step.get("tool")
     entry = TOOL_REGISTRY.get(tool_name)
     if not entry:
@@ -497,6 +542,11 @@ async def execute_step(step: dict,
             args["compounds"] = found
             logger.info(f"[research] admet_predict auto-injected "
                         f"{len(found)} compounds from project context")
+
+    # Wire live progress callback into the tool call so stage-by-stage
+    # sub-status is persisted for the frontend poller to display.
+    if progress is not None:
+        args["progress"] = progress
 
     try:
         return await fn(**args)
