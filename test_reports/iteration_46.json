@@ -1,0 +1,39 @@
+{
+  "summary": "Verified the new Docking-inside-Research feature at both backend and frontend levels for iter46. Backend pytest (test_iter46_docking_autoappend.py) confirms the /api/research plan auto-appends a `docking` step whenever the LLM planner emits BOTH admet_predict AND target_predict — plan tools returned: ['compound_lookup', 'admet_predict', 'target_predict', 'docking']. Frontend (workspace /app, signed in as rtest1785979513@phytonetai.com) renders the PlanCard for that project with all 4 steps including the auto-appended 'Dock curcumin against top predicted targets  DOCKING' row, testid=plan-step-3 present and labelled correctly. Standalone /molecular-docking page still loads (gates on prior workflow steps — pre-existing behaviour; DockingViewer code unchanged). End-to-end docking EXECUTION was NOT run (per review instructions — 10+ min AutoDock Vina batch; feature passes as long as plumbing + auto-append + card contract are correct). DockingCard render was verified by static code review of cards.jsx (lines 846-1036) — all required elements present: 5 summary pills (Pairs / Succeeded / Failed / Strong ≤−7 / Best affinity), best-binder banner when metrics.best_pair is set, sort ascending by best_affinity (Infinity for errored rows), columns Compound|Gene|PDB|Affinity|Strength|Modes|3D View, error rows get opacity-60 with 'Failed' badge, data-testids docking-card / docking-download-csv / docking-row-<i> / docking-view3d-<i> / docking-viewer-wrap-<i> all wired, and DockingViewer is embedded verbatim.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter46_docking_autoappend.py"
+  ],
+  "action_items": [
+    "(Optional) Run a full end-to-end docking test with top_compounds=1, top_genes=1 (~30-60s single pair) in a follow-up manual verification session — this will exercise DockingCard live render + the docking-view3d-0 → docking-viewer-wrap-0 expansion + docking-download-csv. Live execution was skipped here to respect the review's ~10 min runtime cap.",
+    "(Minor housekeeping) cards.jsx is now 1600+ lines. Consider splitting DockingCard, CTPNetworkCard, EnrichmentCard, and the Venn / Enrich chart helpers into their own files under /app/frontend/src/components/research/cards/*.jsx for maintainability."
+  ],
+  "critical_code_review_comments": [
+    "tool_docking auto-picks compounds via QED / drug-likeness score from prior admet_predict, falls back to any earlier compound source — correct chaining policy.",
+    "Gene picker in tool_docking correctly requires uniprot_id (not just gene symbol) — necessary because docking_service.run_docking_batch needs UniProt to fetch a PDB structure. Genes are ranked by ctp_network hub-degree when available, else by evidence count + best score.",
+    "Auto-append in research_service.plan() checks `{target_predict, admet_predict} <= tools_in_plan` before appending — same defensive pattern as the CTP auto-append two lines above, no duplicate when already present.",
+    "DockingCard sorts by best_affinity ascending with Infinity for errored / null rows — correct (most-negative first, errors sink to bottom).",
+    "hasError branch renders opacity-60 row + 'Failed' badge + '—' cells — no crash on partial batches, as required.",
+    "Best-binder banner gated by metrics.best_pair — no NaN toFixed crash when zero pairs succeeded.",
+    "CSV download uses JSON.stringify per cell for CSV-safe quoting of ligand names / errors — good.",
+    "DockingViewer is reused verbatim (imported from ../DockingViewer) — no duplicate 3Dmol.js integration.",
+    "Nit: PlanCard already handles the new tool label 'DOCKING' correctly (tool name is rendered via s.tool without any switch).",
+    "Nit: docking-viewer-wrap-<i> is rendered inside a <td colSpan={8}> — matches the 8-column table header. Good."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (2/2 pytest)", "frontend": "100% (auto-append + PlanCard verified; full DockingCard render pending live docking run)"},
+  "test_credentials": "rtest1785979513@phytonetai.com / TestPass123! — worked. Auth response is {user: {...}} not flat.",
+  "seed_data_creation": "Created two test projects titled 'TEST_iter46_docking_autoappend' (IDs 6a74d93ff0cb028c3cdf1a58 and 6a74d929e8e374408a8896b4) — the first has 1 run with a planned-but-not-executed pipeline that includes the auto-appended docking step. Left in place so next tester can click 'Run plan' if they want to exercise the live DockingCard.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The two TEST_iter46_docking_autoappend projects on rtest1785979513@phytonetai.com contain a ready-to-run plan whose 4th step is `docking` (auto-appended). To do a live-render regression on DockingCard, open the project, click plan-execute-btn, wait ~2-3 min for compound_lookup+admet_predict+target_predict to finish, then 30-60s for the single docking pair. Then verify: docking-card visible, docking-row-0 exists, clicking docking-view3d-0 expands docking-viewer-wrap-0, docking-download-csv triggers a file download. If Emergent LLM key budget is a concern, the auto-append planner call itself was cheap and worked fine in this iteration.",
+  "rca_of_the_issue": "No bugs to RCA. Feature implemented cleanly; PlanCard shows auto-appended docking step; DockingCard component satisfies the specified contract on static review."
+}

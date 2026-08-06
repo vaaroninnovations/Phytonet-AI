@@ -654,6 +654,188 @@ async def tool_admet_predict(smiles: list[str] | str | None = None,
             "message": "ADMET job timed out after 5 minutes."}
 
 
+async def tool_docking(progress=_noop_progress,
+                        prior_results=None, project_context=None,
+                        top_compounds: int = 5, top_genes: int = 3,
+                        exhaustiveness: int = 8, num_modes: int = 9,
+                        box_padding: float = 8.0, **_) -> dict:
+    """Molecular docking of the top-N compounds × top-M genes.
+
+    Auto-picks compounds from a prior admet_predict step (ranked by QED /
+    drug-likeness score if present) or from any earlier compound source.
+    Auto-picks target genes from a prior target_predict step, ranked by
+    frequency (or degree if a ctp_network step has already run). Each gene
+    carries the UniProt accession so `docking_service.run_docking_batch`
+    can auto-fetch a PDB structure.
+
+    Emits a `docking` card containing the full results table and enough
+    metadata for the frontend to plug the existing `DockingViewer` into any
+    row on demand (interactive 3D complex + interactions + downloads).
+    """
+    import docking_service
+
+    prior_results   = prior_results   or []
+    project_context = project_context or []
+
+    # ── 1. Rank + pick compounds ─────────────────────────────────
+    def _rank_compounds() -> list[dict]:
+        # Prefer ADMET-scored compounds if present.
+        for pool in (prior_results, project_context):
+            for step in reversed(pool):
+                if step.get("status") != "done": continue
+                if step.get("tool") != "admet_predict": continue
+                rows = ((step.get("result") or {}).get("data") or {}).get("results") or []
+                if not rows: continue
+                def _score(r):
+                    return float(r.get("qed") or r.get("druglikeness_score")
+                                 or r.get("drug_likeness") or 0.0)
+                picked = [r for r in rows
+                          if (r.get("canonical_smiles") or r.get("smiles"))]
+                picked.sort(key=_score, reverse=True)
+                return [{"name": r.get("compound_name")
+                              or (r.get("smiles") or "")[:20] or "compound",
+                         "smiles": r.get("canonical_smiles") or r.get("smiles")}
+                        for r in picked]
+        # Fallback: use whichever compound source exists.
+        return [{"name": c.get("compound_name") or c.get("name")
+                          or (c.get("smiles") or "")[:20] or "compound",
+                 "smiles": c.get("canonical_smiles") or c.get("smiles") or ""}
+                for c in _auto_pick_compounds(prior_results, project_context)
+                if (c.get("canonical_smiles") or c.get("smiles"))]
+
+    compounds_all = _rank_compounds()
+    if not compounds_all:
+        return {"status": "error",
+                "message": "Docking needs at least one compound. Run "
+                           "compound_lookup / admet_predict / target_predict "
+                           "first."}
+    compounds = compounds_all[:max(1, int(top_compounds))]
+
+    # ── 2. Rank + pick target genes (with UniProt) ───────────────
+    def _rank_genes() -> list[dict]:
+        # Best-effort: pull unique genes from the most recent target_predict.
+        for pool in (prior_results, project_context):
+            for step in reversed(pool):
+                if step.get("status") != "done": continue
+                if step.get("tool") != "target_predict": continue
+                rows = ((step.get("result") or {}).get("data") or {}).get("targets") or []
+                # Aggregate by (gene, uniprot) — count evidence + best score
+                bag: dict = {}
+                for r in rows:
+                    gene = (r.get("gene_symbol") or r.get("gene")
+                            or r.get("symbol") or "").strip().upper()
+                    uid  = (r.get("uniprot_id") or "").strip()
+                    if not gene or not uid: continue
+                    key = (gene, uid)
+                    entry = bag.setdefault(key, {
+                        "gene_symbol": gene, "uniprot_id": uid,
+                        "count": 0, "best_score": 0.0,
+                    })
+                    entry["count"] += 1
+                    entry["best_score"] = max(entry["best_score"],
+                        float(r.get("score") or r.get("similarity") or 0.0))
+                if not bag: continue
+                # Optional: bias ranking by CTP hub degree if a ctp_network
+                # step has already produced one.
+                degree_map: dict = {}
+                for p in (prior_results, project_context):
+                    for s2 in reversed(p):
+                        if s2.get("status") != "done": continue
+                        if s2.get("tool") != "ctp_network": continue
+                        for n in ((s2.get("result") or {}).get("data") or {}).get("nodes") or []:
+                            if n.get("type") == "Target":
+                                degree_map[str(n.get("id") or "").upper()] = int(n.get("degree") or 0)
+                        break
+                    if degree_map: break
+                ranked = list(bag.values())
+                ranked.sort(key=lambda x: (
+                    -degree_map.get(x["gene_symbol"], 0),
+                    -x["count"], -x["best_score"], x["gene_symbol"]))
+                return ranked
+        return []
+
+    genes_all = _rank_genes()
+    if not genes_all:
+        return {"status": "error",
+                "message": "Docking needs at least one target gene with a "
+                           "UniProt ID. Run target_predict first."}
+    genes = genes_all[:max(1, int(top_genes))]
+
+    total_pairs = len(compounds) * len(genes)
+    await progress("submitting",
+                   f"Preparing to dock {len(compounds)} compound(s) × "
+                   f"{len(genes)} target(s) = {total_pairs} pair(s)…")
+    await progress("running",
+                   f"Fetching PDB structures and building receptor grids…")
+
+    # ── 3. Run docking batch (reuses AutoDock Vina pipeline) ────
+    targets_payload = [{"uniprot_id": g["uniprot_id"],
+                        "gene_symbol": g["gene_symbol"]} for g in genes]
+    try:
+        batch = await docking_service.run_docking_batch(
+            compounds=compounds,
+            targets=targets_payload,
+            exhaustiveness=int(exhaustiveness),
+            num_modes=int(num_modes),
+            box_padding=float(box_padding),
+        )
+    except Exception as e:
+        logger.exception("[research] docking batch failed")
+        return {"status": "error", "message": f"Docking failed: {e}"}
+
+    results = batch.get("results") or []
+    receptors = batch.get("receptors") or {}
+    job_id = batch.get("job_id") or ""
+
+    # Attach the human-friendly gene symbol to every result row so the
+    # frontend can render `Compound × GENE (PDB)` without a re-lookup.
+    uid_to_gene = {g["uniprot_id"]: g["gene_symbol"] for g in genes}
+    for r in results:
+        uid = r.get("uniprot_id") or ""
+        r["gene_symbol"] = uid_to_gene.get(uid, "")
+        r["pdb_id"] = r.get("receptor_pdb") or (
+            receptors.get(uid, {}).get("pdb_id") or "")
+
+    # ── 4. Summary metrics ───────────────────────────────────────
+    successful = [r for r in results if not r.get("error")
+                                     and r.get("best_affinity")]
+    successful.sort(key=lambda r: float(r.get("best_affinity") or 0.0))
+    strong = [r for r in successful if float(r.get("best_affinity") or 0.0) <= -7.0]
+
+    best = successful[0] if successful else None
+    metrics = {
+        "n_pairs":   total_pairs,
+        "n_success": len(successful),
+        "n_failed":  len(results) - len(successful),
+        "n_strong":  len(strong),   # ≤ -7 kcal/mol threshold
+        "best_affinity": (float(best["best_affinity"]) if best else None),
+        "best_pair":     ((f'{best.get("ligand_name")} × '
+                           f'{best.get("gene_symbol") or best.get("uniprot_id")} '
+                           f'({best.get("pdb_id")})') if best else None),
+        "top_compounds": top_compounds,
+        "top_genes":     top_genes,
+    }
+
+    await progress("finalizing",
+                   f"Docking complete — {len(successful)}/{total_pairs} "
+                   f"pair(s) succeeded, {len(strong)} strong binder(s) "
+                   f"(≤ −7 kcal/mol).")
+
+    return {"status": "ok",
+            "card": "docking",
+            "message": (f"Docked top {len(compounds)} compound(s) × top "
+                        f"{len(genes)} target(s) = {total_pairs} pair(s). "
+                        f"{len(successful)} succeeded, {len(strong)} strong "
+                        f"binder(s) with affinity ≤ −7 kcal/mol."
+                        + (f" Best: {metrics['best_pair']} at "
+                           f"{metrics['best_affinity']:.2f} kcal/mol."
+                           if metrics.get("best_pair") else "")),
+            "data": {"job_id": job_id,
+                     "metrics": metrics,
+                     "results": results,
+                     "receptors": receptors}}
+
+
 TOOL_REGISTRY: dict[str, dict[str, Any]] = {
     "plant_search":     {"fn": tool_plant_search,
                          "desc": "Search medicinal plants for their full "
@@ -709,6 +891,17 @@ TOOL_REGISTRY: dict[str, dict[str, Any]] = {
                                  "{smiles, compound_name, molecular_weight, "
                                  "source, ...} dicts) when chaining from a "
                                  "previous plant_search result."},
+    "docking":          {"fn": tool_docking,
+                         "desc": "Molecular docking (AutoDock Vina) of the "
+                                 "top-N compounds × top-M target genes. "
+                                 "Automatically picks the strongest binders "
+                                 "from prior admet_predict and target_predict "
+                                 "steps — auto-fetches PDB structures via "
+                                 "UniProt cross-refs. Args (all optional): "
+                                 "{top_compounds?: int=5, top_genes?: int=3, "
+                                 "exhaustiveness?: int=8, num_modes?: int=9}. "
+                                 "Auto-appended when both target_predict and "
+                                 "admet_predict have run."},
 }
 
 
@@ -939,6 +1132,21 @@ async def plan(prompt: str, history: list[dict], project_id: str,
             "status": "pending",
         })
         parsed["plan"] = steps
+    # Auto-append a docking step whenever the plan already runs both
+    # target_predict and admet_predict — dock the top compounds against
+    # the top targets so the user gets a binding-affinity readout without
+    # having to plumb another module.
+    tools_in_plan = {s["tool"] for s in steps}
+    if ({"target_predict", "admet_predict"} <= tools_in_plan
+            and "docking" not in tools_in_plan):
+        steps.append({
+            "id":    f"step_{len(steps)+1}",
+            "tool":  "docking",
+            "label": "Dock top compounds × top targets",
+            "args":  {},
+            "status": "pending",
+        })
+        parsed["plan"] = steps
     return parsed
 
 
@@ -1144,6 +1352,10 @@ async def execute_step(step: dict,
         args["progress"] = progress
     # ctp_network needs raw upstream results — supply them explicitly.
     if tool_name == "ctp_network":
+        args["prior_results"]   = prior_results   or []
+        args["project_context"] = project_context or []
+    # docking needs upstream compound + target results to auto-pick pairs.
+    if tool_name == "docking":
         args["prior_results"]   = prior_results   or []
         args["project_context"] = project_context or []
 
