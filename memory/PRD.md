@@ -1131,3 +1131,52 @@ corrected to `superadmin@phytonet.ai / SuperAdmin@2026!`.
 - P2 — Molecular Dynamics server-side execution via GROMACS + Celery workers.
 - P2 — PDF Fact Sheet for the Plant Information card (one-click printable).
 - P2 (nice-to-have) — Rate-limit or CAPTCHA on public `POST /api/contact` (currently trivially spammable).
+
+## 2026-02-06 — AI Research Assistant Phase 1 Closeout ✅
+
+Validated + fixed the three pending features that were injected but untested in
+the previous handoff (Pathway Enrichment · Cytoscape Network · Save & Share).
+
+**Backend fixes (`research_service.py`)**
+- `tool_pathway_enrichment` `_extract_rows` helper — the previous
+  `kegg.get("terms") or kegg.get("results") or kegg or []` fallback tried to
+  slice the raw KEGG dict when both keys were missing (KEGG returns
+  `{"pathways": [...]}`), raising `unhashable type: 'slice'`. New helper
+  handles `pathways` / `terms` / `results` / `rows` and plain-list responses.
+- `_auto_pick_compounds` now falls back to single-compound `compound_lookup`
+  results (canonical_smiles / isomeric_smiles) so
+  `[compound_lookup → target_predict]` chains propagate SMILES automatically.
+  Fixes the "Target prediction needs at least one compound" error surfaced by
+  the iteration-42 testing agent.
+
+**Frontend additions**
+- `pages/ResearchWorkspace.jsx` — new `ProjectHeader` component with a Share
+  button (`data-testid=share-project-btn`) that toggles a popover
+  (`data-testid=share-popover`) with public URL input, copy button, and
+  disable-sharing action.
+- `pages/SharedResearch.jsx` — new public read-only page rendering the shared
+  project's title, messages, run status, and per-tool step summary. No auth
+  required.
+- `App.js` — `/research/shared/:slug` route registered.
+- Small tweak: `enrichment_table` renderer accepts `adj_p_value` fallback so
+  KEGG rows show the correct adjusted p-value.
+
+**End-to-end verified**
+- Pathway enrichment on `AKT1, EGFR, TP53, TNF, IL6` → 152 KEGG + 200 GO rows,
+  card renders with pathway names + p-values.
+- `Predict protein targets for Curcumin` → plan `[compound_lookup, target_predict]`
+  auto-chains; 19 compound/target nodes, 18 edges rendered by Cytoscape.
+- Share button generates `/research/shared/<slug>` URL; unauth fetch returns
+  title + messages + runs with `user_id` redacted; disable clears the slug.
+
+**Files touched**
+- `backend/research_service.py`
+- `frontend/src/pages/ResearchWorkspace.jsx`
+- `frontend/src/pages/SharedResearch.jsx` (new)
+- `frontend/src/App.js`
+
+**Next Action Items**
+- P1 — Inject ADMET / Docking Validation outputs into the AI Scientific Report.
+- P2 — Split ResearchWorkspace.jsx (~1170 lines) into components/research/*.
+- P2 — AI Research Assistant Phase 2 (PDF report gen, retry engine, filters).
+- P2 — Molecular Dynamics server-side execution via GROMACS + Celery.

@@ -878,6 +878,27 @@ def _auto_pick_compounds(prior_results: list[dict],
                                                        or c.get("canonical_smiles"))]
                 if selected:
                     return selected if limit is None else selected[:limit]
+    # Single-compound lookups (compound_lookup / compound_details card) —
+    # synthesise a 1-item compounds list so target_predict / admet_predict
+    # can chain from "Look up Curcumin → Predict targets" prompts.
+    for pool in (prior_results, project_context):
+        for step in reversed(pool):
+            if step.get("status") != "done":
+                continue
+            data = (step.get("result") or {}).get("data") or {}
+            smi = (data.get("canonical_smiles") or data.get("isomeric_smiles")
+                   or data.get("smiles"))
+            if isinstance(smi, str) and smi.strip():
+                one = {
+                    "smiles": smi,
+                    "canonical_smiles": smi,
+                    "compound_name": data.get("iupac_name") or data.get("name")
+                                     or data.get("compound_name"),
+                    "molecular_formula": data.get("molecular_formula"),
+                    "molecular_weight": data.get("molecular_weight"),
+                    "pubchem_cid": data.get("pubchem_cid"),
+                }
+                return [one]
     for step in reversed(project_context):
         data = (step.get("result") or {}).get("data") or {}
         smis = data.get("smiles_extracted")
