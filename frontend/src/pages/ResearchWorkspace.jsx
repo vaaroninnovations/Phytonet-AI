@@ -4,11 +4,12 @@
 // component only orchestrates the UI.
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { authApi } from "@/context/AuthContext";
+import * as XLSX from "xlsx";
 import {
   Sparkles, Send, Plus, Loader2, ChevronRight, Trash2,
   Beaker, FlaskConical, Dna, Microscope, Atom, X, Download,
   Paperclip, MessageSquare, Bot, User, CheckCircle2, Circle, XCircle,
-  ArrowRight, Menu, Search,
+  ArrowRight, Menu, Search, FileSpreadsheet, FileText, FileJson,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -143,47 +144,61 @@ function PlanCard({ plan, title, onExecute, executing, executed }) {
   );
 }
 
-function TableCard({ testid, title, rows, columns, downloadName, subtitle, onOpen }) {
-  const preview = rows.slice(0, 5);
+function TableCard({ testid, title, rows, columns, downloadBase, subtitle, onOpen }) {
+  const total = rows.length;
   return (
     <div data-testid={testid}
          className="mt-2 rounded-2xl border border-white/10 bg-black/30 backdrop-blur-sm p-4">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <div className="text-[15px] font-semibold text-slate-100">{title}</div>
+          <div className="flex items-center gap-2">
+            <div className="text-[15px] font-semibold text-slate-100">{title}</div>
+            <span data-testid={`${testid}-count`}
+                  className="rounded-full bg-[#5139ED]/20 border border-[#5139ED]/40 px-2 py-0.5 text-[10.5px] font-semibold text-[#a48bff]">
+              {total} {total === 1 ? "row" : "rows"}
+            </span>
+          </div>
           {subtitle && <div className="mt-0.5 text-[11px] text-slate-400">{subtitle}</div>}
         </div>
-        <div className="flex items-center gap-2">
-          {onOpen && rows.length > preview.length && (
-            <button onClick={onOpen}
-                    data-testid={`${testid}-open`}
-                    className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-slate-200 hover:bg-white/10">
-              View all ({rows.length}) <ArrowRight size={11} />
-            </button>
-          )}
-          {downloadName && (
-            <button onClick={() => downloadJson(rows, downloadName)}
-                    data-testid={`${testid}-download`}
-                    className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-slate-200 hover:bg-white/10">
-              <Download size={11} /> JSON
-            </button>
+        <div className="flex items-center gap-1.5">
+          {downloadBase && (
+            <>
+              <button onClick={() => downloadCsv(rows, columns, `${downloadBase}.csv`)}
+                      data-testid={`${testid}-download-csv`}
+                      title="Download CSV"
+                      className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-slate-200 hover:bg-white/10">
+                <FileText size={11} /> CSV
+              </button>
+              <button onClick={() => downloadExcel(rows, columns, `${downloadBase}.xlsx`, title)}
+                      data-testid={`${testid}-download-xlsx`}
+                      title="Download Excel"
+                      className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-slate-200 hover:bg-white/10">
+                <FileSpreadsheet size={11} /> Excel
+              </button>
+              <button onClick={() => downloadJson(rows, `${downloadBase}.json`)}
+                      data-testid={`${testid}-download-json`}
+                      title="Download JSON"
+                      className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-slate-200 hover:bg-white/10">
+                <FileJson size={11} /> JSON
+              </button>
+            </>
           )}
         </div>
       </div>
-      <div className="mt-3 overflow-x-auto">
+      <div className="mt-3 max-h-[420px] overflow-y-auto overflow-x-auto rounded-lg border border-white/5 bg-black/20">
         <table className="w-full text-[12.5px]">
-          <thead>
-            <tr className="text-[10.5px] uppercase tracking-wider text-slate-500 border-b border-white/10">
+          <thead className="sticky top-0 bg-black/70 backdrop-blur-sm z-10">
+            <tr className="text-[10.5px] uppercase tracking-wider text-slate-400 border-b border-white/10">
               {columns.map((c) => (
-                <th key={c.key} className="text-left py-1.5 pr-3 font-semibold">{c.label}</th>
+                <th key={c.key} className="text-left py-2 px-3 font-semibold">{c.label}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {preview.map((r, i) => (
-              <tr key={i} className="border-b border-white/5 last:border-0">
+            {rows.map((r, i) => (
+              <tr key={i} className="border-b border-white/5 last:border-0 hover:bg-white/[0.02]">
                 {columns.map((c) => (
-                  <td key={c.key} className="py-1.5 pr-3 text-slate-200 truncate max-w-[240px]">
+                  <td key={c.key} className="py-1.5 px-3 text-slate-200 truncate max-w-[240px]">
                     {c.render ? c.render(r) : (r[c.key] ?? "—")}
                   </td>
                 ))}
@@ -192,18 +207,71 @@ function TableCard({ testid, title, rows, columns, downloadName, subtitle, onOpe
           </tbody>
         </table>
         {rows.length === 0 && (
-          <div className="py-4 text-center text-xs text-slate-500">No data returned.</div>
+          <div className="py-6 text-center text-xs text-slate-500">No data returned.</div>
         )}
       </div>
+      {rows.length > 8 && (
+        <div className="mt-2 text-right text-[10.5px] text-slate-500">
+          Scroll inside the table to see all {rows.length} rows.
+        </div>
+      )}
     </div>
   );
 }
 
-function downloadJson(data, name) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+// ─── Download helpers ─────────────────────────────────────────────
+function _rowsToPlain(rows, columns) {
+  return rows.map((r) => {
+    const out = {};
+    for (const c of columns) {
+      let v;
+      if (c.render) {
+        try {
+          const rendered = c.render(r);
+          v = typeof rendered === "string" || typeof rendered === "number"
+                ? rendered
+                : (r[c.key] ?? "");
+        } catch { v = r[c.key] ?? ""; }
+      } else {
+        v = r[c.key] ?? "";
+      }
+      out[c.label] = v;
+    }
+    return out;
+  });
+}
+
+function downloadCsv(rows, columns, filename) {
+  const plain = _rowsToPlain(rows, columns);
+  const cols = columns.map((c) => c.label);
+  const esc = (v) => {
+    const s = String(v ?? "");
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const csv = [
+    cols.join(","),
+    ...plain.map((r) => cols.map((c) => esc(r[c])).join(",")),
+  ].join("\n");
+  _trigger(new Blob([csv], { type: "text/csv;charset=utf-8;" }), filename);
+}
+
+function downloadExcel(rows, columns, filename, sheetName = "Results") {
+  const plain = _rowsToPlain(rows, columns);
+  const ws = XLSX.utils.json_to_sheet(plain);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31) || "Results");
+  const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+  _trigger(new Blob([wbout], { type: "application/octet-stream" }), filename);
+}
+
+function downloadJson(data, filename) {
+  _trigger(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }), filename);
+}
+
+function _trigger(blob, filename) {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = name;
+  a.download = filename;
   a.click();
   URL.revokeObjectURL(a.href);
 }
@@ -215,7 +283,7 @@ function ResultCard({ result, onOpen }) {
   if (card === "compound_table") {
     const rows = d.compounds || [];
     return <TableCard testid="compound-table" title="Compounds" subtitle={msg}
-      rows={rows} downloadName="compounds.json" onOpen={onOpen}
+      rows={rows} downloadBase="compounds" onOpen={onOpen}
       columns={[
         { key: "compound_name", label: "Name", render: (r) => r.compound_name || r.name || r.iupac_name || "—" },
         { key: "molecular_formula", label: "Formula", render: (r) => r.molecular_formula || "—" },
@@ -227,7 +295,7 @@ function ResultCard({ result, onOpen }) {
   if (card === "target_table") {
     const rows = d.targets || [];
     return <TableCard testid="target-table" title="Disease-Associated Targets" subtitle={msg}
-      rows={rows} downloadName="targets.json" onOpen={onOpen}
+      rows={rows} downloadBase="targets" onOpen={onOpen}
       columns={[
         { key: "gene", label: "Gene", render: (r) => r.gene || r.gene_symbol || r.symbol || "—" },
         { key: "score", label: "Score", render: (r) => (r.score ?? r.overall_score ?? "").toString().slice(0, 6) || "—" },
@@ -238,7 +306,7 @@ function ResultCard({ result, onOpen }) {
   if (card === "disease_table") {
     const rows = d.hits || [];
     return <TableCard testid="disease-table" title="Disease Search" subtitle={msg}
-      rows={rows} downloadName="diseases.json" onOpen={onOpen}
+      rows={rows} downloadBase="diseases" onOpen={onOpen}
       columns={[
         { key: "name", label: "Disease", render: (r) => r.name || r.disease_name || r.label || "—" },
         { key: "id", label: "ID", render: (r) => r.disease_id || r.efo_id || r.mondo_id || r.id || "—" },
@@ -248,7 +316,7 @@ function ResultCard({ result, onOpen }) {
   if (card === "admet_table") {
     const rows = Array.isArray(d.results) ? d.results : (d.rows || d.compounds || []);
     return <TableCard testid="admet-table" title="ADMET Prediction" subtitle={msg}
-      rows={rows} downloadName="admet.json" onOpen={onOpen}
+      rows={rows} downloadBase="admet" onOpen={onOpen}
       columns={[
         { key: "smiles", label: "SMILES", render: (r) => <span className="font-mono text-[11px]">{(r.smiles || "").slice(0, 30)}</span> },
         { key: "mw", label: "MW", render: (r) => (r.mw ?? r.molecular_weight ?? "").toString().slice(0, 6) },
