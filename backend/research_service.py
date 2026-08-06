@@ -368,10 +368,16 @@ async def tool_disease_targets(disease_id: str, limit: int = 30,
 
 
 async def tool_ctp_network(progress=_noop_progress, prior_results=None,
-                            project_context=None, **_) -> dict:
+                            project_context=None,
+                            top_kegg: int = 20, top_go: int = 20,
+                            max_adj_p: float = 0.05, **_) -> dict:
     """Build a Compound → Target → Pathway network from prior target_predict
     + pathway_enrichment steps, compute centrality metrics, and emit
-    Cytoscape-compatible node / edge / GraphML / JSON downloads."""
+    Cytoscape-compatible node / edge / GraphML / JSON downloads.
+
+    Only the top-N most significant pathways are wired into the network to
+    keep the graph readable (defaults: top 20 KEGG + top 20 GO, both filtered
+    to adj_p ≤ 0.05). Everything upstream still passes through unchanged."""
     import io, csv, networkx as nx
 
     def _last_result(tool):
@@ -403,10 +409,27 @@ async def tool_ctp_network(progress=_noop_progress, prior_results=None,
         compounds.add(c); targets.add(gene)
         ct_edges.append((c, gene, "targets"))
 
-    # Target-Pathway edges — use overlap_genes on each enrichment term
+    # Target-Pathway edges — keep only the top-N most significant pathways
+    # from each library (KEGG uses `adj_p_value`, g:Profiler `p_value` is
+    # already the g:SCS-corrected value).
+    def _pw_score(pw):
+        p = pw.get("adjusted_p_value") or pw.get("adj_p_value") or pw.get("p_value") or 1.0
+        try:
+            return float(p)
+        except (TypeError, ValueError):
+            return 1.0
+
+    def _top(rows, k):
+        filtered = [r for r in (rows or []) if _pw_score(r) <= max_adj_p]
+        filtered.sort(key=_pw_score)
+        return filtered[:k]
+
+    kegg_top = _top(pe.get("kegg"), top_kegg)
+    go_top   = _top(pe.get("go"),   top_go)
+
     tp_edges = []
     pathways = set()
-    for pw in ((pe.get("kegg") or []) + (pe.get("go") or [])):
+    for pw in kegg_top + go_top:
         pname = (pw.get("term_name") or pw.get("name") or pw.get("term") or "").strip()
         if not pname: continue
         overlaps = pw.get("overlap_genes") or []
@@ -491,6 +514,11 @@ async def tool_ctp_network(progress=_noop_progress, prior_results=None,
         "n_pathways":  len(pathways),
         "n_nodes":     G.number_of_nodes(),
         "n_edges":     G.number_of_edges(),
+        "top_kegg_used": len(kegg_top),
+        "top_go_used":   len(go_top),
+        "kegg_available": len(pe.get("kegg") or []),
+        "go_available":   len(pe.get("go")   or []),
+        "max_adj_p":      max_adj_p,
         "top_by_degree": sorted(
             [{"id": n, "type": G.nodes[n]["type"], "degree": deg[n]}
              for n in G.nodes],
@@ -498,10 +526,14 @@ async def tool_ctp_network(progress=_noop_progress, prior_results=None,
     }
     return {"status": "ok",
             "card": "ctp_network",
-            "message": (f"CTP network built: {metrics['n_compounds']} compounds "
-                        f"· {metrics['n_targets']} targets "
-                        f"· {metrics['n_pathways']} pathways "
-                        f"· {metrics['n_nodes']} nodes / {metrics['n_edges']} edges."),
+            "message": (f"CTP network built with the top "
+                        f"{len(kegg_top)} KEGG + {len(go_top)} GO pathways "
+                        f"(of {len(pe.get('kegg') or [])} + {len(pe.get('go') or [])} "
+                        f"available, adj-p ≤ {max_adj_p}): "
+                        f"{metrics['n_compounds']} compounds · "
+                        f"{metrics['n_targets']} targets · "
+                        f"{metrics['n_pathways']} pathways · "
+                        f"{metrics['n_nodes']} nodes / {metrics['n_edges']} edges."),
             "data": {
                 "metrics":  metrics,
                 "nodes":    nodes,

@@ -548,7 +548,10 @@ function CTPNetworkCard({ data, message }) {
         {[
           { label: "Compounds", value: metrics.n_compounds, color: "text-[#a48bff]" },
           { label: "Targets",   value: metrics.n_targets,   color: "text-emerald-300" },
-          { label: "Pathways",  value: metrics.n_pathways,  color: "text-amber-300" },
+          { label: metrics.top_kegg_used != null
+                    ? `Top Pathways (${(metrics.top_kegg_used ?? 0) + (metrics.top_go_used ?? 0)}/${(metrics.kegg_available ?? 0) + (metrics.go_available ?? 0)})`
+                    : "Pathways",
+            value: metrics.n_pathways, color: "text-amber-300" },
           { label: "Nodes",     value: metrics.n_nodes,     color: "text-slate-100" },
           { label: "Edges",     value: metrics.n_edges,     color: "text-slate-100" },
         ].map((s) => (
