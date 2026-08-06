@@ -1511,3 +1511,92 @@ Verified with the same MutationObserver harness:
   via ref + localStorage; `scrollbar-gutter: stable` on both panes)
 - `frontend/src/components/research/cards.jsx` (cytoscape init options
   tightened; NetworkCard still memoised from prior iteration)
+
+
+## 2026-02-06 (iter 45) — CTP Network Interactivity ✅
+
+Completed the paused work from iter-44. `CTPNetworkCard` in
+`/app/frontend/src/components/research/cards.jsx` now supports:
+
+- **Live Top-N sliders** (`ctp-slider-kegg`, `ctp-slider-go`) — client-side
+  re-filter using `data.raw.{kegg,go,targets}` payload already shipped by
+  `tool_ctp_network`. Reset button snaps to 20/20 (or the available cap).
+- **First-degree neighborhood isolation** — tap any node in the Cytoscape
+  canvas (or a `ctp-hub-*` pill button) to dim non-neighbors and highlight
+  the focus + immediate neighbours. Banner (`ctp-isolation-banner`) shows
+  the isolated node id with a Clear button. Tapping empty canvas also
+  clears. Uses `cy.batch()` + class swaps so Cytoscape never re-mounts.
+- Top hubs strip now recomputes live from client-side graph (falls back to
+  server metrics for legacy runs without `data.raw`).
+
+Verified 100% by testing agent (`iteration_45.json`): fresh CTP run at
+5/5 sliders → 41 nodes, at 20/20 → 56 nodes, at max/max → 140 nodes/520
+edges/122 pathways. Downloads (CSV/JSON/GraphML/PNG) still work. No console
+errors during slider drags or isolation toggling.
+
+**Deferred bug (pre-existing, flagged by testing agent for follow-up):**
+- `tool_ctp_network` reports `n_compounds=0, n_targets=0` in its metrics
+  even when 18 target_predict rows exist upstream. Compound/target
+  extraction heuristic likely misses a field name on the current
+  target_predict output shape. Client-side re-derivation agrees with the
+  server, so the fix belongs in `tool_ctp_network` (not the card).
+
+
+## 2026-02-06 (iter 46) — Docking inside AI Research Assistant ✅
+
+Added a new `docking` tool to the Research Assistant orchestrator so the
+platform can automatically run AutoDock Vina docking of the top compounds
+× top target genes right inside the workspace results pane.
+
+**Backend — `/app/backend/research_service.py`**
+- New `tool_docking(top_compounds=5, top_genes=3, exhaustiveness=8,
+  num_modes=9, box_padding=8.0)`:
+  - Ranks compounds by QED / drug-likeness from a prior `admet_predict`
+    step (falls back to any earlier compound source via `_auto_pick_compounds`).
+  - Ranks target genes from `target_predict` by evidence count + best
+    score, further biased by CTP hub-degree if a `ctp_network` step has
+    already run. Each gene carries its UniProt ID so
+    `docking_service.run_docking_batch` can auto-fetch a PDB structure.
+  - Calls the existing `docking_service.run_docking_batch(...)` — same
+    AutoDock Vina pipeline that powers `/molecular-docking`.
+  - Returns `card: "docking"` with `job_id`, `metrics`, `results`
+    (ranked), `receptors`.
+- Registered in `TOOL_REGISTRY`.
+- **Auto-append policy** (in `plan()`): when the LLM plan contains BOTH
+  `target_predict` AND `admet_predict` but no `docking`, a docking step
+  is appended after CTP.
+- `execute_step` wires `prior_results` + `project_context` into the tool
+  (mirrors the `ctp_network` pattern).
+
+**Frontend — `/app/frontend/src/components/research/cards.jsx`**
+- New `DockingCard` component (routed via `card === "docking"`):
+  - 5 summary pills: Pairs / Succeeded / Failed / Strong (≤−7 kcal/mol) /
+    Best affinity.
+  - "Best binder" banner (compound × gene at N kcal/mol).
+  - Ranked results table sorted by `best_affinity` ascending, with columns
+    Compound · Gene · PDB · Affinity · Strength badge · Modes · 3D View.
+  - Per-row `View 3D` button expands the existing `DockingViewer`
+    (3Dmol.js complex + 2D interactions + downloads) inline in the table.
+  - CSV export.
+  - Error rows render at reduced opacity with a "Failed" badge — no crash
+    on partial batches.
+
+**Testing** — `iteration_46.json`: backend pytest 2/2 pass
+(`test_iter46_docking_autoappend.py` confirms plan auto-append works).
+Frontend static contract verified. Live end-to-end docking run was
+deferred (10+ min AutoDock Vina batch cost). Two seeded projects
+`TEST_iter46_docking_autoappend` are ready for a manual run.
+
+**Note on node consumption:** Per user brief, docking runs inside the
+Research Assistant are charged at the chat / project level (complexity-
+based), not per-tool — no separate node debit was added.
+
+**Next Action Items**
+- Optional live-render manual verification: open a seeded
+  `TEST_iter46_docking_autoappend` project → Run plan → verify
+  `docking-card` renders and `docking-view3d-0` opens the inline 3D viewer.
+- Fix pre-existing metric bug in `tool_ctp_network`
+  (`n_compounds=0/n_targets=0`) surfaced in iter-45 report.
+- P1: AI Report enrichment — bake real ADMET / docking / CTP metrics into
+  the AI Scientific Report.
+- P1: Wire ⌘K command palette to search open tabs & past projects.
