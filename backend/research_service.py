@@ -271,6 +271,36 @@ values in earlier messages, reuse them without re-asking.
 5. Never mention that you are calling APIs, backend services or tools by name \
 in your `interpretation`. Speak like a research scientist.
 
+CHAINING RESULTS BETWEEN STEPS
+──────────────────────────────
+To feed the output of an earlier step into a later one, use a placeholder \
+string starting with `$`:
+
+  "$prev.compounds"           → the `data.compounds` array from the most \
+recent SUCCESSFUL step
+  "$prev.compounds[:25]"      → first 25 items (Python slice syntax)
+  "$step_1.compounds[:50]"    → items from a specific step (matched by step id)
+  "$prev.targets"             → the `data.targets` array from a target step
+  "$prev.hits"                → the `data.hits` array from a disease search
+
+TYPICAL CHAINS
+──────────────
+User: "Show me phytochemicals from Withania somnifera and run ADMET on the top 25."
+Plan:
+  step_1  plant_search      {{"query": "Withania somnifera", "limit": 200}}
+  step_2  admet_predict     {{"compounds": "$step_1.compounds[:25]"}}
+
+User: "Find compounds in Ashwagandha and check drug-likeness for all of them."
+Plan:
+  step_1  plant_search      {{"query": "Ashwagandha", "limit": 200}}
+  step_2  admet_predict     {{"compounds": "$prev.compounds"}}
+
+DEFAULT LIMITS
+──────────────
+• plant_search: default limit=200 (returns 100-200 compounds per plant).
+• admet_predict: when chaining after plant_search, DEFAULT TO TOP 25 unless \
+the user explicitly asks for all. ADMET can be slow at scale.
+
 OUTPUT FORMAT
 ─────────────
 Return ONLY a JSON object matching this exact schema — no prose before or \
@@ -287,7 +317,13 @@ after, no code fences:
       "id": "step_1",
       "tool": "plant_search",
       "label": "Retrieve phytochemicals from Withania somnifera",
-      "args": {{"query": "Withania somnifera", "limit": 25}}
+      "args": {{"query": "Withania somnifera", "limit": 200}}
+    }},
+    {{
+      "id": "step_2",
+      "tool": "admet_predict",
+      "label": "Predict ADMET for the top 25 compounds",
+      "args": {{"compounds": "$step_1.compounds[:25]"}}
     }}
   ]
 }}
@@ -417,14 +453,15 @@ def _parse_json_response(text: str) -> dict:
         return {"mode": "chat", "reply": text[:800]}
 
 
-async def execute_step(step: dict) -> dict:
+async def execute_step(step: dict, prior_results: list[dict] | None = None) -> dict:
     tool_name = step.get("tool")
     entry = TOOL_REGISTRY.get(tool_name)
     if not entry:
         return {"status": "error", "message": f"Unknown tool: {tool_name}"}
     fn = entry["fn"]
+    args = resolve_args(step.get("args") or {}, prior_results or [])
     try:
-        return await fn(**(step.get("args") or {}))
+        return await fn(**args)
     except httpx.HTTPStatusError as e:
         detail = ""
         try:
@@ -436,3 +473,60 @@ async def execute_step(step: dict) -> dict:
     except Exception as e:
         logger.exception(f"[research] tool {tool_name} error")
         return {"status": "error", "message": f"{tool_name}: {e}"}
+
+
+# ═══════════════════════════════════════════════════════════════
+# Result forwarding — resolve "$prev.<path>" / "$step_id.<path>" placeholders
+# in a plan step's args from prior successful results.
+# ═══════════════════════════════════════════════════════════════
+def resolve_args(args: dict, prior_results: list[dict]) -> dict:
+    """Walk a step's args and replace any `$prev.<path>` or `$step_<id>.<path>`
+    reference with the corresponding value from prior step results.
+
+    `prior_results` shape (as produced by _execute_in_background):
+      [{ id, label, tool, args, status, result: {status, card, message, data} }]
+
+    Supported placeholder grammar:
+      "$prev.compounds"        → last SUCCESSFUL step's result.data.compounds
+      "$prev.compounds[:25]"   → first 25 items of that array
+      "$step_1.hits"           → step whose `id` == 'step_1' → result.data.hits
+    """
+    def _lookup(source: str) -> Any:
+        # source examples: "prev.compounds", "step_1.compounds[:25]"
+        target, *rest = source.split(".", 1)
+        path = rest[0] if rest else ""
+        # Slice suffix?
+        slice_spec = None
+        if path.endswith("]") and "[" in path:
+            path, _, slc = path.rpartition("[")
+            slice_spec = slc.rstrip("]")
+        # Find the source step
+        if target == "prev":
+            candidates = [r for r in prior_results if (r.get("status") == "done")]
+            step_res = candidates[-1] if candidates else None
+        else:
+            step_res = next((r for r in prior_results if r.get("id") == target), None)
+        if not step_res:
+            return None
+        payload = (step_res.get("result") or {}).get("data") or {}
+        value = payload.get(path) if path else payload
+        if isinstance(value, list) and slice_spec:
+            try:
+                start, stop = (slice_spec.split(":") + [""])[:2]
+                s = int(start) if start else None
+                e = int(stop)  if stop  else None
+                value = value[slice(s, e)]
+            except Exception:
+                pass
+        return value
+
+    def _walk(v: Any) -> Any:
+        if isinstance(v, str) and v.startswith("$"):
+            return _lookup(v[1:])
+        if isinstance(v, list):
+            return [_walk(x) for x in v]
+        if isinstance(v, dict):
+            return {k: _walk(x) for k, x in v.items()}
+        return v
+
+    return _walk(args)

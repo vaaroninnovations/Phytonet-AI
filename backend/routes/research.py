@@ -256,7 +256,7 @@ async def _execute_in_background(db, oid_str: str, pid: str, run_id: str):
             {"_id": oid, "runs.id": run_id},
             {"$set": {f"runs.$.plan.{idx}.status": "running"}},
         )
-        result = await research_service.execute_step(step)
+        result = await research_service.execute_step(step, prior_results=results)
         status = "done" if result.get("status") == "ok" else "error"
         step_out = {
             "id": step_id,
