@@ -504,7 +504,8 @@ export function NetworkCard({ network }) {
             "width":  (n) => 14 + Math.min(20, (n.data("degree") || 1) * 3),
             "height": (n) => 14 + Math.min(20, (n.data("degree") || 1) * 3) } },
         { selector: "edge", style: {
-            "width": 1, "line-color": "#8139ED55", "curve-style": "bezier",
+            "width": 1, "line-color": "#8139ED", "line-opacity": 0.33,
+            "curve-style": "bezier",
             "target-arrow-shape": "none" } },
       ],
       layout: { name: "cose", nodeRepulsion: 4500, idealEdgeLength: 80,

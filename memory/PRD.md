@@ -1180,3 +1180,58 @@ the previous handoff (Pathway Enrichment · Cytoscape Network · Save & Share).
 - P2 — Split ResearchWorkspace.jsx (~1170 lines) into components/research/*.
 - P2 — AI Research Assistant Phase 2 (PDF report gen, retry engine, filters).
 - P2 — Molecular Dynamics server-side execution via GROMACS + Celery.
+
+## 2026-02-06 (pm) — /research Refactor + Retry-Failed-Step ✅
+
+**Refactor** — Split the 1170-line `ResearchWorkspace.jsx` into a thin (270 L)
+orchestrator + `components/research/*.jsx`:
+- `Sidebar.jsx` (71 L) — projects list + New Research button.
+- `Composer.jsx` (77 L) — chat input + drag-drop upload + attachments chips.
+- `ProjectHeader.jsx` (93 L) — title + Share popover (copy / open / disable).
+- `ChatMessage.jsx` (64 L) — user/assistant bubble, plan card, next steps.
+- `VizPanel.jsx` (51 L) — right-side viz + interpretation + next steps.
+- `EmptyState.jsx` (49 L) — hero + SuggestedPromptsGrid.
+- `cards.jsx` (533 L) — PlanCard (now with per-step Retry button), TableCard,
+  ResultCard (compound/target/disease/admet/enrichment/details), NetworkCard
+  (Cytoscape compound-target graph), + CSV/Excel/JSON download helpers.
+- Behavior preserved 1-for-1 (verified: 100 % iteration_43 backend + 7/7 UI).
+
+**Retry Failed Step (option b — "resume from failed step")**
+- Backend `POST /api/research/projects/{pid}/retry/{run_id}/{step_id}` —
+  finds the target step, resets it + every downstream step to `pending`
+  (clears their progress), truncates `results` to strictly-earlier successes,
+  flips run to `running`, kicks off `_execute_in_background` via
+  `BackgroundTasks`. Returns `{ok, retried_from, reset_steps}`.
+- `_execute_in_background` now short-circuits any step whose stored
+  `plan[idx].status == 'done'` — pulls its previous result out of
+  `run.results` and appends without re-running. So on retry, upstream done
+  steps stay untouched while the failed step + downstream re-execute.
+- Frontend PlanCard renders a `data-testid=plan-step-{i}-retry` amber pill
+  next to any step with `status === "error"`. Clicking it fires
+  `POST /research/projects/{pid}/retry/{run_id}/{step_id}`, toasts "Retrying
+  from failed step…", and switches the button to a spinner until polling
+  detects `completed` / `failed`.
+
+**Small polish**
+- Cytoscape `line-color` now uses `#8139ED` + `line-opacity: 0.33` (dropping
+  the invalid 8-digit hex that produced a console warning).
+
+**Verified end-to-end** (iteration_43)
+- Backend pytest 4/4 pass (create project, plan-execute, retry-step,
+  bad-step 404).
+- Frontend Playwright 7/7 pass (workspace load · sidebar · project header +
+  Share · composer · plan / msg / network cards · retry-step UI end-to-end
+  via forced-failure MongoDB injection · VizPanel post-completion).
+
+**Files touched**
+- `backend/routes/research.py` — retry_step endpoint + prior-step reuse.
+- `frontend/src/components/research/*.jsx` — 7 new files (Sidebar, Composer,
+  ProjectHeader, ChatMessage, VizPanel, EmptyState, cards).
+- `frontend/src/pages/ResearchWorkspace.jsx` — trimmed to composition + hooks.
+
+**Next Action Items**
+- P1 — AI Report enrichment with real ADMET + docking numbers.
+- P2 — Extract NetworkCard.jsx into its own file so cytoscape can be
+  React.lazy()-code-split (cards.jsx is still 533 L).
+- P2 — AI Research Assistant Phase 2 (PDF export · saved-project filters ·
+  multi-agent · scheduling).
