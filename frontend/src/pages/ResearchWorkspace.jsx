@@ -315,14 +315,26 @@ function ResultCard({ result, onOpen }) {
   }
   if (card === "admet_table") {
     const rows = Array.isArray(d.results) ? d.results : (d.rows || d.compounds || []);
-    return <TableCard testid="admet-table" title="ADMET Prediction" subtitle={msg}
+    const fmt = (v, digits = 2) => (v === null || v === undefined || v === "") ? "—" :
+      typeof v === "number" ? v.toFixed(digits) : String(v);
+    const pass = (v) => v === true ? <span className="text-emerald-400">✓</span>
+                        : v === false ? <span className="text-rose-400">✗</span>
+                        : "—";
+    return <TableCard testid="admet-table" title="ADMET & Drug-likeness" subtitle={msg}
       rows={rows} downloadBase="admet" onOpen={onOpen}
       columns={[
-        { key: "smiles", label: "SMILES", render: (r) => <span className="font-mono text-[11px]">{(r.smiles || "").slice(0, 30)}</span> },
-        { key: "mw", label: "MW", render: (r) => (r.mw ?? r.molecular_weight ?? "").toString().slice(0, 6) },
-        { key: "logp", label: "logP", render: (r) => (r.logp ?? "").toString().slice(0, 5) },
-        { key: "qed", label: "QED", render: (r) => (r.qed ?? "").toString().slice(0, 5) },
-        { key: "lipinski", label: "Ro5", render: (r) => (r.lipinski_pass ?? r.ro5 ?? "—").toString() },
+        { key: "compound_name", label: "Name", render: (r) => r.compound_name || "—" },
+        { key: "smiles", label: "SMILES", render: (r) => <span className="font-mono text-[11px]">{(r.smiles || "").slice(0, 24)}</span> },
+        { key: "mw", label: "MW", render: (r) => fmt(r.mw, 1) },
+        { key: "logp", label: "logP", render: (r) => fmt(r.logp) },
+        { key: "tpsa", label: "TPSA", render: (r) => fmt(r.tpsa, 1) },
+        { key: "hba", label: "HBA", render: (r) => fmt(r.hba, 0) },
+        { key: "hbd", label: "HBD", render: (r) => fmt(r.hbd, 0) },
+        { key: "qed", label: "QED", render: (r) => fmt(r.qed, 3) },
+        { key: "lipinski_pass", label: "Ro5", render: (r) => pass(r.lipinski_pass) },
+        { key: "veber_pass", label: "Veber", render: (r) => pass(r.veber_pass) },
+        { key: "bbb", label: "BBB", render: (r) => fmt(r.bbb, 2) },
+        { key: "hia", label: "HIA", render: (r) => fmt(r.hia, 2) },
       ]} />;
   }
   if (card === "compound_details" || card === "target_details") {

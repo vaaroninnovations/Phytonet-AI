@@ -124,28 +124,92 @@ async def tool_disease_targets(disease_id: str, limit: int = 30, **_) -> dict:
             "data": {"disease_id": disease_id, "targets": targets[:limit]}}
 
 
-async def tool_admet_predict(smiles: list[str] | str, **_) -> dict:
-    smi_list = [smiles] if isinstance(smiles, str) else list(smiles)
-    # POST /api/admet/predict expects a payload with a list; poll for status
-    job = await _post("/api/admet/predict", {"smiles_list": smi_list})
-    job_id = job.get("job_id") or job.get("id")
+async def tool_admet_predict(smiles: list[str] | str | None = None,
+                              compounds: list[dict] | None = None,
+                              **_) -> dict:
+    """Predict ADMET for a list of SMILES OR a list of compound dicts.
+    Accepts either shape so Claude can chain a plant_search result into it."""
+    # Normalize input into the shape expected by /api/admet/predict
+    payload_compounds: list[dict] = []
+    if compounds:
+        for c in compounds[:250]:
+            if not isinstance(c, dict):
+                continue
+            smi = ((c.get("canonical_smiles") or c.get("smiles") or "")
+                   if isinstance(c, dict) else "")
+            if smi:
+                payload_compounds.append({
+                    "smiles": smi,
+                    "compound_name": c.get("compound_name") or c.get("name"),
+                    "molecular_weight": c.get("molecular_weight"),
+                    "molecular_formula": c.get("molecular_formula"),
+                    "source": c.get("source"),
+                })
+    else:
+        smi_list = [smiles] if isinstance(smiles, str) else list(smiles or [])
+        for s in smi_list[:250]:
+            s = (s or "").strip()
+            if s:
+                payload_compounds.append({"smiles": s})
+
+    if not payload_compounds:
+        return {"status": "error",
+                "message": "ADMET needs at least one SMILES. Provide `smiles` "
+                           "(str or list) or `compounds` (list of {smiles, ...})."}
+
+    job = await _post("/api/admet/predict", {"compounds": payload_compounds})
+    job_id = job.get("job_id")
+    total  = job.get("total", len(payload_compounds))
     if not job_id:
-        return {"status": "error", "message": "ADMET job did not return an id."}
-    # Poll for up to 60s
+        return {"status": "error",
+                "message": "ADMET job did not return an id. "
+                           "Model may still be warming up."}
+    # Poll for up to 5 minutes (ADMET model is compute-intensive on cold start)
     import asyncio
-    for _ in range(30):
+    for _ in range(150):
         s = await _get(f"/api/admet/status/{job_id}")
-        if s.get("status") in ("done", "success", "completed"):
+        st = (s.get("status") or "").lower()
+        if st in ("done", "success", "completed"):
+            rows_raw = s.get("compounds") or []
+            # Flatten physchem / druglikeness / admet dicts so the UI's
+            # simple key-based column renderers work without deep paths.
+            rows = []
+            for r in rows_raw:
+                p = r.get("physchem") or {}
+                d = r.get("druglikeness") or {}
+                a = r.get("admet") or {}
+                rows.append({
+                    **r,
+                    "mw":            p.get("mw", r.get("molecular_weight")),
+                    "logp":          p.get("logp"),
+                    "tpsa":          p.get("tpsa"),
+                    "hba":           p.get("hba"),
+                    "hbd":           p.get("hbd"),
+                    "qed":           p.get("qed"),
+                    "lipinski_rules": p.get("lipinski_rules"),
+                    "lipinski_pass": d.get("lipinski_pass"),
+                    "veber_pass":    d.get("veber_pass"),
+                    "ghose_pass":    d.get("ghose_pass"),
+                    "rotatable_bonds": d.get("rotatable_bonds"),
+                    "hia":           a.get("hia"),
+                    "bbb":           a.get("bbb"),
+                    "pgp_inhibitor": a.get("pgp_inhibitor"),
+                    "herg":          a.get("herg"),
+                    "ames":          a.get("ames"),
+                })
             return {"status": "ok",
                     "card": "admet_table",
                     "message": f"ADMET prediction complete for "
-                               f"{len(smi_list)} compound(s).",
-                    "data": s}
-        if s.get("status") in ("error", "failed"):
+                               f"{len(rows)} compound(s).",
+                    "data": {"job_id": job_id,
+                             "total": total,
+                             "results": rows}}
+        if st in ("error", "failed"):
             return {"status": "error",
                     "message": s.get("error") or "ADMET job failed."}
         await asyncio.sleep(2)
-    return {"status": "error", "message": "ADMET job timed out after 60s."}
+    return {"status": "error",
+            "message": "ADMET job timed out after 5 minutes."}
 
 
 TOOL_REGISTRY: dict[str, dict[str, Any]] = {
@@ -171,8 +235,13 @@ TOOL_REGISTRY: dict[str, dict[str, Any]] = {
                          "desc": "Get disease-associated gene panel. "
                                  "Args: {disease_id: str, limit?: int}."},
     "admet_predict":    {"fn": tool_admet_predict,
-                         "desc": "Predict ADMET + drug-likeness for a list of "
-                                 "SMILES. Args: {smiles: list[str] | str}."},
+                         "desc": "Predict ADMET + drug-likeness (RDKit-derived "
+                                 "physchem, Ro5, QED, permeability, toxicity). "
+                                 "Provide `smiles` (single string OR list) for "
+                                 "standalone use, OR `compounds` (list of "
+                                 "{smiles, compound_name, molecular_weight, "
+                                 "source, ...} dicts) when chaining from a "
+                                 "previous plant_search result."},
 }
 
 
