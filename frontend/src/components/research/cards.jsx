@@ -588,6 +588,9 @@ function EnrichmentCard({ data, message }) {
       {chartView !== "list" && (
         <div data-testid={`enrichment-chart-${chartView}`}
              className="rounded-lg border border-white/5 bg-black/20 p-3 mb-3">
+          <ChartDownloadBar
+            svgSelector={`[data-testid=enrichment-${chartView}-svg]`}
+            filenameBase={`enrichment_${tab}_${chartView}`} />
           {chartView === "bubble"   && <EnrichBubble   rows={filtered} />}
           {chartView === "lollipop" && <EnrichLollipop rows={filtered} />}
           {chartView === "sankey"   && <EnrichSankey   rows={filtered.slice(0, 10)} />}
@@ -660,7 +663,81 @@ function EnrichmentCard({ data, message }) {
   );
 }
 
-// ─── Enrichment chart sub-components (dark-themed, inline SVG) ────
+// ─── Chart export helpers (SVG + PNG) ────────────────────────────
+// Serialise a live SVG element into a standalone .svg file.
+export function downloadSvgFile(svgEl, filename) {
+  if (!svgEl) return;
+  const clone = svgEl.cloneNode(true);
+  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+  // Inline the current computed background so exported figures don't render
+  // transparent on white manuscripts.
+  if (!clone.getAttribute("style")?.includes("background"))
+    clone.style.background = "#0B0B18";
+  const src = new XMLSerializer().serializeToString(clone);
+  _trigger(new Blob([`<?xml version="1.0" standalone="no"?>\n${src}`],
+                     { type: "image/svg+xml;charset=utf-8" }), filename);
+}
+
+// Rasterise an SVG element to a PNG at N× resolution and download it.
+export function downloadSvgAsPng(svgEl, filename, scale = 2) {
+  if (!svgEl) return;
+  const clone = svgEl.cloneNode(true);
+  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  const viewBox = clone.getAttribute("viewBox");
+  let width, height;
+  if (viewBox) {
+    const [, , vbW, vbH] = viewBox.split(/\s+/).map(Number);
+    width  = vbW; height = vbH;
+  } else {
+    width  = svgEl.clientWidth  || svgEl.getBoundingClientRect().width  || 800;
+    height = svgEl.clientHeight || svgEl.getBoundingClientRect().height || 400;
+  }
+  clone.setAttribute("width",  width);
+  clone.setAttribute("height", height);
+  if (!clone.getAttribute("style")?.includes("background"))
+    clone.style.background = "#0B0B18";
+  const src = new XMLSerializer().serializeToString(clone);
+  const blob = new Blob([src], { type: "image/svg+xml;charset=utf-8" });
+  const url  = URL.createObjectURL(blob);
+  const img  = new Image();
+  img.onload = () => {
+    const canvas = document.createElement("canvas");
+    canvas.width  = Math.round(width  * scale);
+    canvas.height = Math.round(height * scale);
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#0B0B18";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob((b) => {
+      _trigger(b, filename);
+      URL.revokeObjectURL(url);
+    }, "image/png");
+  };
+  img.onerror = () => URL.revokeObjectURL(url);
+  img.src = url;
+}
+
+// Small download-chart toolbar rendered above each SVG chart.
+function ChartDownloadBar({ svgSelector, filenameBase }) {
+  const get = () => document.querySelector(svgSelector);
+  return (
+    <div className="mb-2 flex items-center justify-end gap-1.5">
+      <button data-testid={`chart-download-svg-${filenameBase}`}
+              onClick={() => downloadSvgFile(get(), `${filenameBase}.svg`)}
+              className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[10.5px] font-semibold text-slate-200 hover:bg-white/10">
+        <FileText size={10} /> SVG
+      </button>
+      <button data-testid={`chart-download-png-${filenameBase}`}
+              onClick={() => downloadSvgAsPng(get(), `${filenameBase}.png`, 2)}
+              className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[10.5px] font-semibold text-slate-200 hover:bg-white/10">
+        <FileText size={10} /> PNG
+      </button>
+    </div>
+  );
+}
+
+
 function EnrichBubble({ rows }) {
   if (!rows.length)
     return <div className="p-4 text-center text-[12px] italic text-slate-500">
@@ -844,7 +921,10 @@ function IntersectionVennCard({ data, message }) {
       <div className="text-[11.5px] text-slate-400">{message}</div>
 
       {/* SVG Venn */}
-      <div className="mt-3 flex justify-center">
+      <div className="mt-3">
+        <ChartDownloadBar svgSelector="[data-testid=venn-svg]"
+                          filenameBase="venn_intersection" />
+        <div className="flex justify-center">
         <svg viewBox="0 0 380 200" width="100%" style={{maxWidth: 480}}
              data-testid="venn-svg" role="img" aria-label="Intersection Venn diagram">
           <defs>
@@ -883,6 +963,7 @@ function IntersectionVennCard({ data, message }) {
           <text x="310" y="35" textAnchor="middle" fontSize="11"
                 fill="#34d399" fontWeight="700">Disease genes</text>
         </svg>
+        </div>
       </div>
 
       {/* Common genes as pills */}
@@ -1015,6 +1096,18 @@ function NetworkCardImpl({ network }) {
         <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-300">
           {network.nodes.length} nodes · {network.edges.length} edges
         </span>
+        <button
+          data-testid="network-download-png"
+          onClick={() => {
+            const cy = cyRef.current;
+            if (!cy) return;
+            const url = cy.png({ bg: "#0B0B18", scale: 2, full: true });
+            const a = document.createElement("a");
+            a.href = url; a.download = "compound_target_network.png"; a.click();
+          }}
+          className="ml-auto inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[10.5px] font-semibold text-slate-200 hover:bg-white/10">
+          <FileText size={10} /> PNG
+        </button>
       </div>
       <div className="mt-2 text-[10.5px] text-slate-500 flex items-center gap-3">
         <span><span className="inline-block h-2 w-2 rounded-full bg-[#5139ED] mr-1" />Compounds</span>
