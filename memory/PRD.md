@@ -1654,3 +1654,45 @@ gene never gets dropped from the graph.
 - P2: Refactor `cards.jsx` (now 1600+ lines) — split DockingCard,
   CTPNetworkCard, EnrichmentCard, IntersectionVennCard into their own
   files under `/app/frontend/src/components/research/cards/`.
+
+
+## 2026-02-06 (iter 48) — cards.jsx Refactor ✅
+
+Split the 1706-line `/app/frontend/src/components/research/cards.jsx`
+mega-file into 10 focused files under `/app/frontend/src/components/research/cards/`
+with zero behavioural changes.
+
+| File | Lines | Purpose |
+|---|---|---|
+| `index.jsx` | 11 | Re-exports for existing imports (`./cards`) |
+| `_helpers.jsx` | 138 | `trigger`, CSV/XLSX/JSON downloaders, SVG→SVG & SVG→PNG exporters, `ChartDownloadBar` |
+| `PlanCard.jsx` | 84 | Execution plan renderer with retry-per-step |
+| `TableCard.jsx` | 112 | Generic sortable table + CSV/Excel/JSON toolbar |
+| `NetworkCard.jsx` | 95 | Memoised Cytoscape compound→target graph |
+| `CTPNetworkCard.jsx` | 358 | CTP master graph w/ Top-N sliders + neighborhood isolation |
+| `DockingCard.jsx` | 196 | Docking results table + inline 3Dmol viewer |
+| `EnrichmentCard.jsx` | 350 | KEGG/GO enrichment + bubble/lollipop/sankey charts |
+| `IntersectionVennCard.jsx` | 131 | Predicted∩Disease Venn + intersection table |
+| `ResultCard.jsx` | 215 | Card router keyed off `result.card` |
+
+Public API (`PlanCard`, `ResultCard`, `NetworkCard`, `downloadSvgFile`,
+`downloadSvgAsPng`) is unchanged — existing importers
+(`ChatMessage.jsx`, `VizPanel.jsx`, `workspace/ProjectTab.jsx`) resolve
+`./cards` to the new `cards/index.jsx` folder module without a single
+import-line change.
+
+**Renamed** module-internal `_trigger` → exported `trigger` so per-card
+files can use it directly.
+
+**Verified end-to-end**: frontend compiles clean (only the pre-existing
+`ProjectTab` warning remains); re-opened the seeded docking project and
+confirmed `plan-card`, `target-table`, `admet-table`, `docking-card`
+render with all 3D-view + CSV export interactions still working;
+Cytoscape memoisation on `network-card` still prevents flicker.
+
+**Next Action Items**
+- P1: AI Report enrichment — bake docking + CTP + ADMET metrics into the
+  AI Scientific Report so it feels publication-ready.
+- P1: Wire ⌘K command palette to search open tabs and past projects.
+- P2: One-tap "Generate Report" button on the interpretation card once
+  docking finishes, so users close the loop without leaving the workspace.
