@@ -50,14 +50,18 @@ import { FeedbackProvider } from "@/components/feedback/FeedbackDialog";
 import { Toaster } from "sonner";
 
 function SiteChrome({ children }) {
-  // Hide user SiteHeader/Footer on admin routes — admin has its own chrome.
-  const { pathname } = useLocation();
+  // Hide user SiteHeader/Footer on admin routes and when embedded in an
+  // iframe (via ?embed=1). /app itself also renders its own tabbar, so we
+  // don't want the outer SiteHeader stacked twice.
+  const { pathname, search } = useLocation();
   const isAdmin = pathname.startsWith("/admin");
+  const embedded = new URLSearchParams(search).get("embed") === "1";
+  const hideChrome = isAdmin || embedded;
   return (
     <>
-      {!isAdmin && <SiteHeader />}
+      {!hideChrome && <SiteHeader />}
       {children}
-      {!isAdmin && <SiteFooter />}
+      {!hideChrome && <SiteFooter />}
     </>
   );
 }

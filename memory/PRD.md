@@ -1235,3 +1235,83 @@ orchestrator + `components/research/*.jsx`:
   React.lazy()-code-split (cards.jsx is still 533 L).
 - P2 — AI Research Assistant Phase 2 (PDF export · saved-project filters ·
   multi-agent · scheduling).
+
+## 2026-02-06 (evening) — Tabbed /app Workspace ✅
+
+Major UX overhaul: introduced a browser-tab-style shell at `/app` that becomes
+the logged-in landing surface after the marketing homepage's "Start Free
+Analysis" CTA. Home page itself is untouched.
+
+**New route `/app`** (guarded by auth — guest is bounced to `/` + login modal)
+- Header tabbar with a permanent **Home** tab (non-closable) plus dynamic
+  project / module tabs. Up to 12 tabs, horizontal scroll beyond.
+- Tabs stay MOUNTED (`display:none` when inactive) so chat state, scroll
+  positions, and iframe navigation are preserved when switching.
+
+**Home tab**
+- 75%-width main area: hero chat bar (`home-chat-input` + `home-chat-send`),
+  4 suggested prompts, Recent Projects grid (rich cards with title, preview,
+  message count, updated_at).
+- 25%-width right column: 9 standalone module cards (PhytoNet AI, Plant DB,
+  Compound→Target, Disease Targets, ADMET, Docking, MD, Report, Databases).
+  Clicking a module opens it as a new tab.
+
+**Project tab (split-pane workspace)**
+- LEFT pane: chat messages, plan cards, composer, suggested next steps,
+  retry-step buttons. `ChatMessage` gets a `hideResults` prop so results no
+  longer render inline.
+- RIGHT pane: aggregated `ResultCard` outputs across every run (tables,
+  network Cytoscape, images), plus latest interpretation.
+- **Draggable divider** via new `SplitPane` component. Ratio bounded to
+  [0.22 – 0.78] and persisted per-tab.
+
+**Module tab**
+- Loads the standalone page (`/plant-database`, `/admet`, `/molecular-docking`,
+  etc.) inside an `<iframe>` with a small toolbar showing the path + an
+  "Open standalone" out-link.
+- Iframe source has `?embed=1` appended; `SiteChrome` now hides the outer
+  `SiteHeader` + `SiteFooter` when `embed=1` is present, so users no longer
+  see stacked headers.
+
+**Persistence** (via `useTabState`, keyed on `user.id`)
+- Open tabs list · active tab id · panel-size ratio per tab · scroll positions
+  (left / right) per tab. All serialized to `localStorage` key
+  `phytonet.app.tabs.v1.<userId>`.
+
+**Homepage CTA rewiring** (`Home.jsx`)
+- Three "Start Free Analysis" buttons (`hero-primary-cta`, `why-choose-cta`,
+  `final-cta-start`) converted from `<Link to="/phytonet-ai">` to buttons
+  that call `guard(() => navigate("/app"))`. Guest → auth modal; authed →
+  direct navigate.
+- Design/placement of the buttons is unchanged.
+
+**Files added**
+- `frontend/src/pages/AppWorkspace.jsx`  (main orchestrator)
+- `frontend/src/hooks/useTabState.js`
+- `frontend/src/components/workspace/TabBar.jsx`
+- `frontend/src/components/workspace/HomeTab.jsx`
+- `frontend/src/components/workspace/ProjectTab.jsx`
+- `frontend/src/components/workspace/ModuleTab.jsx`
+- `frontend/src/components/workspace/SplitPane.jsx`
+
+**Files edited**
+- `frontend/src/App.js` (added `/app` + `/workspace` routes; SiteChrome
+  respects `?embed=1`)
+- `frontend/src/pages/Home.jsx` (Start Free Analysis CTAs)
+- `frontend/src/components/research/ChatMessage.jsx` (`hideResults` prop)
+
+**Regression-safe**
+- `/research`, `/research/shared/:slug`, `/dashboard`, `/phytonet-ai`, and all
+  standalone modules unchanged. Backend untouched.
+
+**Verified end-to-end** (iteration_44)
+- 30/30 frontend checks pass (guest→login redirect, Home layout, project tab
+  split pane, drag + persistence, module iframe + tab-switching state
+  preservation, close-tab rules, multi-tab reload persistence, regression).
+
+**Next Action Items**
+- Optional: fix invalid `<span>` inside `<option>` in SiteChrome (minor
+  console warning).
+- P1 — AI Report enrichment with real ADMET + docking numbers.
+- P2 — Extract `NetworkCard.jsx` into its own file for React.lazy split.
+- P2 — Phase 2 assistant (PDF export, filters, scheduling).

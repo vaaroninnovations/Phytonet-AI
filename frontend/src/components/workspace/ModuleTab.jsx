@@ -31,7 +31,7 @@ export function ModuleTab({ path, title, visible }) {
       </div>
       <iframe
         ref={iframeRef}
-        src={path}
+        src={`${path}${path.includes("?") ? "&" : "?"}embed=1`}
         title={title}
         onLoad={() => setLoading(false)}
         data-testid="module-iframe"
