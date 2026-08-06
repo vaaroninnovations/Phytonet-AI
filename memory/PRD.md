@@ -1468,3 +1468,46 @@ Playwright snapshot confirmed the LIVE pill + text growth + caret animation.
 - Plan streaming (harder — planner output is strict JSON, would need
   natural-language rationale prefix).
 - Server-Sent-Events channel to eliminate polling entirely (nice-to-have).
+
+## 2026-02-06 (deepest night) — Flicker: Real Root Causes ✅
+
+The prior polling-signature + memo fixes reduced re-renders but did NOT
+eliminate the flicker. User reported it still occurred (a) after a compound
+prompt executes in a new project and (b) while scrolling in old projects.
+
+Three real culprits identified via a MutationObserver instrumented on the
+whole `/app` workspace:
+
+1. **Scroll → React re-render cascade**. `onScroll` fired
+   `setScrollPos` on the parent `useTabState` on every wheel tick. That
+   invalidated `state` → `AppWorkspace` re-rendered → every ProjectTab
+   received new prop refs → Cytoscape canvas repainted. During even a
+   short scroll, dozens of full-tree renders fired.
+   FIX — Scroll persistence rewired to a component-local ref +
+   direct `localStorage` write (debounced 500 ms). Zero React state is
+   touched during scroll, so zero re-renders.
+
+2. **Scrollbar-width jitter during interpretation streaming**. As
+   interpretation text grew past the viewport, the automatic overflow
+   scrollbar appeared, shifting the pane's effective width by ~15 px.
+   Cytoscape's ResizeObserver picked it up and re-fit the graph — every
+   time. Same on the left pane when messages grew.
+   FIX — Both panes now use `overflow-y-scroll` + `scrollbar-gutter:
+   stable` so a scrollbar column is always reserved.
+
+3. **Cytoscape ambient repaints**. Added `textureOnViewport: true`,
+   `motionBlur: false`, `pixelRatio: 1`, `autoungrabify: true`,
+   `hideEdgesOnViewport: false` to freeze the graph unless the underlying
+   node/edge set actually changes.
+
+Verified with the same MutationObserver harness:
+- 3 s of continuous scrolling: **0 DOM mutations** (was ~100+).
+- 5 s of idle on a project with a network: **0 DOM mutations** (was 59).
+
+**Files touched**
+- `frontend/src/pages/AppWorkspace.jsx`   (dropped `savedScroll`/
+  `onScrollChange` props to ProjectTab)
+- `frontend/src/components/workspace/ProjectTab.jsx` (scroll persistence
+  via ref + localStorage; `scrollbar-gutter: stable` on both panes)
+- `frontend/src/components/research/cards.jsx` (cytoscape init options
+  tightened; NetworkCard still memoised from prior iteration)

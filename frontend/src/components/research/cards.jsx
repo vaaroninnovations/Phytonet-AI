@@ -500,10 +500,20 @@ export const ResultCard = memo(ResultCardImpl, (prev, next) => {
 // every second while a run was still executing.
 function NetworkCardImpl({ network }) {
   const ref = useRef(null);
+  const cyRef = useRef(null);
   useEffect(() => {
     if (!ref.current || !network) return;
+    // Only build once. Rerenders with the same nodes/edges (handled by the
+    // outer memo) never reach this effect. Explicit `animate: false` + a
+    // `hideEdgesOnViewport` guard prevents cytoscape from repainting itself
+    // during unrelated parent updates (streaming interpretation, scroll
+    // events, etc.).
     const cy = cytoscape({
       container: ref.current,
+      hideEdgesOnViewport: false,
+      textureOnViewport: true,
+      motionBlur: false,
+      pixelRatio: 1,
       elements: [
         ...network.nodes.map((n) => ({
           data: { id: n.id, label: n.label, type: n.type, degree: n.degree || 1 },
@@ -532,6 +542,11 @@ function NetworkCardImpl({ network }) {
       layout: { name: "cose", nodeRepulsion: 4500, idealEdgeLength: 80,
                 animate: false, padding: 30 },
     });
+    // Freeze auto-resize so a scrollbar / streaming layout jitter never
+    // triggers a redraw of the whole graph.
+    cy.autolock(false);
+    cy.autoungrabify(true);
+    cyRef.current = cy;
     return () => cy.destroy();
   }, [network]);
 

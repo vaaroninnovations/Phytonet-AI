@@ -16,8 +16,7 @@ import { ResultCard } from "@/components/research/cards";
 import { ProjectHeader } from "@/components/research/ProjectHeader";
 
 export function ProjectTab({ tabId, projectId, initialPrompt, panelRatio,
-                              onPanelRatioChange, savedScroll, onScrollChange,
-                              onTitleChange }) {
+                              onPanelRatioChange, onTitleChange }) {
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -175,19 +174,42 @@ export function ProjectTab({ tabId, projectId, initialPrompt, panelRatio,
     }
   }, [initialPrompt, project, send]);
 
-  // ─── Persist scroll positions ────────────────────────────────────
+  // ─── Scroll persistence (ref + localStorage, NOT React state) ────
+  // Keeping scroll state out of the parent avoids per-scroll re-renders
+  // — the sole reason the workspace flickered while the user scrolled.
+  const SCROLL_KEY = `phytonet.app.scroll.${tabId}`;
+  const scrollRestoredRef = useRef(false);
   useEffect(() => {
-    if (!leftScrollRef.current || savedScroll?.left == null) return;
-    leftScrollRef.current.scrollTop = savedScroll.left;
-  }, [projectId, savedScroll?.left, loading]);
-
+    scrollRestoredRef.current = false;
+  }, [projectId]);
   useEffect(() => {
-    if (!rightScrollRef.current || savedScroll?.right == null) return;
-    rightScrollRef.current.scrollTop = savedScroll.right;
-  }, [projectId, savedScroll?.right, loading]);
+    if (loading || !project || scrollRestoredRef.current) return;
+    scrollRestoredRef.current = true;
+    try {
+      const saved = JSON.parse(localStorage.getItem(SCROLL_KEY) || "{}");
+      if (leftScrollRef.current && saved.left != null)
+        leftScrollRef.current.scrollTop = saved.left;
+      if (rightScrollRef.current && saved.right != null)
+        rightScrollRef.current.scrollTop = saved.right;
+    } catch { /* corrupt entry → ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, loading, project]);
 
-  const onLeftScroll = (e) => onScrollChange && onScrollChange("left",  e.target.scrollTop);
-  const onRightScroll = (e) => onScrollChange && onScrollChange("right", e.target.scrollTop);
+  const pendingScrollSaveRef = useRef(null);
+  const saveScroll = () => {
+    if (pendingScrollSaveRef.current) return;   // already scheduled
+    pendingScrollSaveRef.current = setTimeout(() => {
+      pendingScrollSaveRef.current = null;
+      try {
+        localStorage.setItem(SCROLL_KEY, JSON.stringify({
+          left:  leftScrollRef.current?.scrollTop  ?? 0,
+          right: rightScrollRef.current?.scrollTop ?? 0,
+        }));
+      } catch { /* quota / private mode */ }
+    }, 500);
+  };
+  const onLeftScroll  = () => saveScroll();
+  const onRightScroll = () => saveScroll();
 
   // ─── Aggregate all results across every run for the right pane ────
   const allResults = useMemo(() => {
@@ -232,7 +254,8 @@ export function ProjectTab({ tabId, projectId, initialPrompt, panelRatio,
             <>
               <div ref={leftScrollRef} onScroll={onLeftScroll}
                    data-testid="project-tab-left"
-                   className="flex-1 overflow-y-auto">
+                   style={{ scrollbarGutter: "stable" }}
+                   className="flex-1 overflow-y-scroll">
                 <div className="mx-auto max-w-3xl px-5 py-5 space-y-5">
                   {messages.length === 0 && !sending && (
                     <div className="rounded-2xl border border-white/10 bg-white/5 p-5 text-center backdrop-blur-sm">
@@ -279,7 +302,8 @@ export function ProjectTab({ tabId, projectId, initialPrompt, panelRatio,
           right={
             <div ref={rightScrollRef} onScroll={onRightScroll}
                  data-testid="project-tab-right"
-                 className="flex-1 overflow-y-auto bg-black/20">
+                 style={{ scrollbarGutter: "stable" }}
+                 className="flex-1 overflow-y-scroll bg-black/20">
               <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-white/10 bg-black/60 backdrop-blur-xl px-4 py-2.5">
                 <FileBarChart size={14} className="text-[#a48bff]" />
                 <div className="text-[11px] font-bold uppercase tracking-widest text-slate-300">Results</div>

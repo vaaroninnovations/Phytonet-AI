@@ -109,8 +109,6 @@ export default function AppWorkspace() {
                   initialPrompt={t.initialPrompt}
                   panelRatio={panelSizes[t.id]}
                   onPanelRatioChange={(r) => setPanelSize(t.id, r)}
-                  savedScroll={scrollPos[t.id]}
-                  onScrollChange={(key, pos) => setScrollPos(t.id, key, pos)}
                   onTitleChange={(_) => { /* keep tab title stable */ }}
                 />
               </div>
