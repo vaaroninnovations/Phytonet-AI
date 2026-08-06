@@ -92,18 +92,30 @@ export function ProjectTab({ tabId, projectId, initialPrompt, panelRatio,
 
   const startPolling = (pid, runId) => {
     if (pollRef.current) clearInterval(pollRef.current);
+    // Signature of the last-seen status so we can skip setState when nothing
+    // changed (a plain polling tick shouldn't cause a full re-render + all
+    // downstream Cytoscape/table remounts).
+    let lastSig = "";
     pollRef.current = setInterval(async () => {
       try {
         const { data: status } = await authApi.get(
           `/research/projects/${pid}/status/${runId}`,
         );
-        setProject((cur) => {
-          if (!cur) return cur;
-          const runs = (cur.runs || []).map((r) =>
-            r.id === runId ? { ...r, ...status } : r,
-          );
-          return { ...cur, runs };
+        const sig = JSON.stringify({
+          s: status.status,
+          p: (status.plan || []).map((x) => [x.id, x.status, x.progress?.detail || null]),
+          r: (status.results || []).map((x) => [x.id, x.status]),
         });
+        if (sig !== lastSig) {
+          lastSig = sig;
+          setProject((cur) => {
+            if (!cur) return cur;
+            const runs = (cur.runs || []).map((r) =>
+              r.id === runId ? { ...r, ...status } : r,
+            );
+            return { ...cur, runs };
+          });
+        }
         if (["completed", "failed"].includes(status.status)) {
           clearInterval(pollRef.current);
           pollRef.current = null;

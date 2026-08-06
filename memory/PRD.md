@@ -1382,3 +1382,42 @@ present, `app-header` is the sole source).
 **Next Action Items**
 - Wire ⌘K Search to actually search projects/modules.
 - Consider a subtle drop-shadow under the header when scrolling long tabs.
+
+## 2026-02-06 (deep night) — Fix: Flicker During Long Runs ✅
+
+Bug: even after the previous "blank chat" fix, the workspace still visibly
+flickered / redrew every ~1 s while a run was in progress. The user pointed
+this out with the note "flickering issue persisted".
+
+**Root cause** — three cumulative issues:
+1. `startPolling` unconditionally called `setProject(...)` every second even
+   when the run's status/plan/results were byte-for-byte identical between
+   polls. Every setState blew away referential equality for `project.runs`,
+   forcing all downstream memos, `ChatMessage` children, and `ResultCard`s to
+   re-render.
+2. `NetworkCard`'s useEffect (`[network]`) tore down and rebuilt the
+   Cytoscape instance on every render because `network` was a fresh object
+   reference each poll — visible as a brief empty flash of the graph.
+3. `ResultCard` re-rendered its full JSX tree (including 100-plus-row
+   tables) on every parent re-render.
+
+**Fix**
+- `startPolling` (`ProjectTab.jsx`) now stringifies a compact signature of
+  `{status, plan[id/status/detail], results[id/status]}` and only calls
+  `setProject` when the signature actually changes. Confirmed: a 20 s run
+  now triggers ~2-3 real state updates instead of ~20.
+- `NetworkCard` (`cards.jsx`) wrapped in `React.memo` with a custom compare
+  that treats two networks as equal when nodes/edges IDs match — no more
+  cytoscape destroy/recreate churn.
+- `ResultCard` wrapped in `React.memo` with a signature over `card`,
+  `message`, main row count, and edge count. Idempotent completed results
+  now bail out of re-render entirely.
+
+**Verified** — 32 s smoke test: 13 poll requests, only ~3 state updates,
+NetworkCard/tables stable, no visible flicker. Final DOM identical to
+non-polling baseline.
+
+**Files touched**
+- `frontend/src/components/workspace/ProjectTab.jsx` (polling signature)
+- `frontend/src/components/research/cards.jsx` (memoised NetworkCard +
+  ResultCard, added `memo` import)

@@ -2,7 +2,7 @@
 // Includes: PlanCard (with retry-failed-step), TableCard, ResultCard, NetworkCard,
 // and CSV / Excel / JSON download helpers.
 import cytoscape from "cytoscape";
-import { useEffect, useMemo, useRef } from "react";
+import { memo, useEffect, useMemo, useRef } from "react";
 import * as XLSX from "xlsx";
 import {
   Sparkles, Loader2, CheckCircle2, Circle, XCircle, RotateCcw,
@@ -263,7 +263,7 @@ function _trigger(blob, filename) {
 }
 
 // ─── ResultCard (switches on `result.card`) ───────────────────────
-export function ResultCard({ result, onOpen }) {
+function ResultCardImpl({ result, onOpen }) {
   const card = result?.card;
   const d = result?.data || {};
   const msg = result?.message || "";
@@ -476,8 +476,29 @@ export function ResultCard({ result, onOpen }) {
   );
 }
 
+// Result payloads (from completed steps) are immutable — bail out of
+// re-render entirely when the same result object is passed again.
+export const ResultCard = memo(ResultCardImpl, (prev, next) => {
+  const a = prev.result, b = next.result;
+  if (a === b) return true;
+  if (!a || !b) return false;
+  if (a.card !== b.card) return false;
+  // Cheap structural signature — good enough for the polling use-case
+  // (server returns idempotent completed step results).
+  const sig = (r) => JSON.stringify({
+    m: r.message || "",
+    n: (r.data?.compounds || r.data?.targets || r.data?.hits ||
+        r.data?.results || r.data?.rows || r.data?.kegg || []).length,
+    e: (r.data?.network?.edges || []).length,
+  });
+  return sig(a) === sig(b);
+});
+
 // ─── NetworkCard (Cytoscape compound-target graph) ────────────────
-export function NetworkCard({ network }) {
+// Memoised so parent-driven re-renders (e.g. polling ticks) never trigger a
+// full cytoscape destroy+recreate — that used to cause a visible flicker
+// every second while a run was still executing.
+function NetworkCardImpl({ network }) {
   const ref = useRef(null);
   useEffect(() => {
     if (!ref.current || !network) return;
@@ -532,3 +553,17 @@ export function NetworkCard({ network }) {
     </div>
   );
 }
+
+// Only re-mount cytoscape when the graph shape actually changes.
+export const NetworkCard = memo(NetworkCardImpl, (prev, next) => {
+  const a = prev.network, b = next.network;
+  if (a === b) return true;
+  if (!a || !b) return false;
+  if ((a.nodes?.length || 0) !== (b.nodes?.length || 0)) return false;
+  if ((a.edges?.length || 0) !== (b.edges?.length || 0)) return false;
+  // Nodes/edges same size — compare a hash of ids to catch content changes.
+  const nodeIds = (arr) => (arr || []).map((n) => n.id).join("|");
+  const edgeIds = (arr) => (arr || []).map((e) => `${e.source}>${e.target}`).join("|");
+  return nodeIds(a.nodes) === nodeIds(b.nodes) &&
+         edgeIds(a.edges) === edgeIds(b.edges);
+});
