@@ -367,6 +367,154 @@ async def tool_disease_targets(disease_id: str, limit: int = 30,
             "data": {"disease_id": disease_id, "targets": targets[:limit]}}
 
 
+async def tool_ctp_network(progress=_noop_progress, prior_results=None,
+                            project_context=None, **_) -> dict:
+    """Build a Compound → Target → Pathway network from prior target_predict
+    + pathway_enrichment steps, compute centrality metrics, and emit
+    Cytoscape-compatible node / edge / GraphML / JSON downloads."""
+    import io, csv, networkx as nx
+
+    def _last_result(tool):
+        for pool in (prior_results or [], project_context or []):
+            for step in reversed(pool):
+                if step.get("status") == "done" and step.get("tool") == tool:
+                    return (step.get("result") or {}).get("data") or {}
+        return None
+
+    tp = _last_result("target_predict")
+    pe = _last_result("pathway_enrichment")
+    if not tp or not (tp.get("targets") or []):
+        return {"status": "error",
+                "message": "CTP network requires a prior target_predict step. "
+                           "Run target prediction first."}
+    if not pe or not ((pe.get("kegg") or []) or (pe.get("go") or [])):
+        return {"status": "error",
+                "message": "CTP network requires a prior pathway_enrichment "
+                           "step. Run enrichment first."}
+
+    await progress("querying", "Reading Compound-Target and Target-Pathway datasets…")
+    # Compound-Target edges
+    ct_edges = []
+    compounds, targets = set(), set()
+    for t in (tp.get("targets") or []):
+        c   = (t.get("compound_name") or t.get("query_compound") or "").strip()
+        gene = (t.get("gene") or t.get("gene_symbol") or t.get("symbol") or "").strip().upper()
+        if not c or not gene: continue
+        compounds.add(c); targets.add(gene)
+        ct_edges.append((c, gene, "targets"))
+
+    # Target-Pathway edges — use overlap_genes on each enrichment term
+    tp_edges = []
+    pathways = set()
+    for pw in ((pe.get("kegg") or []) + (pe.get("go") or [])):
+        pname = (pw.get("term_name") or pw.get("name") or pw.get("term") or "").strip()
+        if not pname: continue
+        overlaps = pw.get("overlap_genes") or []
+        for g in overlaps:
+            g = (g or "").strip().upper()
+            if not g: continue
+            pathways.add(pname)
+            tp_edges.append((g, pname, "involved_in"))
+
+    # De-duplicate
+    ct_edges = list({e for e in ct_edges})
+    tp_edges = list({e for e in tp_edges})
+    if not ct_edges and not tp_edges:
+        return {"status": "error", "message": "No valid CTP edges — check upstream results."}
+
+    await progress("building",
+                   f"Building CTP graph ({len(compounds)} compounds · "
+                   f"{len(targets)} targets · {len(pathways)} pathways)…")
+
+    G = nx.Graph()
+    for c in compounds: G.add_node(c, type="Compound", label=c)
+    for t in targets:   G.add_node(t, type="Target",   label=t)
+    for p in pathways:  G.add_node(p, type="Pathway",  label=p)
+    for s, t, i in ct_edges:
+        if s not in G: G.add_node(s, type="Compound", label=s)
+        if t not in G: G.add_node(t, type="Target",   label=t)
+        G.add_edge(s, t, interaction=i)
+    for s, t, i in tp_edges:
+        if s not in G: G.add_node(s, type="Target",  label=s)
+        if t not in G: G.add_node(t, type="Pathway", label=t)
+        G.add_edge(s, t, interaction=i)
+
+    await progress("intersecting", "Computing centrality metrics…")
+    deg  = dict(G.degree())
+    dc   = nx.degree_centrality(G)
+    bc   = nx.betweenness_centrality(G) if len(G) < 1500 else {n: None for n in G}
+    cc   = nx.closeness_centrality(G)
+
+    nodes = [{"id": n, "label": n, "type": G.nodes[n]["type"],
+              "degree": deg.get(n, 0),
+              "degree_centrality":      round(dc.get(n, 0), 4),
+              "betweenness_centrality": (round(bc[n], 4) if bc.get(n) is not None else None),
+              "closeness_centrality":   round(cc.get(n, 0), 4)}
+             for n in G.nodes]
+    edges = [{"source": s, "target": t,
+              "interaction": G.edges[s, t].get("interaction", "")}
+             for s, t in G.edges]
+
+    # ── Cytoscape-compatible export payloads ────────────────────────
+    def _csv(fields, rows):
+        buf = io.StringIO()
+        w = csv.DictWriter(buf, fieldnames=fields)
+        w.writeheader()
+        for r in rows:
+            w.writerow({k: r.get(k) for k in fields})
+        return buf.getvalue()
+
+    nodes_csv = _csv(["id", "label", "type", "degree",
+                       "degree_centrality", "betweenness_centrality",
+                       "closeness_centrality"], nodes)
+    edges_csv = _csv(["source", "target", "interaction"], edges)
+
+    # GraphML
+    graphml_buf = io.BytesIO()
+    nx.write_graphml(G, graphml_buf)
+    graphml = graphml_buf.getvalue().decode("utf-8")
+
+    # Cytoscape JSON
+    cy_json = {
+        "nodes": [{"data": {"id": n["id"], "label": n["label"],
+                             "type": n["type"], "degree": n["degree"]}}
+                  for n in nodes],
+        "edges": [{"data": {"id": f"e{i}", "source": e["source"],
+                             "target": e["target"],
+                             "interaction": e["interaction"]}}
+                  for i, e in enumerate(edges)],
+    }
+
+    metrics = {
+        "n_compounds": len(compounds),
+        "n_targets":   len(targets),
+        "n_pathways":  len(pathways),
+        "n_nodes":     G.number_of_nodes(),
+        "n_edges":     G.number_of_edges(),
+        "top_by_degree": sorted(
+            [{"id": n, "type": G.nodes[n]["type"], "degree": deg[n]}
+             for n in G.nodes],
+            key=lambda x: -x["degree"])[:10],
+    }
+    return {"status": "ok",
+            "card": "ctp_network",
+            "message": (f"CTP network built: {metrics['n_compounds']} compounds "
+                        f"· {metrics['n_targets']} targets "
+                        f"· {metrics['n_pathways']} pathways "
+                        f"· {metrics['n_nodes']} nodes / {metrics['n_edges']} edges."),
+            "data": {
+                "metrics":  metrics,
+                "nodes":    nodes,
+                "edges":    edges,
+                "exports":  {
+                    "ctp_nodes.csv":    nodes_csv,
+                    "ctp_edges.csv":    edges_csv,
+                    "ctp_network.graphml": graphml,
+                    "ctp_network.json": json.dumps(cy_json, indent=2),
+                },
+            }}
+
+
 async def tool_admet_predict(smiles: list[str] | str | None = None,
                               compounds: list[dict] | None = None,
                               progress=_noop_progress,
@@ -499,6 +647,14 @@ TOOL_REGISTRY: dict[str, dict[str, Any]] = {
                                     "Chains from a prior target_predict / "
                                     "target_resolve step. Args: {genes?: "
                                     "list[str], library?: str}."},
+    "ctp_network":     {"fn": tool_ctp_network,
+                         "desc": "Build a Compound → Target → Pathway network "
+                                 "from the prior target_predict + "
+                                 "pathway_enrichment steps. Computes degree, "
+                                 "centrality metrics, and emits Cytoscape-"
+                                 "compatible node / edge / GraphML / JSON "
+                                 "downloads. Auto-triggered after any successful "
+                                 "pathway_enrichment. No args."},
     "disease_targets":  {"fn": tool_disease_targets,
                          "desc": "Get disease-associated gene panel. When a "
                                  "prior target_predict step exists, pass "
@@ -730,6 +886,20 @@ async def plan(prompt: str, history: list[dict], project_id: str,
             "status": "pending",
         })
     parsed["plan"] = steps
+    # Auto-append a ctp_network step whenever the plan already runs both
+    # target_predict and pathway_enrichment — the CTP graph is the natural
+    # final artefact of that pipeline and the user never needs to ask for it.
+    tools_in_plan = {s["tool"] for s in steps}
+    if ({"target_predict", "pathway_enrichment"} <= tools_in_plan
+            and "ctp_network" not in tools_in_plan):
+        steps.append({
+            "id":    f"step_{len(steps)+1}",
+            "tool":  "ctp_network",
+            "label": "Build Compound → Target → Pathway network",
+            "args":  {},
+            "status": "pending",
+        })
+        parsed["plan"] = steps
     return parsed
 
 
@@ -933,6 +1103,10 @@ async def execute_step(step: dict,
     # sub-status is persisted for the frontend poller to display.
     if progress is not None:
         args["progress"] = progress
+    # ctp_network needs raw upstream results — supply them explicitly.
+    if tool_name == "ctp_network":
+        args["prior_results"]   = prior_results   or []
+        args["project_context"] = project_context or []
 
     try:
         return await fn(**args)

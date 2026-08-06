@@ -424,6 +424,9 @@ function ResultCardImpl({ result, onOpen }) {
   if (card === "intersection_venn") {
     return <IntersectionVennCard data={d} message={msg} />;
   }
+  if (card === "ctp_network") {
+    return <CTPNetworkCard data={d} message={msg} />;
+  }
   if (card === "compound_details" || card === "target_details") {
     return <div data-testid={card}
                 className="mt-2 rounded-2xl border border-white/10 bg-black/30 p-4 text-[13px] backdrop-blur-sm">
@@ -456,14 +459,171 @@ export const ResultCard = memo(ResultCardImpl, (prev, next) => {
     m: r.message || "",
     n: (r.data?.compounds || r.data?.targets || r.data?.hits ||
         r.data?.results || r.data?.rows || r.data?.kegg ||
-        r.data?.common || []).length,
-    e: (r.data?.network?.edges || []).length,
+        r.data?.common || r.data?.nodes || []).length,
+    e: (r.data?.network?.edges || r.data?.edges || []).length,
     c: (r.data?.common || []).length,
   });
   return sig(a) === sig(b);
 });
 
-// ─── EnrichmentCard (KEGG + GO / Reactome with full workflow parity) ─
+// ─── CTPNetworkCard — Compound → Target → Pathway master graph ───
+function CTPNetworkCard({ data, message }) {
+  const ref = useRef(null);
+  const cyRef = useRef(null);
+  const nodes = data?.nodes || [];
+  const edges = data?.edges || [];
+  const metrics = data?.metrics || {};
+  const exports = data?.exports || {};
+
+  useEffect(() => {
+    if (!ref.current || !nodes.length) return;
+    const cy = cytoscape({
+      container: ref.current,
+      elements: [
+        ...nodes.map((n) => ({ data: {
+          id: n.id, label: n.label, type: n.type, degree: n.degree,
+        }})),
+        ...edges.map((e, i) => ({ data: {
+          id: `e${i}`, source: e.source, target: e.target,
+          interaction: e.interaction,
+        }})),
+      ],
+      style: [
+        { selector: "node[type='Compound']", style: {
+            "background-color": "#5139ED", "label": "data(label)",
+            "color": "#e0e0ff", "font-size": 10,
+            "text-outline-color": "#0B0B18", "text-outline-width": 2,
+            "width":  (n) => 18 + Math.min(24, (n.data("degree") || 1) * 2),
+            "height": (n) => 18 + Math.min(24, (n.data("degree") || 1) * 2) } },
+        { selector: "node[type='Target']", style: {
+            "background-color": "#2BB673", "label": "data(label)",
+            "color": "#d0ffd0", "font-size": 9,
+            "text-outline-color": "#0B0B18", "text-outline-width": 2,
+            "width":  (n) => 14 + Math.min(18, (n.data("degree") || 1) * 2),
+            "height": (n) => 14 + Math.min(18, (n.data("degree") || 1) * 2) } },
+        { selector: "node[type='Pathway']", style: {
+            "background-color": "#F5B301", "shape": "diamond",
+            "label": "data(label)", "color": "#fef3c7", "font-size": 9,
+            "text-outline-color": "#0B0B18", "text-outline-width": 2,
+            "width":  (n) => 14 + Math.min(18, (n.data("degree") || 1) * 2),
+            "height": (n) => 14 + Math.min(18, (n.data("degree") || 1) * 2) } },
+        { selector: "edge", style: {
+            "width": 1, "line-color": "#8139ED", "line-opacity": 0.32,
+            "curve-style": "bezier", "target-arrow-shape": "none" } },
+        { selector: "edge[interaction='involved_in']", style: {
+            "line-color": "#F5B301", "line-opacity": 0.28 } },
+      ],
+      layout: { name: "cose", nodeRepulsion: 4200, idealEdgeLength: 60,
+                animate: false, padding: 40 },
+      textureOnViewport: true, motionBlur: false, pixelRatio: 1,
+    });
+    cy.autoungrabify(true);
+    cyRef.current = cy;
+    return () => cy.destroy();
+  }, [nodes, edges]);
+
+  const dl = (fname) => {
+    const txt = exports?.[fname]; if (!txt) return;
+    const isJson = fname.endsWith(".json");
+    _trigger(new Blob([txt], {
+      type: isJson ? "application/json"
+                   : fname.endsWith(".graphml") ? "application/xml"
+                   : "text/csv;charset=utf-8;",
+    }), fname);
+  };
+
+  return (
+    <div data-testid="ctp-network-card"
+         className="mt-2 rounded-2xl border border-white/10 bg-black/30 p-4 backdrop-blur-sm">
+      <div className="flex flex-wrap items-center gap-2 mb-1">
+        <div className="text-[15px] font-semibold text-slate-100">Compound → Target → Pathway Network</div>
+        <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-300">
+          {metrics.n_nodes} nodes · {metrics.n_edges} edges
+        </span>
+      </div>
+      <div className="text-[11.5px] text-slate-400 mb-3">{message}</div>
+
+      {/* Stat pills */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-3">
+        {[
+          { label: "Compounds", value: metrics.n_compounds, color: "text-[#a48bff]" },
+          { label: "Targets",   value: metrics.n_targets,   color: "text-emerald-300" },
+          { label: "Pathways",  value: metrics.n_pathways,  color: "text-amber-300" },
+          { label: "Nodes",     value: metrics.n_nodes,     color: "text-slate-100" },
+          { label: "Edges",     value: metrics.n_edges,     color: "text-slate-100" },
+        ].map((s) => (
+          <div key={s.label} className="rounded-lg border border-white/5 bg-black/25 px-3 py-2 text-center">
+            <div className={`text-[18px] font-bold ${s.color}`}>{s.value ?? "—"}</div>
+            <div className="text-[10.5px] uppercase tracking-widest text-slate-500">{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Legend + downloads */}
+      <div className="flex flex-wrap items-center gap-3 mb-2 text-[10.5px] text-slate-400">
+        <span><span className="inline-block h-2 w-2 rounded-full bg-[#5139ED] mr-1" />Compounds</span>
+        <span><span className="inline-block h-2 w-2 rounded-full bg-[#2BB673] mr-1" />Targets</span>
+        <span><span className="inline-block h-2 w-2 rotate-45 bg-[#F5B301] mr-1" />Pathways</span>
+        <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          <button data-testid="ctp-download-nodes-csv" onClick={() => dl("ctp_nodes.csv")}
+            className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[10.5px] font-semibold text-slate-200 hover:bg-white/10">
+            <FileText size={10} /> nodes.csv
+          </button>
+          <button data-testid="ctp-download-edges-csv" onClick={() => dl("ctp_edges.csv")}
+            className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[10.5px] font-semibold text-slate-200 hover:bg-white/10">
+            <FileText size={10} /> edges.csv
+          </button>
+          <button data-testid="ctp-download-graphml" onClick={() => dl("ctp_network.graphml")}
+            className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[10.5px] font-semibold text-slate-200 hover:bg-white/10">
+            <FileText size={10} /> GraphML
+          </button>
+          <button data-testid="ctp-download-json" onClick={() => dl("ctp_network.json")}
+            className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[10.5px] font-semibold text-slate-200 hover:bg-white/10">
+            <FileJson size={10} /> JSON
+          </button>
+          <button data-testid="ctp-download-png"
+            onClick={() => {
+              const cy = cyRef.current; if (!cy) return;
+              const url = cy.png({ bg: "#0B0B18", scale: 2, full: true });
+              const a = document.createElement("a");
+              a.href = url; a.download = "ctp_network.png"; a.click();
+            }}
+            className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[10.5px] font-semibold text-slate-200 hover:bg-white/10">
+            <FileText size={10} /> PNG
+          </button>
+        </div>
+      </div>
+
+      <div ref={ref} data-testid="ctp-network-canvas"
+           className="w-full h-[500px] rounded-lg border border-white/5 bg-black/40" />
+
+      {/* Top nodes by degree */}
+      {(metrics.top_by_degree || []).length > 0 && (
+        <div className="mt-3">
+          <div className="text-[10.5px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">
+            Top hubs by degree
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {metrics.top_by_degree.map((h, i) => {
+              const tint = h.type === "Compound" ? "text-[#a48bff] border-[#5139ED]/40 bg-[#5139ED]/10"
+                         : h.type === "Target"   ? "text-emerald-200 border-emerald-500/40 bg-emerald-500/10"
+                         : "text-amber-200 border-amber-500/40 bg-amber-500/10";
+              return (
+                <span key={i}
+                      data-testid={`ctp-hub-${i}`}
+                      className={`inline-flex items-center gap-1 rounded-full border ${tint} px-2 py-0.5 text-[11px] font-semibold`}>
+                  {h.id} <span className="text-slate-500 text-[10px]">·{h.degree}</span>
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 function EnrichmentCard({ data, message }) {
   const genesCount = (data?.genes || []).length;
   const keggAll = data?.kegg || [];
