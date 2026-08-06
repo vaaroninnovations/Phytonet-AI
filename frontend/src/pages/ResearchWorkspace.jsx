@@ -2,6 +2,7 @@
 // Left sidebar (projects) · Center (chat) · Right (viz panel).
 // The planner + executor live in the backend (research_service.py); this
 // component only orchestrates the UI.
+import cytoscape from "cytoscape";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { authApi } from "@/context/AuthContext";
 import * as XLSX from "xlsx";
@@ -10,6 +11,7 @@ import {
   Beaker, FlaskConical, Dna, Microscope, Atom, X, Download,
   Paperclip, MessageSquare, Bot, User, CheckCircle2, Circle, XCircle,
   ArrowRight, Menu, Search, FileSpreadsheet, FileText, FileJson,
+  Share2, Copy, Check,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -363,36 +365,42 @@ function ResultCard({ result, onOpen }) {
   }
   if (card === "target_table") {
     const rows = d.targets || [];
+    const network = d.network;
     const fmt = (v, n = 2) => (v === null || v === undefined || v === "") ? "—"
       : typeof v === "number" ? v.toFixed(n) : String(v);
-    return <TableCard testid="target-table" title="Predicted Targets" subtitle={msg}
-      rows={rows} downloadBase="targets" onOpen={onOpen}
-      columns={[
-        { key: "compound_name", label: "Compound",
-          tooltip: "Query compound (from prior step)",
-          render: (r) => r.compound_name || r.query_compound || "—" },
-        { key: "gene", label: "Gene",
-          tooltip: "Predicted target gene symbol (HGNC)",
-          render: (r) => r.gene || r.gene_symbol || r.symbol || "—" },
-        { key: "uniprot", label: "UniProt",
-          tooltip: "UniProt accession of the predicted protein target",
-          render: (r) => r.uniprot_id || r.uniprot || "—" },
-        { key: "target_name", label: "Target Name",
-          tooltip: "Full name of the predicted protein",
-          render: (r) => (r.target_name || r.pref_name || "").slice(0, 40) || "—" },
-        { key: "similarity", label: "Similarity",
-          tooltip: "Tanimoto similarity to the nearest known ChEMBL ligand (0-1)",
-          render: (r) => fmt(r.similarity, 2) },
-        { key: "pchembl", label: "pChEMBL",
-          tooltip: "-log10(activity in M) of the nearest ChEMBL bioactivity (higher = more potent)",
-          render: (r) => fmt(r.pchembl, 2) },
-        { key: "score", label: "Score",
-          tooltip: "Overall confidence score (0-1)",
-          render: (r) => fmt(r.score ?? r.overall_score, 3) },
-        { key: "source", label: "Source",
-          tooltip: "Evidence source (ChEMBL / SwissTargetPrediction / Open Targets)",
-          render: (r) => r.source || (r.sources || []).join(", ") || "—" },
-      ]} />;
+    return <>
+      <TableCard testid="target-table" title="Predicted Targets" subtitle={msg}
+        rows={rows} downloadBase="targets" onOpen={onOpen}
+        columns={[
+          { key: "compound_name", label: "Compound",
+            tooltip: "Query compound (from prior step)",
+            render: (r) => r.compound_name || r.query_compound || "—" },
+          { key: "gene", label: "Gene",
+            tooltip: "Predicted target gene symbol (HGNC)",
+            render: (r) => r.gene || r.gene_symbol || r.symbol || "—" },
+          { key: "uniprot", label: "UniProt",
+            tooltip: "UniProt accession of the predicted protein target",
+            render: (r) => r.uniprot_id || r.uniprot || "—" },
+          { key: "target_name", label: "Target Name",
+            tooltip: "Full name of the predicted protein",
+            render: (r) => (r.target_name || r.pref_name || "").slice(0, 40) || "—" },
+          { key: "similarity", label: "Similarity",
+            tooltip: "Tanimoto similarity to the nearest known ChEMBL ligand (0-1)",
+            render: (r) => fmt(r.similarity, 2) },
+          { key: "pchembl", label: "pChEMBL",
+            tooltip: "-log10(activity in M) of the nearest ChEMBL bioactivity (higher = more potent)",
+            render: (r) => fmt(r.pchembl, 2) },
+          { key: "score", label: "Score",
+            tooltip: "Overall confidence score (0-1)",
+            render: (r) => fmt(r.score ?? r.overall_score, 3) },
+          { key: "source", label: "Source",
+            tooltip: "Evidence source (ChEMBL / SwissTargetPrediction / Open Targets)",
+            render: (r) => r.source || (r.sources || []).join(", ") || "—" },
+        ]} />
+      {network && network.nodes && network.nodes.length > 0 && (
+        <NetworkCard network={network} />
+      )}
+    </>;
   }
   if (card === "disease_table") {
     const rows = d.hits || [];
@@ -491,6 +499,45 @@ function ResultCard({ result, onOpen }) {
           render: (r) => fmt(r.dili, 2) },
       ]} />;
   }
+  if (card === "enrichment_table") {
+    const kegg = (d.kegg || []).slice(0, 10);
+    const go   = (d.go   || []).slice(0, 10);
+    return <div data-testid="enrichment-card"
+                className="mt-2 rounded-2xl border border-white/10 bg-black/30 p-4 backdrop-blur-sm">
+      <div className="flex items-center gap-2">
+        <div className="text-[15px] font-semibold text-slate-100">Pathway Enrichment</div>
+        <span className="rounded-full bg-[#5139ED]/20 border border-[#5139ED]/40 px-2 py-0.5 text-[10.5px] font-semibold text-[#a48bff]">
+          {(d.genes || []).length} genes
+        </span>
+      </div>
+      <div className="mt-0.5 text-[11px] text-slate-400">{msg}</div>
+      <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+        {[
+          { title: "KEGG (Enrichr)", rows: kegg, testid: "enrichment-kegg" },
+          { title: "GO / Reactome (g:Profiler)", rows: go, testid: "enrichment-go" },
+        ].map((sec) => (
+          <div key={sec.title} data-testid={sec.testid} className="rounded-lg border border-white/5 bg-black/20 p-3">
+            <div className="text-[10.5px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">{sec.title}</div>
+            <ul className="space-y-1">
+              {sec.rows.map((t, i) => (
+                <li key={i} className="flex items-center justify-between gap-2 text-[12px]">
+                  <span className="truncate text-slate-200" title={t.term_name || t.name || t.term || ""}>
+                    {t.term_name || t.name || t.term || "—"}
+                  </span>
+                  <span className="text-[10.5px] font-mono text-emerald-300">
+                    p={((t.adjusted_p_value ?? t.adj_p_value ?? t.p_value ?? t.p_adj ?? t.pvalue) || 0).toExponential(1)}
+                  </span>
+                </li>
+              ))}
+              {sec.rows.length === 0 && (
+                <li className="text-[11px] text-slate-500 italic">No enriched terms.</li>
+              )}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </div>;
+  }
   if (card === "compound_details" || card === "target_details") {
     return <div data-testid={card}
                 className="mt-2 rounded-2xl border border-white/10 bg-black/30 p-4 text-[13px] backdrop-blur-sm">
@@ -513,6 +560,61 @@ function ResultCard({ result, onOpen }) {
 // ═════════════════════════════════════════════════════════════════
 // CHAT MESSAGE
 // ═════════════════════════════════════════════════════════════════
+function NetworkCard({ network }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!ref.current || !network) return;
+    const cy = cytoscape({
+      container: ref.current,
+      elements: [
+        ...network.nodes.map((n) => ({
+          data: { id: n.id, label: n.label, type: n.type, degree: n.degree || 1 },
+        })),
+        ...network.edges.map((e, i) => ({
+          data: { id: `e${i}`, source: e.source, target: e.target,
+                  score: e.score || 0.5 },
+        })),
+      ],
+      style: [
+        { selector: "node[type='compound']", style: {
+            "background-color": "#5139ED", "label": "data(label)",
+            "color": "#e0e0ff", "font-size": 10, "text-outline-color": "#0B0B18",
+            "text-outline-width": 2, "width": 22, "height": 22 } },
+        { selector: "node[type='target']", style: {
+            "background-color": "#2BB673", "label": "data(label)",
+            "color": "#d0ffd0", "font-size": 10, "text-outline-color": "#0B0B18",
+            "text-outline-width": 2,
+            "width":  (n) => 14 + Math.min(20, (n.data("degree") || 1) * 3),
+            "height": (n) => 14 + Math.min(20, (n.data("degree") || 1) * 3) } },
+        { selector: "edge", style: {
+            "width": 1, "line-color": "#8139ED55", "curve-style": "bezier",
+            "target-arrow-shape": "none" } },
+      ],
+      layout: { name: "cose", nodeRepulsion: 4500, idealEdgeLength: 80,
+                animate: false, padding: 30 },
+    });
+    return () => cy.destroy();
+  }, [network]);
+
+  return (
+    <div data-testid="network-card"
+         className="mt-2 rounded-2xl border border-white/10 bg-black/30 p-4 backdrop-blur-sm">
+      <div className="flex items-center gap-2 mb-2">
+        <div className="text-[15px] font-semibold text-slate-100">Compound–Target Network</div>
+        <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-300">
+          {network.nodes.length} nodes · {network.edges.length} edges
+        </span>
+      </div>
+      <div className="mt-2 text-[10.5px] text-slate-500 flex items-center gap-3">
+        <span><span className="inline-block h-2 w-2 rounded-full bg-[#5139ED] mr-1" />Compounds</span>
+        <span><span className="inline-block h-2 w-2 rounded-full bg-[#2BB673] mr-1" />Targets (larger = more overlapping compounds)</span>
+      </div>
+      <div ref={ref} data-testid="network-cytoscape"
+           className="mt-2 w-full h-[420px] rounded-lg border border-white/5 bg-black/40" />
+    </div>
+  );
+}
+
 function ChatMessage({ msg, run, onExecute, executing, onOpenRun, onSend }) {
   const isUser = msg.role === "user";
   const Icon = isUser ? User : Bot;
@@ -695,6 +797,97 @@ function Composer({ onSend, onAttach, disabled, attachments, onRemoveAttach }) {
                 className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#5139ED] to-[#8139ED] px-3 py-2 text-sm font-semibold text-white shadow-lg shadow-purple-500/20 disabled:opacity-40">
           {disabled ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════
+// PROJECT HEADER · Title + Share
+// ═════════════════════════════════════════════════════════════════
+function ProjectHeader({ project }) {
+  const [busy, setBusy] = useState(false);
+  const [shareUrl, setShareUrl] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  const enable = async () => {
+    setBusy(true);
+    try {
+      const { data } = await authApi.post(`/research/projects/${project.id}/share`);
+      const url = `${window.location.origin}/research/shared/${data.share_slug}`;
+      setShareUrl(url);
+      setOpen(true);
+      toast.success("Public share link created");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to enable sharing");
+    } finally { setBusy(false); }
+  };
+
+  const disable = async () => {
+    setBusy(true);
+    try {
+      await authApi.delete(`/research/projects/${project.id}/share`);
+      setShareUrl("");
+      setOpen(false);
+      toast.success("Share link disabled");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to disable sharing");
+    } finally { setBusy(false); }
+  };
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch { toast.error("Copy failed"); }
+  };
+
+  return (
+    <div data-testid="project-header"
+         className="flex items-center justify-between gap-3 border-b border-white/5 bg-black/25 px-6 py-3 backdrop-blur-xl">
+      <div className="min-w-0">
+        <div className="truncate text-[14px] font-semibold text-slate-100">{project.title || "New Research"}</div>
+        <div className="text-[11px] text-slate-500">{(project.messages || []).length} messages · {(project.runs || []).length} runs</div>
+      </div>
+      <div className="relative">
+        <button data-testid="share-project-btn"
+                onClick={() => (shareUrl ? setOpen((o) => !o) : enable())}
+                disabled={busy}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-[12px] font-medium text-slate-100 hover:bg-white/10 disabled:opacity-50">
+          {busy ? <Loader2 size={13} className="animate-spin" /> : <Share2 size={13} />}
+          Share
+        </button>
+        {open && shareUrl && (
+          <div data-testid="share-popover"
+               className="absolute right-0 top-full mt-2 w-[380px] rounded-xl border border-white/10 bg-[#141024] p-3 shadow-2xl shadow-black/50 z-30">
+            <div className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-1">Public link · Read-only</div>
+            <div className="flex items-center gap-2">
+              <input readOnly value={shareUrl}
+                     data-testid="share-url-input"
+                     onFocus={(e) => e.target.select()}
+                     className="flex-1 rounded-md border border-white/10 bg-black/50 px-2 py-1.5 text-[11.5px] font-mono text-slate-200 focus:outline-none focus:ring-1 focus:ring-[#5139ED]" />
+              <button data-testid="copy-share-btn"
+                      onClick={copy}
+                      className="rounded-md bg-[#5139ED] px-2 py-1.5 text-[11.5px] font-semibold text-white hover:bg-[#6242f5]">
+                {copied ? <Check size={13} /> : <Copy size={13} />}
+              </button>
+            </div>
+            <div className="mt-2 text-[11px] text-slate-500">
+              Anyone with this link can view the project's messages and results. They cannot execute or modify anything.
+            </div>
+            <div className="mt-2 flex items-center justify-between">
+              <a href={shareUrl} target="_blank" rel="noreferrer"
+                 className="text-[11px] text-[#a48bff] hover:text-white">Open in new tab →</a>
+              <button data-testid="disable-share-btn"
+                      onClick={disable}
+                      className="text-[11px] text-rose-300 hover:text-rose-100">
+                Disable sharing
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -888,6 +1081,7 @@ export default function ResearchWorkspace() {
                loading={projectsLoading} />
 
       <main className="flex flex-1 flex-col min-w-0">
+        {activeProject && <ProjectHeader project={activeProject} />}
         {/* Empty state or chat */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto">
           {!activeProject ? (

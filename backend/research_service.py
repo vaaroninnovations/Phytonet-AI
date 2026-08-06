@@ -171,15 +171,35 @@ async def tool_target_predict(smiles: list[str] | str | None = None,
             await progress("finalizing",
                            "Aggregating unique targets, sorting by score…")
             rows = s.get("rows") or []
-            # Reshape rows so the frontend target_table renderer just works.
+            # Build a small compound → target graph for Cytoscape
+            comp_nodes: dict = {}
+            tgt_nodes: dict = {}
+            edges = []
+            for r in rows:
+                cn = (r.get("compound_name") or r.get("query_compound")
+                      or (r.get("smiles") or "")[:20] or "?")
+                gs = (r.get("gene_symbol") or r.get("gene") or r.get("symbol"))
+                if not gs:
+                    continue
+                comp_nodes[cn] = True
+                tgt_nodes[gs] = tgt_nodes.get(gs, 0) + 1
+                edges.append({"source": cn, "target": gs,
+                              "score": r.get("score") or r.get("similarity")})
+            network = {
+                "nodes": [{"id": c, "label": c, "type": "compound"}
+                          for c in comp_nodes]
+                        + [{"id": g, "label": g, "type": "target",
+                            "degree": deg} for g, deg in tgt_nodes.items()],
+                "edges": edges,
+            }
             return {"status": "ok",
                     "card": "target_table",
                     "message": f"Target prediction complete — {len(rows)} "
                                f"compound-target predictions across "
-                               f"{len({r.get('gene_symbol') for r in rows if r.get('gene_symbol')})} "
-                               f"unique targets.",
+                               f"{len(tgt_nodes)} unique targets.",
                     "data": {"job_id": job_id, "total": total,
-                             "targets": rows}}
+                             "targets": rows,
+                             "network": network}}
         if st in ("error", "failed"):
             return {"status": "error",
                     "message": s.get("error") or "Target-prediction job failed."}
@@ -211,6 +231,50 @@ async def tool_disease_search(query: str,
             "card": "disease_table",
             "message": f"Found {len(hits)} matching diseases for '{query}'.",
             "data": {"query": query, "hits": hits}}
+
+
+async def tool_pathway_enrichment(genes: list[str] | None = None,
+                                    library: str = "KEGG_2021_Human",
+                                    progress=_noop_progress, **_) -> dict:
+    """Run KEGG + GO pathway enrichment on a gene list. Auto-chains from a
+    prior target_predict / target_resolve step."""
+    if not genes:
+        return {"status": "error",
+                "message": "Enrichment needs a gene list. Provide `genes` "
+                           "or run target_predict first so it can auto-chain."}
+    gene_list = [g for g in genes if isinstance(g, str) and g.strip()]
+    if not gene_list:
+        return {"status": "error", "message": "No valid gene symbols provided."}
+    await progress("querying",
+                   f"Running Enrichr KEGG on {len(gene_list)} genes…")
+    kegg = await _post("/api/kegg/enrich",
+                       {"genes": gene_list, "library": library})
+    await progress("querying",
+                   f"Running g:Profiler GO / Reactome enrichment…")
+    go = await _post("/api/go/enrich",
+                     {"genes": gene_list, "organism": "hsapiens",
+                      "sources": ["GO:BP", "REAC", "KEGG", "WP"],
+                      "user_threshold": 0.05,
+                      "significance_method": "g_SCS"})
+    def _extract_rows(resp):
+        if isinstance(resp, list):
+            return resp
+        if isinstance(resp, dict):
+            for k in ("pathways", "terms", "results", "rows"):
+                if isinstance(resp.get(k), list):
+                    return resp[k]
+        return []
+    kegg_rows = _extract_rows(kegg)[:200]
+    go_rows   = _extract_rows(go)[:200]
+    await progress("finalizing",
+                   f"Aggregated {len(kegg_rows)} KEGG + {len(go_rows)} GO terms.")
+    return {"status": "ok",
+            "card": "enrichment_table",
+            "message": (f"Enriched pathways across {len(gene_list)} genes — "
+                        f"{len(kegg_rows)} KEGG hits, {len(go_rows)} GO/Reactome hits."),
+            "data": {"genes": gene_list,
+                     "kegg": kegg_rows,
+                     "go":   go_rows}}
 
 
 async def tool_disease_targets(disease_id: str, limit: int = 30,
@@ -382,6 +446,12 @@ TOOL_REGISTRY: dict[str, dict[str, Any]] = {
     "disease_search":   {"fn": tool_disease_search,
                          "desc": "Search DisGeNET / Open Targets for a "
                                  "disease. Args: {query: str}."},
+    "pathway_enrichment": {"fn": tool_pathway_enrichment,
+                            "desc": "KEGG + GO / Reactome pathway enrichment "
+                                    "for a gene list via Enrichr + g:Profiler. "
+                                    "Chains from a prior target_predict / "
+                                    "target_resolve step. Args: {genes?: "
+                                    "list[str], library?: str}."},
     "disease_targets":  {"fn": tool_disease_targets,
                          "desc": "Get disease-associated gene panel. When a "
                                  "prior target_predict step exists, pass "
@@ -760,6 +830,14 @@ async def execute_step(step: dict,
             args["genes"] = genes
             logger.info(f"[research] disease_targets auto-injected "
                         f"{len(genes)} genes from prior target step")
+
+    # ── Enrichment chain: target_predict → pathway_enrichment ─────
+    if tool_name == "pathway_enrichment" and not args.get("genes"):
+        genes = _auto_pick_genes(prior_results or [], project_context or [])
+        if genes:
+            args["genes"] = genes
+            logger.info(f"[research] pathway_enrichment auto-injected "
+                        f"{len(genes)} genes")
 
     # Wire live progress callback into the tool call so stage-by-stage
     # sub-status is persisted for the frontend poller to display.

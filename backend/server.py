@@ -1330,6 +1330,7 @@ app.include_router(api_router_contact)
 from routes import research as _research_routes  # noqa: E402
 api_router_research = APIRouter(prefix="/api")
 api_router_research.include_router(_research_routes.build_router(db))
+api_router_research.include_router(_research_routes.build_public_share_router(db))
 app.include_router(api_router_research)
 
 app.add_middleware(

@@ -225,6 +225,49 @@ def build_router(db) -> APIRouter:
             "extracted": extracted,   # e.g. list of SMILES parsed from CSV
         }
 
+    @router.post("/projects/{pid}/share")
+    async def enable_share(pid: str, user=Depends(require_user)):
+        """Generate (or return existing) public read-only slug for a project."""
+        import secrets
+        d = await _fetch_owned(col, pid, user)
+        slug = d.get("share_slug") or secrets.token_urlsafe(10)
+        await col.update_one(
+            {"_id": d["_id"]},
+            {"$set": {"share_slug": slug, "shared_at":
+                      datetime.now(timezone.utc)}},
+        )
+        return {"share_slug": slug,
+                "share_path": f"/research/shared/{slug}"}
+
+    @router.delete("/projects/{pid}/share")
+    async def disable_share(pid: str, user=Depends(require_user)):
+        d = await _fetch_owned(col, pid, user)
+        await col.update_one({"_id": d["_id"]},
+                             {"$unset": {"share_slug": "", "shared_at": ""}})
+        return {"ok": True}
+
+    return router
+
+
+def build_public_share_router(db) -> APIRouter:
+    """Unauthenticated read-only access to shared projects."""
+    router = APIRouter(prefix="/research", tags=["research-public"])
+    col = db["research_projects"]
+
+    @router.get("/shared/{slug}")
+    async def get_shared(slug: str):
+        d = await col.find_one({"share_slug": slug})
+        if not d:
+            raise HTTPException(404, "Shared project not found")
+        # Redact user_id + IPs before returning
+        return {
+            "id":        str(d["_id"]),
+            "title":     d.get("title"),
+            "shared_at": d.get("shared_at").isoformat() if d.get("shared_at") else None,
+            "messages":  d.get("messages") or [],
+            "runs":     [_serialize_run(r) for r in (d.get("runs") or [])],
+        }
+
     return router
 
 

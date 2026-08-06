@@ -1,0 +1,38 @@
+{
+  "summary": "Iteration 42 validated the three new /research features. Backend pytest (3/3 pass) covers pathway_enrichment (KEGG=152, GO=200 rows for the 5-gene AKT1/EGFR/TP53/TNF/IL6 query), POST/DELETE /projects/{pid}/share and GET /shared/{slug} (with user_id redaction confirmed). Frontend E2E via Playwright: (a) enrichment-card renders correctly in an existing 'Enrichment retest' project showing KEGG (ENRICHR) and GO/Reactome (g:Profiler) subsections with pathway names + p-values; (b) share-project-btn opens share-popover with a share-url-input starting with the current origin + /research/shared/, copy-share-btn works; (c) opening the share URL in a new context (unauth) renders shared-title, shared-msg-*, shared-run-* blocks with KEGG content and NO user_id in payload; (d) disable-share-btn correctly makes the same URL return the shared-error state; (e) HOWEVER the target_predict flow for Curcumin FAILS end-to-end — the second plan step errors with 'Target prediction needs at least one compound. Provide smiles or compounds' even though the first step successfully resolves Curcumin from PubChem (CID 969516, SMILES COC1=C(C=CC(=C1)C=CC(=O)CC=CC2=CC(=C(C=C2)O)OC)O). Because target_predict never completes, no network-card / network-cytoscape is rendered. The NetworkCard component itself has correct data-testids (network-card L600, network-cytoscape L612) but is unreachable via the intended user flow.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "planner/execute_step (target_predict)", "issue": "When user asks 'Predict protein targets for Curcumin', the planner emits a plan that resolves Curcumin (compound_identification step succeeds with canonical SMILES) but the following target_predict step fails with 'Target prediction needs at least one compound. Provide smiles (str or list) or compounds (list of {smiles, ...}).' — the resolved SMILES from the prior step is not being propagated into target_predict.args. The public-share Interpretation msg confirms the technical issue ('target prediction step failed due to a technical issue where the compound structure was not properly passed to the prediction algorithm'). This blocks feature #3 (Compound–Target Network Cytoscape).", "priority": "CRITICAL"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Target predict → NetworkCard", "issue": "Because target_predict backend step never returns a targets payload for a natural-language Curcumin prompt, the NetworkCard (data-testid=network-card) never mounts. Cannot visually verify Cytoscape rendering via the intended UX.", "affected_selectors": ["[data-testid=network-card]", "[data-testid=network-cytoscape]"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter42_share_enrichment.py",
+    "/app/test_reports/pytest/iter42.xml"
+  ],
+  "action_items": [
+    "Fix planner/execute pipeline so that for a plan like [compound_identification → target_predict], the SMILES resolved in step 1 is automatically injected into target_predict.args (either via placeholder resolution or the same auto-injection mechanism used for ADMET). Verify with 'Predict protein targets for Curcumin' — target_predict should complete and NetworkCard should render with compound + target nodes."
+  ],
+  "critical_code_review_comments": [
+    "ResearchWorkspace.jsx is now ~1171 lines (grew from 701 last iteration) — Share/ProjectHeader added inline. Consider extracting ProjectHeader, EnrichmentCard, NetworkCard, VizPanel into separate files.",
+    "Public share endpoint correctly excludes user_id but still returns the full messages array which may embed user attachments/emails. Consider adding a redaction pass on messages.attachments and any interpretation text that could contain PII.",
+    "SharedResearch.jsx uses raw axios (not authApi) — good for the unauth flow but hardcodes `${REACT_APP_BACKEND_URL}/api`; keep an eye on double-prefix regressions.",
+    "research routes: share_slug uses secrets.token_urlsafe(10) — that's 14 chars of ~83 bits entropy which is fine, but no rate-limit on the enable endpoint. Consider a per-user cap or reuse-existing (already done via the `d.get('share_slug') or …` fallback).",
+    "The disable_share DELETE returns {ok: true} regardless of whether a slug existed — idempotent, ok."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter42_share_enrichment.py"],
+  "success_rate": {"backend": "100% (3/3 pytest for enrichment + share endpoints)", "frontend": "80% (4/5 UI flows pass — target_predict blocked by planner bug)"},
+  "test_credentials": "rtest1785979513@phytonetai.com / TestPass123! — works. Login via '/' → Sign In header button → AuthModal (data-testid=signin-email/password/submit).",
+  "seed_data_creation": "Reused existing 'Enrichment retest' project for enrichment-card verification. Created transient 'Predict Protein Targets for Curcumin' project during Test 5 (kept in sidebar). Backend pytest creates + deletes TEST_iter42 project.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Pathway enrichment tool + Share/public-share features are FULLY working (backend + frontend). Only outstanding blocker is the target_predict SMILES-propagation bug: when a user asks 'Predict protein targets for X', the planner produces [compound_identification, target_predict] but does not wire step-1's SMILES into step-2's args, so target_predict fails and NetworkCard never renders. Enrichment retest project's slug was disabled during testing — re-enable if needed. Composer testids: composer-input (textarea) and composer-send-btn. Do NOT use button[type=submit] — that hits the header Search form.",
+  "rca of the issue": "target_predict failure RCA: research_service.plan() emits a two-step plan for 'Predict protein targets for Curcumin' where step 1 is compound_identification (returns {canonical_smiles, pubchem_cid,…} in result.data) and step 2 is target_predict with args that do NOT reference {{prev.smiles}} or an auto-injection hint. In execute_step's argument resolution / auto-injection block, ADMET has an auto-inject path from project_context but target_predict does not — hence 'Target prediction needs at least one compound.' Fix: either (a) add target_predict to the auto-injection allowlist so it pulls smiles from the most-recent compound_identification / compound_table result, OR (b) fix the planner prompt to always emit target_predict with args like {\"smiles\": \"{{step_1.result.data.canonical_smiles}}\"}. Reproduction: from a clean project, send 'Predict protein targets for Curcumin' via composer-input → composer-send-btn → wait for run — the second plan step will show status=error with the 'needs at least one compound' message."
+}
