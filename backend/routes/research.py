@@ -246,6 +246,52 @@ def build_router(db) -> APIRouter:
                              {"$unset": {"share_slug": "", "shared_at": ""}})
         return {"ok": True}
 
+    @router.post("/projects/{pid}/retry/{run_id}/{step_id}")
+    async def retry_step(pid: str, run_id: str, step_id: str,
+                          background_tasks: BackgroundTasks,
+                          user=Depends(require_user)):
+        """Reset a failed step (+ every downstream step in the plan) back to
+        'pending', clear their results, and re-execute the run. Previously-
+        completed steps upstream are preserved untouched."""
+        d = await _fetch_owned(col, pid, user)
+        run = next((r for r in (d.get("runs") or []) if r.get("id") == run_id),
+                   None)
+        if not run:
+            raise HTTPException(404, "Run not found")
+        plan = run.get("plan") or []
+        target_idx = next((i for i, s in enumerate(plan)
+                           if s.get("id") == step_id), None)
+        if target_idx is None:
+            raise HTTPException(404, "Step not found in plan")
+
+        # Reset this step + all downstream steps back to `pending`.
+        new_plan = []
+        for i, s in enumerate(plan):
+            if i >= target_idx:
+                new_plan.append({**s, "status": "pending", "progress": None})
+            else:
+                new_plan.append(s)
+
+        # Trim results to only steps strictly before the retried step.
+        old_results = run.get("results") or []
+        new_results = [r for i, r in enumerate(old_results) if i < target_idx]
+
+        await col.update_one(
+            {"_id": d["_id"], "runs.id": run_id},
+            {"$set": {
+                "runs.$.plan":           new_plan,
+                "runs.$.results":        new_results,
+                "runs.$.status":         "running",
+                "runs.$.interpretation": "",
+                "runs.$.next_steps":     [],
+                "runs.$.completed_at":   None,
+            }},
+        )
+        background_tasks.add_task(_execute_in_background,
+                                   db, str(d["_id"]), pid, run_id)
+        return {"ok": True, "retried_from": step_id,
+                "reset_steps": len(plan) - target_idx}
+
     return router
 
 
@@ -285,7 +331,11 @@ async def _fetch_owned(col, pid: str, user) -> dict:
 
 async def _execute_in_background(db, oid_str: str, pid: str, run_id: str):
     """Sequential executor. Streams progress by mutating the run doc as each
-    step completes, so the client's poller can render live progress."""
+    step completes, so the client's poller can render live progress.
+
+    If the run already has partial `results` (e.g. re-invocation after a
+    retry), previously-`done` steps are preserved and only pending / error
+    steps are re-executed."""
     col = db["research_projects"]
     oid = ObjectId(oid_str)
     d = await col.find_one({"_id": oid})
@@ -323,9 +373,19 @@ async def _execute_in_background(db, oid_str: str, pid: str, run_id: str):
                                }},
                 })
 
+    # Preserve already-done step results so retries only rerun what failed.
+    prior_step_results: dict[str, dict] = {}
+    for r in (run.get("results") or []):
+        if r.get("status") == "done" and r.get("id"):
+            prior_step_results[r["id"]] = r
+
     results: list[dict] = []
     for idx, step in enumerate(plan_steps):
         step_id = step.get("id")
+        # Skip steps that already succeeded — reuse their prior result.
+        if step_id in prior_step_results and step.get("status") == "done":
+            results.append(prior_step_results[step_id])
+            continue
         # Mark running on this step
         await col.update_one(
             {"_id": oid, "runs.id": run_id},

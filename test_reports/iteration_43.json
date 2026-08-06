@@ -1,0 +1,33 @@
+{
+  "summary": "Iteration 43 validated both the /research refactor (ResearchWorkspace.jsx 1170 → 270 LOC + components/research/*.jsx) AND the new one-click Retry-Step feature end-to-end. Backend pytest (4/4 pass) covers: (a) POST /api/research/projects — create OK, (b) POST /projects/{pid}/message with 'Predict protein targets for Aspirin' → planner returns 2-step plan (compound_lookup + target_predict) that fully completes (steps done, run status=completed), (c) POST /projects/{pid}/retry/{run_id}/{step_id} returns {ok:true, retried_from:'step_2', reset_steps:1} exactly per spec, preserves step_1 as done, and the re-run completes successfully within ~40 s, (d) bad step_id / bad run_id both return 404. Frontend UI E2E via Playwright: (1) login → /research loads (research-workspace testid present), (2) sidebar renders 13 project entries, (3) opened 'Retry endpoint test' — project header + Share button + composer-input + composer-send-btn all visible, (4) chat msgs: msg-user=1, msg-assistant=3, plan-card renders with plan-step-0 + plan-step-1, (5) NetworkCard (network-card + network-cytoscape, 11 nodes/10 edges) renders below target_table, (6) share-popover + share-url-input work when Share clicked, (7) INJECTED failure via mongodb (set runs.0.plan.1.status='error', results.1.status='error', runs.0.status='failed') → after reload plan-step-1-retry button appeared with 'Retry step' text — CLICK triggered toast 'Retrying from failed step…', run re-executed, step_2 turned green and completed_at/interpretation regenerated; VizPanel then opened on the right showing Compound Details + Predicted Targets table (10 rows / 22 cols) as expected. Aspirin's target_predict works end-to-end — the SMILES-propagation regression from iter 42 (which was specific to Curcumin) is not reproduced for Aspirin. Regression on /research/shared/:slug NOT re-tested this iteration (already validated in iter 42) but the underlying route was untouched in this refactor.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "NetworkCard (Cytoscape)", "issues": ["Console warns: 'The style property line-color: #8139ED55 is invalid' — Cytoscape.js does not accept 8-digit hex on line-color. Split into `line-color: #8139ED` + `line-opacity: 0.33` to silence the warning."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter43_retry_step.py",
+    "/app/test_reports/pytest/iter43.xml"
+  ],
+  "action_items": [
+    "OPTIONAL cosmetic: fix Cytoscape line-color hex (drop the trailing '55' + use line-opacity) in /app/frontend/src/components/research/cards.jsx L507 to silence the repeated console warning while cy-instance mounts."
+  ],
+  "critical_code_review_comments": [
+    "Refactor is clean — ResearchWorkspace.jsx is now 270 LOC and delegates rendering to /components/research/* (Sidebar, Composer, ProjectHeader, ChatMessage, VizPanel, EmptyState, cards). Business logic (hooks, polling, retry, execute) stays in the parent — good separation.",
+    "cards.jsx is 533 LOC and still bundles PlanCard + TableCard + ResultCard + NetworkCard + download helpers. Consider splitting NetworkCard.jsx out (owns cytoscape import which pulls a large dep — a separate file lets React.lazy() code-split it).",
+    "retry_step endpoint has NO auth-owner check beyond _fetch_owned — that's correct. But note it does not validate that the target step's status is 'error' before resetting; a user can call retry on a fully-completed step (as our test did) and the endpoint will happily rerun it. That is intentional per PR description ('one-click Retry step' + 'preserving upstream results') but worth documenting.",
+    "_execute_in_background's `prior_step_results` dict short-circuits step re-execution when step.status=='done', which correctly preserves upstream results after a retry. Good.",
+    "Frontend `retrying` state is a single {runId, stepId} object shared across all runs — if two runs retry simultaneously this would visually mis-target, but only one run can execute at once (executing state gates the composer) so fine in practice.",
+    "PlanCard is missing keyboard focus styles on the retry button — no focus-visible ring. Minor a11y."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter43_retry_step.py"],
+  "success_rate": {"backend": "100% (4/4 pytest)", "frontend": "100% (all 7 UI checkpoints pass — workspace load, sidebar, project header + Share, composer, plan/msg/network cards, retry-step end-to-end, VizPanel post-completion)"},
+  "test_credentials": "rtest1785979513@phytonetai.com / TestPass123! — httpOnly-cookie login (no access_token in response body); use requests.Session.",
+  "seed_data_creation": "Reused existing 'Retry endpoint test' project (id 6a7432c62b2835a425e0ec36). Temporarily injected runs.0.plan.1.status='error' / results.1.status='error' / status='failed' via mongosh to force the retry-button UI to appear; the retry click then re-ran step_2 which restored the state to fully completed. Backend pytest creates + deletes TEST_iter43_retry project.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Retry-step feature (both endpoint and UI) is fully functional. Repro of the retry UI: use mongosh test_database to set runs.0.plan.<i>.status='error' + results.<i>.status='error' on any project, reload /research, open that project — the plan-step-<i>-retry button will appear. Cytoscape line-color warning is cosmetic only. Note: /api/auth/login returns user body only + httpOnly cookies — do NOT try to read access_token from JSON."
+}
