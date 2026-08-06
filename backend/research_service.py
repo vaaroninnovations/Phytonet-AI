@@ -403,9 +403,16 @@ async def tool_ctp_network(progress=_noop_progress, prior_results=None,
     ct_edges = []
     compounds, targets = set(), set()
     for t in (tp.get("targets") or []):
-        c   = (t.get("compound_name") or t.get("query_compound") or "").strip()
+        # Fall back to canonical_smiles / smiles prefix or a stable "Compound"
+        # placeholder so a row with a valid gene but a missing name still
+        # contributes to the graph (fixes the "0 compounds · 0 targets"
+        # metric bug when compound_lookup didn't propagate a display name).
+        c = ((t.get("compound_name") or t.get("query_compound")
+              or t.get("name") or "").strip()
+             or ((t.get("canonical_smiles") or t.get("smiles") or "").strip()[:20])
+             or "Compound")
         gene = (t.get("gene") or t.get("gene_symbol") or t.get("symbol") or "").strip().upper()
-        if not c or not gene: continue
+        if not gene: continue
         compounds.add(c); targets.add(gene)
         ct_edges.append((c, gene, "targets"))
 
@@ -677,6 +684,31 @@ async def tool_docking(progress=_noop_progress,
     prior_results   = prior_results   or []
     project_context = project_context or []
 
+    # ── SMILES → friendly-name index built from compound_lookup steps ──
+    # ADMET rows often lose the human-readable name; we backfill from any
+    # compound_lookup step so docking labels read "Curcumin" instead of
+    # a 20-char SMILES prefix.
+    smiles_to_name: dict[str, str] = {}
+    for pool in (prior_results, project_context):
+        for step in pool:
+            if step.get("status") != "done": continue
+            if step.get("tool") != "compound_lookup": continue
+            d = (step.get("result") or {}).get("data") or {}
+            smi = (d.get("canonical_smiles") or d.get("isomeric_smiles")
+                   or d.get("smiles") or "").strip()
+            nm  = (d.get("name") or d.get("compound_name")
+                   or d.get("iupac_name") or "").strip()
+            if smi and nm and smi not in smiles_to_name:
+                # Capitalise obvious lowercased plant/compound names ("curcumin"
+                # → "Curcumin") — leaves IUPAC names untouched.
+                smiles_to_name[smi] = nm[:1].upper() + nm[1:] if nm.islower() else nm
+
+    def _friendly(smi: str, fallback: str = "") -> str:
+        smi = (smi or "").strip()
+        return (smiles_to_name.get(smi)
+                or (fallback or "").strip()
+                or (smi[:20] if smi else "compound"))
+
     # ── 1. Rank + pick compounds ─────────────────────────────────
     def _rank_compounds() -> list[dict]:
         # Prefer ADMET-scored compounds if present.
@@ -692,16 +724,22 @@ async def tool_docking(progress=_noop_progress,
                 picked = [r for r in rows
                           if (r.get("canonical_smiles") or r.get("smiles"))]
                 picked.sort(key=_score, reverse=True)
-                return [{"name": r.get("compound_name")
-                              or (r.get("smiles") or "")[:20] or "compound",
+                return [{"name": _friendly(
+                              r.get("canonical_smiles") or r.get("smiles") or "",
+                              (r.get("compound_name") or "").strip()),
                          "smiles": r.get("canonical_smiles") or r.get("smiles")}
                         for r in picked]
         # Fallback: use whichever compound source exists.
-        return [{"name": c.get("compound_name") or c.get("name")
-                          or (c.get("smiles") or "")[:20] or "compound",
-                 "smiles": c.get("canonical_smiles") or c.get("smiles") or ""}
-                for c in _auto_pick_compounds(prior_results, project_context)
-                if (c.get("canonical_smiles") or c.get("smiles"))]
+        out: list[dict] = []
+        for c in _auto_pick_compounds(prior_results, project_context):
+            smi = c.get("canonical_smiles") or c.get("smiles") or ""
+            if not smi: continue
+            out.append({
+                "name": _friendly(smi,
+                          (c.get("compound_name") or c.get("name") or "").strip()),
+                "smiles": smi,
+            })
+        return out
 
     compounds_all = _rank_compounds()
     if not compounds_all:
@@ -789,9 +827,11 @@ async def tool_docking(progress=_noop_progress,
 
     # Attach the human-friendly gene symbol to every result row so the
     # frontend can render `Compound × GENE (PDB)` without a re-lookup.
+    # DockResult carries `receptor_uniprot` (NOT `uniprot_id`), so key
+    # the lookup off that.
     uid_to_gene = {g["uniprot_id"]: g["gene_symbol"] for g in genes}
     for r in results:
-        uid = r.get("uniprot_id") or ""
+        uid = r.get("receptor_uniprot") or r.get("uniprot_id") or ""
         r["gene_symbol"] = uid_to_gene.get(uid, "")
         r["pdb_id"] = r.get("receptor_pdb") or (
             receptors.get(uid, {}).get("pdb_id") or "")
@@ -810,7 +850,7 @@ async def tool_docking(progress=_noop_progress,
         "n_strong":  len(strong),   # ≤ -7 kcal/mol threshold
         "best_affinity": (float(best["best_affinity"]) if best else None),
         "best_pair":     ((f'{best.get("ligand_name")} × '
-                           f'{best.get("gene_symbol") or best.get("uniprot_id")} '
+                           f'{best.get("gene_symbol") or best.get("receptor_uniprot") or best.get("uniprot_id")} '
                            f'({best.get("pdb_id")})') if best else None),
         "top_compounds": top_compounds,
         "top_genes":     top_genes,

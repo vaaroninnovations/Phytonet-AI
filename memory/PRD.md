@@ -1600,3 +1600,57 @@ based), not per-tool — no separate node debit was added.
 - P1: AI Report enrichment — bake real ADMET / docking / CTP metrics into
   the AI Scientific Report.
 - P1: Wire ⌘K command palette to search open tabs & past projects.
+
+
+## 2026-02-06 (iter 47) — Docking Live Verify + CTP Metric Fix ✅
+
+**Docking end-to-end verified in the AI Research Assistant.**
+Reset the seeded `TEST_iter46_docking_autoappend` run with
+`top_compounds=1, top_genes=1, exhaustiveness=4`, executed it via
+`POST /api/research/projects/{pid}/execute/{run_id}`, and eyeballed the
+resulting `DockingCard` + inline `DockingViewer`:
+
+- 4-step chain (compound_lookup → admet_predict → target_predict →
+  docking) completed cleanly (~2 min end-to-end).
+- Best binder: **Curcumin × ALOX5 (PDB 7TTK) at −7.86 kcal/mol** —
+  correctly labelled "Strong" (≤ −7 threshold).
+- DockingCard renders every element from the spec: 5 summary pills,
+  best-binder banner, ranked results table, CSV export.
+- `View 3D` button expands the existing `DockingViewer` inline: full 3Dmol.js
+  cartoon complex with H-bond distance labels, LigPlot-style 2D
+  interaction diagram, 16-interaction table (5 H-bonds + hydrophobic
+  + π-stacking), and all download formats (Complex PDB / Pose PDBQT-PDB /
+  All poses / Interactions CSV-JSON / PNG-TIFF-PDF snapshots).
+
+**Fixed two docking data bugs surfaced during live verify:**
+1. **Empty `gene_symbol` on result rows** — my tool_docking was keying the
+   `uid_to_gene` lookup off `r.get("uniprot_id")` but `DockResult` carries
+   the field as `receptor_uniprot`. Fixed to prefer `receptor_uniprot`.
+2. **Ligand rendered as SMILES prefix** ("COC1=C(C=CC(=C1)C=CC" instead of
+   "Curcumin") — ADMET rows lose the friendly name (compound_name empty).
+   Added a `smiles_to_name` index built from any prior `compound_lookup`
+   step; docking now labels ligands as their PubChem name whenever
+   available and title-cases lowercase inputs ("curcumin" → "Curcumin").
+
+**Fixed pre-existing CTP metric bug** (`n_compounds=0/n_targets=0` on
+healthy runs — flagged in iter-45 report). `tool_ctp_network` was
+bailing out with `if not c or not gene: continue` whenever a target
+row was missing a display `compound_name`. Now falls back to
+`canonical_smiles[:20]` (or a stable "Compound" placeholder) so a valid
+gene never gets dropped from the graph.
+
+**Files touched**
+- `/app/backend/research_service.py`
+  - `tool_docking`: added `smiles_to_name` backfill from compound_lookup,
+    fixed UniProt key mismatch on result rows, wired through `receptor_uniprot`
+    everywhere in the metrics summary.
+  - `tool_ctp_network`: relaxed compound-side extraction so targets aren't
+    lost when the display name is missing.
+
+**Next Action Items**
+- P1: AI Report enrichment — bake real ADMET / docking / CTP-network
+  metrics into the AI Scientific Report so it feels publication-ready.
+- P1: Wire ⌘K command palette to search open tabs and past projects.
+- P2: Refactor `cards.jsx` (now 1600+ lines) — split DockingCard,
+  CTPNetworkCard, EnrichmentCard, IntersectionVennCard into their own
+  files under `/app/frontend/src/components/research/cards/`.
