@@ -57,15 +57,23 @@ async def _post(path: str, json_body: dict | None = None, timeout: float = 120.0
         return r.json()
 
 
-async def tool_plant_search(query: str, limit: int = 25, **_) -> dict:
-    data = await _get("/api/plant/search",
-                      {"plant": query, "limit": min(int(limit), 50)})
+async def tool_plant_search(query: str, limit: int = 200, **_) -> dict:
+    # Match the standalone Plant Database defaults so the AI Assistant
+    # returns the same compound count as the manual page. `want_structure`
+    # and `want_physchem` widen the backend response.
+    data = await _get("/api/plant/search", {
+        "plant": query,
+        "limit": max(1, min(int(limit), 500)),
+        "want_structure": "true",
+        "want_physchem":  "true",
+    }, timeout=180.0)
     # `data` is a list of compounds — reshape for the UI's compound-table card
     compounds = data if isinstance(data, list) else data.get("compounds", []) or []
     return {"status": "ok",
             "card": "compound_table",
-            "message": f"Retrieved {len(compounds)} compounds for '{query}'.",
-            "data":    {"query": query, "compounds": compounds[:limit]}}
+            "message": f"Retrieved {len(compounds)} compounds for '{query}' "
+                       f"from IMPPAT + LOTUS + PubChem.",
+            "data":    {"query": query, "compounds": compounds}}
 
 
 async def tool_lotus_search(query: str, limit: int = 25, **_) -> dict:
@@ -142,8 +150,11 @@ async def tool_admet_predict(smiles: list[str] | str, **_) -> dict:
 
 TOOL_REGISTRY: dict[str, dict[str, Any]] = {
     "plant_search":     {"fn": tool_plant_search,
-                         "desc": "Search medicinal plants (IMPPAT + LOTUS). "
-                                 "Args: {query: str, limit?: int}."},
+                         "desc": "Search medicinal plants for their full "
+                                 "phytochemical catalogue (IMPPAT + LOTUS + "
+                                 "PubChem). ALWAYS use limit=200 unless the "
+                                 "user asks for a smaller subset. "
+                                 "Args: {query: str, limit?: int (default 200, max 500)}."},
     "lotus_search":     {"fn": tool_lotus_search,
                          "desc": "Search LOTUS natural-product database by "
                                  "compound name. Args: {query: str, limit?: int}."},
