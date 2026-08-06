@@ -538,6 +538,13 @@ async def tool_ctp_network(progress=_noop_progress, prior_results=None,
                 "metrics":  metrics,
                 "nodes":    nodes,
                 "edges":    edges,
+                # Bundle the raw upstream data so the frontend can re-filter
+                # the top-N pathways live without another backend call.
+                "raw": {
+                    "targets": tp.get("targets") or [],
+                    "kegg":    pe.get("kegg")    or [],
+                    "go":      pe.get("go")     or [],
+                },
                 "exports":  {
                     "ctp_nodes.csv":    nodes_csv,
                     "ctp_edges.csv":    edges_csv,
