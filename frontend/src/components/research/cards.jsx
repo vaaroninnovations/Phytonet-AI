@@ -473,6 +473,7 @@ function EnrichmentCard({ data, message }) {
   const [maxAdjP, setMaxAdjP] = useState(0.05);
 
   const rows = tab === "kegg" ? keggAll : goAll;
+  const [chartView, setChartView] = useState("list");
 
   // Normalise each row across the two APIs so a single table renders both.
   // NB: g:Profiler's `p_value` is ALREADY the g:SCS-corrected value, so for
@@ -572,7 +573,28 @@ function EnrichmentCard({ data, message }) {
         </button>
       </div>
 
-      {/* Bubble strip — pathway name + gene_count + -log10(p) bar */}
+      {/* View switcher */}
+      <div className="inline-flex rounded-lg border border-white/10 bg-white/5 p-0.5 mb-3">
+        {["list", "bubble", "lollipop", "sankey"].map((v) => (
+          <button key={v}
+                  data-testid={`enrichment-view-${v}`}
+                  onClick={() => setChartView(v)}
+                  className={`px-2.5 py-1 rounded-md text-[11.5px] font-semibold capitalize ${
+                    chartView === v ? "bg-[#5139ED] text-white" : "text-slate-300 hover:text-white"
+                  }`}>{v}</button>
+        ))}
+      </div>
+
+      {chartView !== "list" && (
+        <div data-testid={`enrichment-chart-${chartView}`}
+             className="rounded-lg border border-white/5 bg-black/20 p-3 mb-3">
+          {chartView === "bubble"   && <EnrichBubble   rows={filtered} />}
+          {chartView === "lollipop" && <EnrichLollipop rows={filtered} />}
+          {chartView === "sankey"   && <EnrichSankey   rows={filtered.slice(0, 10)} />}
+        </div>
+      )}
+
+      {chartView === "list" && (
       <div data-testid="enrichment-rows"
            className="max-h-[420px] overflow-y-auto rounded-lg border border-white/5 bg-black/20 divide-y divide-white/5">
         {filtered.length === 0 && (
@@ -633,9 +655,166 @@ function EnrichmentCard({ data, message }) {
           );
         })}
       </div>
+      )}
     </div>
   );
 }
+
+// ─── Enrichment chart sub-components (dark-themed, inline SVG) ────
+function EnrichBubble({ rows }) {
+  if (!rows.length)
+    return <div className="p-4 text-center text-[12px] italic text-slate-500">
+             No data to plot.</div>;
+  const w = 780;
+  const rowH = 26;
+  const h = Math.max(180, rows.length * rowH + 60);
+  const labelW = 300;
+  const plotL = labelW + 20;
+  const plotW = w - plotL - 60;
+  const maxLog = Math.max(1, ...rows.map((r) =>
+    -Math.log10(Math.max(r.p_value || 1, 1e-30))));
+  const maxCount = Math.max(1, ...rows.map((r) => r.gene_count || 0));
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h}
+         style={{ fontFamily: "Inter, system-ui" }}
+         data-testid="enrichment-bubble-svg">
+      {[0.25, 0.5, 0.75, 1].map((f) => (
+        <line key={f} x1={plotL + f * plotW} x2={plotL + f * plotW} y1={20} y2={h - 40}
+              stroke="#ffffff10" strokeWidth="0.5" />
+      ))}
+      {rows.map((r, i) => {
+        const y = 30 + i * rowH;
+        const logp = -Math.log10(Math.max(r.p_value || 1, 1e-30));
+        const x = plotL + (logp / maxLog) * plotW;
+        const rB = 4 + ((r.gene_count || 0) / maxCount) * 14;
+        const label = r.term.length > 40 ? r.term.slice(0, 38) + "…" : r.term;
+        return (
+          <g key={i}>
+            <text x={labelW - 8} y={y + 4} textAnchor="end" fontSize="10" fill="#e2e8f0">
+              {label}
+            </text>
+            <circle cx={x} cy={y} r={rB} fill="#a48bff" fillOpacity="0.55"
+                    stroke="#8139ED" strokeWidth="1" />
+            <text x={x + rB + 4} y={y + 3} fontSize="9" fill="#94a3b8">
+              {r.gene_count ?? ""}
+            </text>
+          </g>
+        );
+      })}
+      <text x={plotL + plotW / 2} y={h - 12} textAnchor="middle" fontSize="10"
+            fill="#94a3b8">−log₁₀(P-value) · bubble size = overlap gene count</text>
+    </svg>
+  );
+}
+
+function EnrichLollipop({ rows }) {
+  if (!rows.length)
+    return <div className="p-4 text-center text-[12px] italic text-slate-500">
+             No data to plot.</div>;
+  const w = 780;
+  const rowH = 26;
+  const h = Math.max(180, rows.length * rowH + 60);
+  const labelW = 300;
+  const plotL = labelW + 20;
+  const plotW = w - plotL - 60;
+  const maxScore = Math.max(1, ...rows.map(
+    (r) => r.combined_score || 0));
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h}
+         style={{ fontFamily: "Inter, system-ui" }}
+         data-testid="enrichment-lollipop-svg">
+      <line x1={plotL} x2={plotL} y1={20} y2={h - 40}
+            stroke="#ffffff20" strokeWidth="1" />
+      {rows.map((r, i) => {
+        const y = 30 + i * rowH;
+        const bw = ((r.combined_score || 0) / maxScore) * plotW;
+        const label = r.term.length > 40 ? r.term.slice(0, 38) + "…" : r.term;
+        return (
+          <g key={i}>
+            <text x={labelW - 8} y={y + 4} textAnchor="end" fontSize="10" fill="#e2e8f0">
+              {label}
+            </text>
+            <line x1={plotL} y1={y} x2={plotL + bw} y2={y}
+                  stroke="#8139ED" strokeOpacity="0.7" strokeWidth="2" />
+            <circle cx={plotL + bw} cy={y} r={5} fill="#a48bff"
+                    stroke="#0B0B18" strokeWidth="1.5" />
+            <text x={plotL + bw + 10} y={y + 3} fontSize="10" fill="#94a3b8">
+              {(r.combined_score || 0).toFixed(1)}
+            </text>
+          </g>
+        );
+      })}
+      <text x={plotL + plotW / 2} y={h - 12} textAnchor="middle" fontSize="10"
+            fill="#94a3b8">Combined score (Enrichr) or fold-enrichment (g:Profiler)</text>
+    </svg>
+  );
+}
+
+function EnrichSankey({ rows }) {
+  const w = 900;
+  const geneCounts = new Map();
+  for (const r of rows) for (const g of (r.overlap_genes || []))
+    geneCounts.set(g, (geneCounts.get(g) || 0) + 1);
+  const genes = [...geneCounts.entries()]
+                  .sort((a, b) => b[1] - a[1]).slice(0, 24).map(([g]) => g);
+  const geneSet = new Set(genes);
+  const filtered = rows
+    .map((r) => ({ ...r, overlap_genes: (r.overlap_genes || []).filter((g) => geneSet.has(g)) }))
+    .filter((r) => r.overlap_genes.length > 0);
+
+  if (!filtered.length || !genes.length)
+    return <div className="p-4 text-center text-[12px] italic text-slate-500">
+             Not enough overlap data to render a Sankey diagram.</div>;
+
+  const h = Math.max(360, Math.max(genes.length, filtered.length) * 22 + 60);
+  const pad = 16;
+  const geneStep = (h - 2 * pad) / Math.max(1, genes.length);
+  const pathStep = (h - 2 * pad) / Math.max(1, filtered.length);
+  const geneY = (i) => pad + geneStep * (i + 0.5);
+  const pathY = (i) => pad + pathStep * (i + 0.5);
+  const palette = ["#5139ED", "#8139ED", "#395AED", "#ED39A6",
+                   "#39C1ED", "#F5B301", "#10B981", "#EF4444"];
+  const geneW = 12, pathW = 12;
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h}
+         style={{ fontFamily: "Inter, system-ui" }}
+         data-testid="enrichment-sankey-svg">
+      {genes.map((g, i) => (
+        <g key={g}>
+          <rect x={140} y={geneY(i) - 6} width={geneW} height={12} rx={2} fill="#a48bff" />
+          <text x={135} y={geneY(i) + 3} fontSize="10" fill="#e2e8f0"
+                textAnchor="end">{g}</text>
+        </g>
+      ))}
+      {filtered.map((r, i) => {
+        const color = palette[i % palette.length];
+        const label = r.term.length > 34 ? r.term.slice(0, 32) + "…" : r.term;
+        return (
+          <g key={i}>
+            <rect x={w - 140 - pathW} y={pathY(i) - 6} width={pathW} height={12}
+                  rx={2} fill={color} />
+            <text x={w - 140 + 6} y={pathY(i) + 3} fontSize="10"
+                  fill="#e2e8f0">{label}</text>
+          </g>
+        );
+      })}
+      {filtered.map((r, pi) => {
+        const color = palette[pi % palette.length];
+        return (r.overlap_genes || []).map((g) => {
+          const gi = genes.indexOf(g);
+          if (gi < 0) return null;
+          const x1 = 140 + geneW, y1 = geneY(gi);
+          const x2 = w - 140 - pathW, y2 = pathY(pi);
+          const cx = x1 + (x2 - x1) * 0.5;
+          const d = `M ${x1} ${y1} C ${cx} ${y1}, ${cx} ${y2}, ${x2} ${y2}`;
+          return <path key={`${g}-${pi}`} d={d} stroke={color}
+                       strokeWidth="1.5" strokeOpacity="0.4" fill="none" />;
+        });
+      })}
+    </svg>
+  );
+}
+
 
 
 function IntersectionVennCard({ data, message }) {
