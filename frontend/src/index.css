@@ -217,6 +217,16 @@ body {
     animation: fadeUp 0.7s ease-out both;
 }
 
+/* Typing cursor for streamed AI text */
+@keyframes caret-blink {
+    0%, 49% { opacity: 1; }
+    50%, 100% { opacity: 0; }
+}
+.animate-caret {
+    animation: caret-blink 0.9s steps(1) infinite;
+}
+
+
 /* Focus rings */
 .brand-focus:focus-visible {
     outline: none;

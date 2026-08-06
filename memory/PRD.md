@@ -1421,3 +1421,50 @@ non-polling baseline.
 - `frontend/src/components/workspace/ProjectTab.jsx` (polling signature)
 - `frontend/src/components/research/cards.jsx` (memoised NetworkCard +
   ResultCard, added `memo` import)
+
+## 2026-02-06 (late) — Streaming Interpretation ✅
+
+Feature: the assistant's scientific interpretation now streams token-by-token
+into the right-pane "Writing Interpretation…" card while a run is finishing —
+the chat feels alive instead of showing a blank spinner during the ~5-10 s
+Claude call.
+
+**Backend**
+- `research_service.interpret_stream()` — new async generator that uses
+  `LlmChat.stream_message()` and yields `TextDelta.content` chunks.
+- `routes/research._execute_in_background()` now consumes that stream and
+  writes the growing text to `runs.$.interpretation` every ~40 characters,
+  flipping `runs.$.interp_streaming` between `True` (during) and `False`
+  (final). The status endpoint already returned `interpretation`; it now
+  also exposes `interp_streaming` via `_serialize_run`.
+
+**Frontend**
+- `ProjectTab.startPolling` — polling loop tightened to 700 ms (was 1000 ms)
+  and its signature now also tracks interpretation length + streaming flag,
+  so growing text is surfaced without spurious re-renders on unchanged
+  polls. Flicker fix from earlier iteration still applies.
+- New right-pane card renders the interpretation with a **LIVE** pill and a
+  blinking caret (`animate-caret` keyframe added to `index.css`) while
+  `interp_streaming` is true. Card flips to a static "Latest Interpretation"
+  the moment streaming ends.
+
+**Verified end-to-end** — On a Quercetin target-prediction run:
+- t≈+4 s: interpretation length grew from 0 → 122 chars, badge became
+  visible.
+- t≈+9 s: 967 chars, still streaming.
+- t≈+11 s: run flipped to `completed`, badge disappeared, final
+  interpretation message appended to left-pane chat.
+Playwright snapshot confirmed the LIVE pill + text growth + caret animation.
+
+**Files touched**
+- `backend/research_service.py`  (added `interpret_stream`)
+- `backend/routes/research.py`   (executor uses stream + flushes;
+                                  `_serialize_run` exposes `interp_streaming`)
+- `frontend/src/components/workspace/ProjectTab.jsx` (700 ms poll, sig
+                                  extended, streaming card w/ caret)
+- `frontend/src/index.css`       (`@keyframes caret-blink`)
+
+**Next Action Items**
+- Plan streaming (harder — planner output is strict JSON, would need
+  natural-language rationale prefix).
+- Server-Sent-Events channel to eliminate polling entirely (nice-to-have).

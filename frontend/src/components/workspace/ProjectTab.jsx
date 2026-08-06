@@ -105,6 +105,8 @@ export function ProjectTab({ tabId, projectId, initialPrompt, panelRatio,
           s: status.status,
           p: (status.plan || []).map((x) => [x.id, x.status, x.progress?.detail || null]),
           r: (status.results || []).map((x) => [x.id, x.status]),
+          i: (status.interpretation || "").length,
+          st: !!status.interp_streaming,
         });
         if (sig !== lastSig) {
           lastSig = sig;
@@ -125,7 +127,7 @@ export function ProjectTab({ tabId, projectId, initialPrompt, panelRatio,
           setProject(fresh);
         }
       } catch { /* ignore */ }
-    }, 1000);
+    }, 700);
   };
 
   useEffect(() => () => pollRef.current && clearInterval(pollRef.current), []);
@@ -318,14 +320,37 @@ export function ProjectTab({ tabId, projectId, initialPrompt, panelRatio,
                     </div>
                   ))
                 )}
-                {(project.runs || []).some((r) => r.interpretation) && (
-                  <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-[13px] leading-relaxed text-slate-100">
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-emerald-300 mb-1">
-                      Latest Interpretation
+                {(() => {
+                  const lastInterp = (project.runs || [])
+                    .filter((r) => r.interpretation).slice(-1)[0];
+                  if (!lastInterp) return null;
+                  const streaming = !!lastInterp.interp_streaming;
+                  return (
+                    <div data-testid="interpretation-card"
+                         className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-[13px] leading-relaxed text-slate-100">
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="text-[10px] font-bold uppercase tracking-widest text-emerald-300">
+                          {streaming ? "Writing Interpretation…" : "Latest Interpretation"}
+                        </div>
+                        {streaming && (
+                          <span data-testid="interp-streaming-badge"
+                                className="inline-flex items-center gap-1 rounded-full bg-emerald-400/15 border border-emerald-400/30 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-200">
+                            <span className="h-1 w-1 rounded-full bg-emerald-300 animate-pulse" />
+                            LIVE
+                          </span>
+                        )}
+                      </div>
+                      <div data-testid="interpretation-text"
+                           className="whitespace-pre-wrap">
+                        {lastInterp.interpretation}
+                        {streaming && (
+                          <span data-testid="interp-cursor"
+                                className="ml-0.5 inline-block h-4 w-[7px] translate-y-0.5 bg-emerald-300 align-baseline animate-caret" />
+                        )}
+                      </div>
                     </div>
-                    {(project.runs || []).filter((r) => r.interpretation).slice(-1)[0]?.interpretation}
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             </div>
           }

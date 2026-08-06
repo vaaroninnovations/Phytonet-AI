@@ -77,6 +77,7 @@ def _serialize_run(r: dict) -> dict:
         "plan":   r.get("plan") or [],
         "results": r.get("results") or [],
         "interpretation": r.get("interpretation"),
+        "interp_streaming": bool(r.get("interp_streaming", False)),
         "next_steps": r.get("next_steps") or [],
         "created_at": r.get("created_at"),
         "completed_at": r.get("completed_at"),
@@ -447,17 +448,35 @@ async def _execute_in_background(db, oid_str: str, pid: str, run_id: str):
         if status == "error":
             break
 
-    # Ask Claude for a natural-language interpretation of the run + a set
-    # of personalised follow-up suggestions the researcher could click.
+    # Stream the natural-language interpretation token-by-token, saving
+    # partial text to the run doc as each chunk arrives. Existing /status
+    # polling then surfaces the growing text progressively — no SSE needed.
     interpretation = ""
     next_steps: list[str] = []
     try:
-        interpretation = await research_service.interpret(
-            {"title": run.get("title"),
-             "reasoning": run.get("reasoning"),
-             "plan": plan_steps},
-            results, pid,
-        )
+        buf: list[str] = []
+        # Flush to Mongo every N chars (or every 300 ms) to avoid write storms.
+        FLUSH_EVERY = 40
+        last_flush_len = 0
+        async for delta in research_service.interpret_stream(
+                {"title": run.get("title"),
+                 "reasoning": run.get("reasoning"),
+                 "plan": plan_steps},
+                results, pid):
+            if not delta:
+                continue
+            buf.append(delta)
+            joined_len = sum(len(x) for x in buf)
+            if joined_len - last_flush_len >= FLUSH_EVERY:
+                last_flush_len = joined_len
+                await col.update_one(
+                    {"_id": oid, "runs.id": run_id},
+                    {"$set": {
+                        "runs.$.interpretation": "".join(buf),
+                        "runs.$.interp_streaming": True,
+                    }},
+                )
+        interpretation = "".join(buf).strip()
     except Exception as e:
         logger.warning(f"[research] interpret error: {e}")
     try:
@@ -474,10 +493,11 @@ async def _execute_in_background(db, oid_str: str, pid: str, run_id: str):
     await col.update_one(
         {"_id": oid, "runs.id": run_id},
         {"$set": {
-            "runs.$.status":         final_status,
-            "runs.$.interpretation": interpretation,
-            "runs.$.next_steps":     next_steps,
-            "runs.$.completed_at":   now_iso,
+            "runs.$.status":            final_status,
+            "runs.$.interpretation":    interpretation,
+            "runs.$.interp_streaming":  False,
+            "runs.$.next_steps":        next_steps,
+            "runs.$.completed_at":      now_iso,
         }},
     )
     # Append the interpretation as an assistant message so it stays in chat

@@ -709,6 +709,37 @@ async def interpret(plan: dict, results: list[dict], project_id: str) -> str:
         return "Workflow complete. See the results panel for details."
 
 
+async def interpret_stream(plan: dict, results: list[dict], project_id: str):
+    """Stream the scientific interpretation token-by-token so the frontend
+    can render it progressively (via /status polling reading the run's
+    interpretation field as it grows). Yields plain-text deltas."""
+    chat = _new_chat(f"research:{project_id}:interp", _SYSTEM_INTERPRETER)
+    payload = {
+        "title": plan.get("title"),
+        "reasoning": plan.get("reasoning"),
+        "steps":  [{"label": s.get("label"), "tool": s.get("tool")}
+                   for s in plan.get("plan", [])],
+        "results": [{
+            "label":       r.get("label"),
+            "status":      r.get("status"),
+            "summary":     (r.get("result") or {}).get("message"),
+            "data_preview": _preview((r.get("result") or {}).get("data")),
+        } for r in results],
+    }
+    try:
+        # Local import to avoid a hard dependency at module load.
+        from emergentintegrations.llm.chat import TextDelta
+        stream = chat.stream_message(UserMessage(
+            text=json.dumps(payload, default=str)[:8000]
+        ))
+        async for evt in stream:
+            if isinstance(evt, TextDelta) and evt.content:
+                yield evt.content
+    except Exception as e:
+        logger.warning(f"[research] interpretation stream failed: {e}")
+        yield "Workflow complete. See the results panel for details."
+
+
 async def suggest_next_steps(plan: dict, results: list[dict],
                               project_id: str) -> list[str]:
     """Ask Claude for 3-4 personalised next-step prompts based on what just
