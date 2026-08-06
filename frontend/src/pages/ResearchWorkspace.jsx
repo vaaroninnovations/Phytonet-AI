@@ -363,21 +363,35 @@ function ResultCard({ result, onOpen }) {
   }
   if (card === "target_table") {
     const rows = d.targets || [];
-    return <TableCard testid="target-table" title="Disease-Associated Targets" subtitle={msg}
+    const fmt = (v, n = 2) => (v === null || v === undefined || v === "") ? "—"
+      : typeof v === "number" ? v.toFixed(n) : String(v);
+    return <TableCard testid="target-table" title="Predicted Targets" subtitle={msg}
       rows={rows} downloadBase="targets" onOpen={onOpen}
       columns={[
+        { key: "compound_name", label: "Compound",
+          tooltip: "Query compound (from prior step)",
+          render: (r) => r.compound_name || r.query_compound || "—" },
         { key: "gene", label: "Gene",
-          tooltip: "Gene symbol (HGNC)",
+          tooltip: "Predicted target gene symbol (HGNC)",
           render: (r) => r.gene || r.gene_symbol || r.symbol || "—" },
-        { key: "score", label: "Score",
-          tooltip: "Overall evidence score across all sources (0-1)",
-          render: (r) => (r.score ?? r.overall_score ?? "").toString().slice(0, 6) || "—" },
-        { key: "source", label: "Source",
-          tooltip: "Contributing databases (Open Targets, CTD, NCBI Gene)",
-          render: (r) => r.source || (r.sources || []).join(", ") || "—" },
         { key: "uniprot", label: "UniProt",
-          tooltip: "UniProt accession for the encoded protein",
+          tooltip: "UniProt accession of the predicted protein target",
           render: (r) => r.uniprot_id || r.uniprot || "—" },
+        { key: "target_name", label: "Target Name",
+          tooltip: "Full name of the predicted protein",
+          render: (r) => (r.target_name || r.pref_name || "").slice(0, 40) || "—" },
+        { key: "similarity", label: "Similarity",
+          tooltip: "Tanimoto similarity to the nearest known ChEMBL ligand (0-1)",
+          render: (r) => fmt(r.similarity, 2) },
+        { key: "pchembl", label: "pChEMBL",
+          tooltip: "-log10(activity in M) of the nearest ChEMBL bioactivity (higher = more potent)",
+          render: (r) => fmt(r.pchembl, 2) },
+        { key: "score", label: "Score",
+          tooltip: "Overall confidence score (0-1)",
+          render: (r) => fmt(r.score ?? r.overall_score, 3) },
+        { key: "source", label: "Source",
+          tooltip: "Evidence source (ChEMBL / SwissTargetPrediction / Open Targets)",
+          render: (r) => r.source || (r.sources || []).join(", ") || "—" },
       ]} />;
   }
   if (card === "disease_table") {

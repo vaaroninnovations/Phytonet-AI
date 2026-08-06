@@ -113,6 +113,81 @@ async def tool_compound_lookup(compound: str,
             "data": data}
 
 
+async def tool_target_predict(smiles: list[str] | str | None = None,
+                               compounds: list[dict] | None = None,
+                               progress=_noop_progress, **_) -> dict:
+    """Predict protein targets FOR a set of compounds via ChEMBL similarity +
+    SwissTargetPrediction. Accepts the same shape as admet_predict so it can
+    chain from a plant_search result."""
+    payload_compounds: list[dict] = []
+    if compounds:
+        for c in compounds:
+            if not isinstance(c, dict):
+                continue
+            smi = (c.get("canonical_smiles") or c.get("smiles") or "").strip()
+            if smi:
+                payload_compounds.append({
+                    "smiles": smi,
+                    "canonical_smiles": smi,
+                    "compound_name": c.get("compound_name") or c.get("name"),
+                    "molecular_formula": c.get("molecular_formula"),
+                    "molecular_weight": c.get("molecular_weight"),
+                })
+    else:
+        smi_list = [smiles] if isinstance(smiles, str) else list(smiles or [])
+        for s in smi_list:
+            s = (s or "").strip()
+            if s:
+                payload_compounds.append({"smiles": s, "canonical_smiles": s})
+
+    if not payload_compounds:
+        return {"status": "error",
+                "message": "Target prediction needs at least one compound. "
+                           "Provide `smiles` (str or list) or `compounds` "
+                           "(list of {smiles, ...})."}
+
+    await progress("submitting",
+                   f"Submitting {len(payload_compounds)} compound(s) to the "
+                   f"target-prediction pipeline…")
+    job = await _post("/api/target/predict", {"compounds": payload_compounds})
+    job_id = job.get("job_id")
+    total  = job.get("total", len(payload_compounds))
+    if not job_id:
+        return {"status": "error",
+                "message": "Target-prediction job did not return an id."}
+    await progress("running",
+                   f"Querying ChEMBL + SwissTargetPrediction "
+                   f"(0/{total} compounds)…")
+
+    import asyncio
+    for _ in range(150):
+        s = await _get(f"/api/target/status/{job_id}")
+        st = (s.get("status") or "").lower()
+        done_ct = s.get("done") or 0
+        if done_ct:
+            await progress("running",
+                           f"Ranking targets by similarity ({done_ct}/{total})…")
+        if st in ("done", "success", "completed"):
+            await progress("finalizing",
+                           "Aggregating unique targets, sorting by score…")
+            rows = s.get("rows") or []
+            # Reshape rows so the frontend target_table renderer just works.
+            return {"status": "ok",
+                    "card": "target_table",
+                    "message": f"Target prediction complete — {len(rows)} "
+                               f"compound-target predictions across "
+                               f"{len({r.get('gene_symbol') for r in rows if r.get('gene_symbol')})} "
+                               f"unique targets.",
+                    "data": {"job_id": job_id, "total": total,
+                             "targets": rows}}
+        if st in ("error", "failed"):
+            return {"status": "error",
+                    "message": s.get("error") or "Target-prediction job failed."}
+        await asyncio.sleep(2)
+    return {"status": "error",
+            "message": "Target-prediction job timed out after 5 minutes."}
+
+
 async def tool_target_resolve(query: str,
                                progress=_noop_progress, **_) -> dict:
     """Resolve a protein target (gene symbol / uniprot) to full annotation."""
@@ -267,6 +342,13 @@ TOOL_REGISTRY: dict[str, dict[str, Any]] = {
     "compound_lookup":  {"fn": tool_compound_lookup,
                          "desc": "Look up a compound by name or SMILES "
                                  "→ PubChem CID + ChEBI. Args: {compound: str}."},
+    "target_predict":   {"fn": tool_target_predict,
+                         "desc": "Predict protein targets FOR a set of "
+                                 "compounds via ChEMBL similarity + Swiss"
+                                 "TargetPrediction. Provide `smiles` (single "
+                                 "string OR list) OR `compounds` (list of "
+                                 "{smiles, compound_name, ...}). Chains from "
+                                 "plant_search naturally."},
     "target_resolve":   {"fn": tool_target_resolve,
                          "desc": "Resolve a protein target (gene symbol / "
                                  "UniProt) → full annotation. Args: {query: str}."},
@@ -349,6 +431,11 @@ Plan:
   step_1  plant_search      {{"query": "Ashwagandha", "limit": 200}}
   step_2  admet_predict     {{"compounds": "$prev.compounds"}}
 
+User: "Predict protein targets for phytochemicals of Curcuma longa."
+Plan:
+  step_1  plant_search      {{"query": "Curcuma longa", "limit": 200}}
+  step_2  target_predict    {{"compounds": "$prev.compounds"}}
+
 User (follow-up on an existing project): "Now run ADMET on the top 25."
 Plan (SAFEST):
   step_1  plant_search      {{"query": "<plant from earlier turn>", "limit": 200}}
@@ -360,13 +447,19 @@ DEFAULT LIMITS
 • admet_predict: run across ALL compounds produced by the previous step \
 by default (matches the standalone Drug-Likeness page's behaviour). Only \
 slice with `[:N]` if the user EXPLICITLY asks for a top-N subset.
+• target_predict: same rule — all compounds by default, respect explicit \
+top-N slicing from the user.
 
-HARD RULES FOR admet_predict
-────────────────────────────
-• You MUST NEVER emit an admet_predict step whose `args` is empty or whose \
-compound source cannot be traced to (a) an earlier step in the SAME plan, \
-(b) a prior completed run in the SAME conversation, or (c) explicit SMILES \
-provided by the user. Prefer inserting a plant_search step in the same plan.
+HARD RULES FOR admet_predict AND target_predict
+───────────────────────────────────────────────
+• You MUST NEVER emit an admet_predict or target_predict step whose `args` \
+is empty or whose compound source cannot be traced to (a) an earlier step \
+in the SAME plan, (b) a prior completed run in the SAME conversation, or \
+(c) explicit SMILES provided by the user. Prefer inserting a plant_search \
+step in the same plan when in doubt.
+• target_resolve is DIFFERENT from target_predict — use target_resolve when \
+the user names a specific protein (e.g. "resolve AKT1") and target_predict \
+when the user asks which targets a compound might bind.
 
 OUTPUT FORMAT
 ─────────────
@@ -597,18 +690,18 @@ async def execute_step(step: dict,
     args = resolve_args(step.get("args") or {},
                         prior_results or [], project_context or [])
 
-    # ── Defensive auto-injection for admet_predict ─────────────────
-    # If Claude planned admet_predict without SMILES (e.g. user asked as a
-    # follow-up "now run ADMET"), scan every source for compounds and inject
-    # the most recent list automatically. This makes the chat feel like the
-    # standalone linear workflow — outputs of one step become inputs of the
-    # next, even across turns.
-    if tool_name == "admet_predict" and not (args.get("compounds")
-                                              or args.get("smiles")):
+    # ── Defensive auto-injection for compound-driven tools ────────
+    # If Claude planned admet_predict or target_predict without SMILES
+    # (e.g. user asked as a follow-up "now run ADMET" or "predict targets
+    # for these compounds"), scan every source for compounds and inject
+    # the most recent list automatically. Matches how the standalone
+    # linear workflow chains outputs → inputs across turns.
+    if tool_name in ("admet_predict", "target_predict") and not (
+            args.get("compounds") or args.get("smiles")):
         found = _auto_pick_compounds(prior_results or [], project_context or [])
         if found:
             args["compounds"] = found
-            logger.info(f"[research] admet_predict auto-injected "
+            logger.info(f"[research] {tool_name} auto-injected "
                         f"{len(found)} compounds from project context")
 
     # Wire live progress callback into the tool call so stage-by-stage
