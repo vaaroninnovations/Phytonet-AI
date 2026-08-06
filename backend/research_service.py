@@ -160,10 +160,12 @@ async def tool_admet_predict(smiles: list[str] | str | None = None,
                               **_) -> dict:
     """Predict ADMET for a list of SMILES OR a list of compound dicts.
     Accepts either shape so Claude can chain a plant_search result into it."""
-    # Normalize input into the shape expected by /api/admet/predict
+    # Normalize input into the shape expected by /api/admet/predict.
+    # No hard truncation — ADMET runs across the entire supplied set, just
+    # like the standalone Drug-Likeness page.
     payload_compounds: list[dict] = []
     if compounds:
-        for c in compounds[:250]:
+        for c in compounds:
             if not isinstance(c, dict):
                 continue
             smi = ((c.get("canonical_smiles") or c.get("smiles") or "")
@@ -178,7 +180,7 @@ async def tool_admet_predict(smiles: list[str] | str | None = None,
                 })
     else:
         smi_list = [smiles] if isinstance(smiles, str) else list(smiles or [])
-        for s in smi_list[:250]:
+        for s in smi_list:
             s = (s or "").strip()
             if s:
                 payload_compounds.append({"smiles": s})
@@ -355,8 +357,9 @@ Plan (SAFEST):
 DEFAULT LIMITS
 ──────────────
 • plant_search: default limit=200 (returns 100-200 compounds per plant).
-• admet_predict: when chaining after plant_search, DEFAULT TO TOP 25 unless \
-the user explicitly asks for all. ADMET can be slow at scale.
+• admet_predict: run across ALL compounds produced by the previous step \
+by default (matches the standalone Drug-Likeness page's behaviour). Only \
+slice with `[:N]` if the user EXPLICITLY asks for a top-N subset.
 
 HARD RULES FOR admet_predict
 ────────────────────────────
@@ -565,13 +568,11 @@ async def execute_step(step: dict,
 
 def _auto_pick_compounds(prior_results: list[dict],
                          project_context: list[dict],
-                         limit: int = 25) -> list[dict]:
-    """Return the most-recent compound list from anywhere we know about.
-    Order of preference:
-      1. This run's earlier steps (newest first)
-      2. Earlier runs in the same project (newest first)
-      3. SMILES extracted from uploaded CSV/Excel attachments
-    """
+                         limit: int | None = None) -> list[dict]:
+    """Return the compound list from anywhere we know about — full set by
+    default so ADMET runs across every compound produced upstream (parity
+    with the standalone Drug-Likeness page). Caller may pass a soft `limit`
+    only when the user explicitly asks for a subset."""
     for pool in (prior_results, project_context):
         for step in reversed(pool):
             if step.get("status") != "done":
@@ -579,19 +580,17 @@ def _auto_pick_compounds(prior_results: list[dict],
             data = (step.get("result") or {}).get("data") or {}
             compounds = data.get("compounds")
             if isinstance(compounds, list) and compounds:
-                # Slice to a sensible default and require SMILES presence
                 selected = [c for c in compounds
                             if isinstance(c, dict) and (c.get("smiles")
                                                        or c.get("canonical_smiles"))]
                 if selected:
-                    return selected[:limit]
-    # Fallback: SMILES from uploaded attachments (packed as pseudo-steps by
-    # _execute_in_background — see routes/research.py)
+                    return selected if limit is None else selected[:limit]
     for step in reversed(project_context):
         data = (step.get("result") or {}).get("data") or {}
         smis = data.get("smiles_extracted")
         if isinstance(smis, list) and smis:
-            return [{"smiles": s} for s in smis[:limit]]
+            picked = [{"smiles": s} for s in smis]
+            return picked if limit is None else picked[:limit]
     return []
 
 

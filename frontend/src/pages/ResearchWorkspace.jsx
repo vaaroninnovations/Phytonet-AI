@@ -164,11 +164,8 @@ function PlanCard({ plan, title, onExecute, executing, executed }) {
   );
 }
 
-function TableCard({ testid, title, rows, columns, downloadBase, subtitle, onOpen }) {
+function TableCard({ testid, title, rows, columns, downloadBase, subtitle, onOpen, groups }) {
   const total = rows.length;
-  // For downloads, expose EVERY key from every row (union) — not just the
-  // 12 preview columns. This is what makes CSV/Excel from the chat match the
-  // standalone module's full export.
   const fullColumns = useMemo(() => {
     const seen = new Map();
     for (const c of columns) seen.set(c.key, c.label);
@@ -226,9 +223,26 @@ function TableCard({ testid, title, rows, columns, downloadBase, subtitle, onOpe
       <div className="mt-3 max-h-[420px] overflow-y-auto overflow-x-auto rounded-lg border border-white/5 bg-black/20">
         <table className="w-full text-[12.5px]">
           <thead className="sticky top-0 bg-black/70 backdrop-blur-sm z-10">
+            {groups && groups.length > 0 && (
+              <tr className="border-b border-white/10">
+                {groups.map((g, i) => (
+                  <th key={i}
+                      colSpan={g.span}
+                      className={`text-left py-1.5 px-3 text-[10.5px] font-bold uppercase tracking-widest ${g.className || "text-slate-300"}`}>
+                    {g.label}
+                  </th>
+                ))}
+              </tr>
+            )}
             <tr className="text-[10.5px] uppercase tracking-wider text-slate-400 border-b border-white/10">
               {columns.map((c) => (
-                <th key={c.key} className="text-left py-2 px-3 font-semibold">{c.label}</th>
+                <th key={c.key}
+                    title={c.tooltip || c.label}
+                    className="text-left py-2 px-3 font-semibold cursor-help">
+                  <span className="border-b border-dotted border-slate-500/60">
+                    {c.label}
+                  </span>
+                </th>
               ))}
             </tr>
           </thead>
@@ -330,11 +344,21 @@ function ResultCard({ result, onOpen }) {
     return <TableCard testid="compound-table" title="Compounds" subtitle={msg}
       rows={rows} downloadBase="compounds" onOpen={onOpen}
       columns={[
-        { key: "compound_name", label: "Name", render: (r) => r.compound_name || r.name || r.iupac_name || "—" },
-        { key: "molecular_formula", label: "Formula", render: (r) => r.molecular_formula || "—" },
-        { key: "molecular_weight", label: "MW", render: (r) => (r.molecular_weight || "").toString().slice(0, 8) || "—" },
-        { key: "smiles", label: "SMILES", render: (r) => <span className="font-mono text-[11px]">{(r.smiles || r.canonical_smiles || "—").slice(0, 32)}</span> },
-        { key: "source", label: "Source", render: (r) => r.source || r.lotus_id ? "LOTUS" : r.imppat_id ? "IMPPAT" : "—" },
+        { key: "compound_name", label: "Name",
+          tooltip: "Compound name from source database",
+          render: (r) => r.compound_name || r.name || r.iupac_name || "—" },
+        { key: "molecular_formula", label: "Formula",
+          tooltip: "Molecular formula (Hill notation)",
+          render: (r) => r.molecular_formula || "—" },
+        { key: "molecular_weight", label: "MW (Da)",
+          tooltip: "Molecular weight in daltons",
+          render: (r) => (r.molecular_weight || "").toString().slice(0, 8) || "—" },
+        { key: "smiles", label: "SMILES",
+          tooltip: "Canonical SMILES structure",
+          render: (r) => <span className="font-mono text-[11px]">{(r.smiles || r.canonical_smiles || "—").slice(0, 32)}</span> },
+        { key: "source", label: "Source",
+          tooltip: "Origin database (IMPPAT / LOTUS / PubChem)",
+          render: (r) => r.source || r.lotus_id ? "LOTUS" : r.imppat_id ? "IMPPAT" : "—" },
       ]} />;
   }
   if (card === "target_table") {
@@ -342,10 +366,18 @@ function ResultCard({ result, onOpen }) {
     return <TableCard testid="target-table" title="Disease-Associated Targets" subtitle={msg}
       rows={rows} downloadBase="targets" onOpen={onOpen}
       columns={[
-        { key: "gene", label: "Gene", render: (r) => r.gene || r.gene_symbol || r.symbol || "—" },
-        { key: "score", label: "Score", render: (r) => (r.score ?? r.overall_score ?? "").toString().slice(0, 6) || "—" },
-        { key: "source", label: "Source", render: (r) => r.source || (r.sources || []).join(", ") || "—" },
-        { key: "uniprot", label: "UniProt", render: (r) => r.uniprot_id || r.uniprot || "—" },
+        { key: "gene", label: "Gene",
+          tooltip: "Gene symbol (HGNC)",
+          render: (r) => r.gene || r.gene_symbol || r.symbol || "—" },
+        { key: "score", label: "Score",
+          tooltip: "Overall evidence score across all sources (0-1)",
+          render: (r) => (r.score ?? r.overall_score ?? "").toString().slice(0, 6) || "—" },
+        { key: "source", label: "Source",
+          tooltip: "Contributing databases (Open Targets, CTD, NCBI Gene)",
+          render: (r) => r.source || (r.sources || []).join(", ") || "—" },
+        { key: "uniprot", label: "UniProt",
+          tooltip: "UniProt accession for the encoded protein",
+          render: (r) => r.uniprot_id || r.uniprot || "—" },
       ]} />;
   }
   if (card === "disease_table") {
@@ -353,9 +385,15 @@ function ResultCard({ result, onOpen }) {
     return <TableCard testid="disease-table" title="Disease Search" subtitle={msg}
       rows={rows} downloadBase="diseases" onOpen={onOpen}
       columns={[
-        { key: "name", label: "Disease", render: (r) => r.name || r.disease_name || r.label || "—" },
-        { key: "id", label: "ID", render: (r) => r.disease_id || r.efo_id || r.mondo_id || r.id || "—" },
-        { key: "score", label: "Score", render: (r) => (r.score ?? "").toString().slice(0, 6) },
+        { key: "name", label: "Disease",
+          tooltip: "Disease / condition name",
+          render: (r) => r.name || r.disease_name || r.label || "—" },
+        { key: "id", label: "ID",
+          tooltip: "Cross-reference ID (EFO / MONDO / DisGeNET)",
+          render: (r) => r.disease_id || r.efo_id || r.mondo_id || r.id || "—" },
+        { key: "score", label: "Score",
+          tooltip: "Match relevance score from Open Targets",
+          render: (r) => (r.score ?? "").toString().slice(0, 6) },
       ]} />;
   }
   if (card === "admet_table") {
@@ -365,21 +403,78 @@ function ResultCard({ result, onOpen }) {
     const pass = (v) => v === true ? <span className="text-emerald-400">✓</span>
                         : v === false ? <span className="text-rose-400">✗</span>
                         : "—";
-    return <TableCard testid="admet-table" title="ADMET & Drug-likeness" subtitle={msg}
+    // Convert normalised LD50 → mg/kg. Backend returns log10(mg/kg) — invert.
+    const ld50mgkg = (r) => {
+      const raw = r.ld50 ?? r["ld50_log"] ?? null;
+      if (raw === null || raw === undefined || raw === "") return "—";
+      // Heuristic: if the value is > 20, assume it's already mg/kg; if <= 20,
+      // assume it's log10(mg/kg) and invert.
+      const n = Number(raw);
+      if (Number.isNaN(n)) return "—";
+      const mgkg = n > 20 ? n : Math.pow(10, n);
+      return mgkg.toLocaleString(undefined, { maximumFractionDigits: 0 });
+    };
+    return <TableCard testid="admet-table" title="ADMET & Drug-Likeness" subtitle={msg}
       rows={rows} downloadBase="admet" onOpen={onOpen}
+      groups={[
+        { label: "Identity",       span: 2, className: "text-slate-400" },
+        { label: "Drug-Likeness",  span: 4, className: "text-emerald-300" },
+        { label: "ADME",           span: 6, className: "text-sky-300" },
+        { label: "Toxicity",       span: 4, className: "text-rose-300" },
+      ]}
       columns={[
-        { key: "compound_name", label: "Name", render: (r) => r.compound_name || "—" },
-        { key: "smiles", label: "SMILES", render: (r) => <span className="font-mono text-[11px]">{(r.smiles || "").slice(0, 24)}</span> },
-        { key: "mw", label: "MW", render: (r) => fmt(r.mw, 1) },
-        { key: "logp", label: "logP", render: (r) => fmt(r.logp) },
-        { key: "tpsa", label: "TPSA", render: (r) => fmt(r.tpsa, 1) },
-        { key: "hba", label: "HBA", render: (r) => fmt(r.hba, 0) },
-        { key: "hbd", label: "HBD", render: (r) => fmt(r.hbd, 0) },
-        { key: "qed", label: "QED", render: (r) => fmt(r.qed, 3) },
-        { key: "lipinski_pass", label: "Ro5", render: (r) => pass(r.lipinski_pass) },
-        { key: "veber_pass", label: "Veber", render: (r) => pass(r.veber_pass) },
-        { key: "bbb", label: "BBB", render: (r) => fmt(r.bbb, 2) },
-        { key: "hia", label: "HIA", render: (r) => fmt(r.hia, 2) },
+        /* Identity */
+        { key: "compound_name", label: "Name",
+          tooltip: "Compound name from IMPPAT / LOTUS / PubChem",
+          render: (r) => r.compound_name || "—" },
+        { key: "smiles", label: "SMILES",
+          tooltip: "Canonical SMILES string",
+          render: (r) => <span className="font-mono text-[11px]">{(r.smiles || "").slice(0, 24)}</span> },
+        /* Drug-Likeness */
+        { key: "mw", label: "MW (Da)",
+          tooltip: "Molecular weight in daltons. Lipinski threshold: ≤500 Da.",
+          render: (r) => fmt(r.mw, 1) },
+        { key: "logp", label: "logP",
+          tooltip: "Octanol-water partition coefficient. Lipinski threshold: ≤5.",
+          render: (r) => fmt(r.logp) },
+        { key: "qed", label: "QED",
+          tooltip: "Quantitative Estimate of Drug-likeness (0-1, higher is better).",
+          render: (r) => fmt(r.qed, 3) },
+        { key: "lipinski_pass", label: "Lipinski Ro5",
+          tooltip: "Passes Lipinski's Rule of Five: MW≤500, logP≤5, HBD≤5, HBA≤10.",
+          render: (r) => pass(r.lipinski_pass) },
+        /* ADME */
+        { key: "tpsa", label: "TPSA (Å²)",
+          tooltip: "Topological polar surface area in Ų. Veber threshold: ≤140 Å².",
+          render: (r) => fmt(r.tpsa, 1) },
+        { key: "hba", label: "HBA",
+          tooltip: "Hydrogen bond acceptors. Lipinski threshold: ≤10.",
+          render: (r) => fmt(r.hba, 0) },
+        { key: "hbd", label: "HBD",
+          tooltip: "Hydrogen bond donors. Lipinski threshold: ≤5.",
+          render: (r) => fmt(r.hbd, 0) },
+        { key: "hia", label: "HIA",
+          tooltip: "Human intestinal absorption probability (0-1).",
+          render: (r) => fmt(r.hia, 2) },
+        { key: "bbb", label: "BBB",
+          tooltip: "Blood-brain barrier permeability probability (0-1).",
+          render: (r) => fmt(r.bbb, 2) },
+        { key: "caco2", label: "Caco-2 (log)",
+          tooltip: "Caco-2 cell permeability, log10(10⁻⁶ cm/s).",
+          render: (r) => fmt(r.caco2, 2) },
+        /* Toxicity */
+        { key: "ld50", label: "LD50 (mg/kg)",
+          tooltip: "Rat oral median lethal dose. Higher = safer (>2000 = low toxicity).",
+          render: (r) => ld50mgkg(r) },
+        { key: "herg", label: "hERG",
+          tooltip: "hERG cardiotoxicity probability (0-1). Lower = safer.",
+          render: (r) => fmt(r.herg, 2) },
+        { key: "ames", label: "Ames",
+          tooltip: "Ames mutagenicity probability (0-1). Lower = safer.",
+          render: (r) => fmt(r.ames, 2) },
+        { key: "dili", label: "DILI",
+          tooltip: "Drug-induced liver injury probability (0-1). Lower = safer.",
+          render: (r) => fmt(r.dili, 2) },
       ]} />;
   }
   if (card === "compound_details" || card === "target_details") {
