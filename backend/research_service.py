@@ -317,21 +317,48 @@ async def tool_disease_targets(disease_id: str, limit: int = 30,
                    f"Scoring evidence across Open Targets + CTD…")
 
     if genes:
-        gene_set = {(g or "").upper() for g in genes if g}
-        overlap = [t for t in targets
-                   if (t.get("gene") or t.get("gene_symbol")
-                       or t.get("symbol") or "").upper() in gene_set]
+        # Normalise the caller's predicted gene list.
+        pred_syms: list[str] = []
+        seen: set[str] = set()
+        for g in (genes or []):
+            s = (g or "").strip().upper() if isinstance(g, str) else \
+                (g.get("gene") or g.get("gene_symbol") or g.get("symbol") or "").strip().upper() \
+                if isinstance(g, dict) else ""
+            if s and s not in seen:
+                seen.add(s); pred_syms.append(s)
+
+        disease_syms: list[str] = []
+        seen_d: set[str] = set()
+        for t in targets:
+            g = (t.get("gene") or t.get("gene_symbol") or t.get("symbol") or "").strip().upper()
+            if g and g not in seen_d:
+                seen_d.add(g); disease_syms.append(g)
+
+        common = [g for g in pred_syms if g in seen_d]
+        predicted_only = [g for g in pred_syms if g not in seen_d]
+        disease_only   = [g for g in disease_syms if g not in seen]  # not in predicted
+
+        overlap_rows = [t for t in targets
+                        if (t.get("gene") or t.get("gene_symbol")
+                            or t.get("symbol") or "").strip().upper() in seen]
         await progress("intersecting",
-                       f"Intersecting {len(gene_set)} predicted targets "
-                       f"with {len(targets)} disease genes → {len(overlap)} hits.")
+                       f"Intersecting {len(pred_syms)} predicted targets "
+                       f"with {len(disease_syms)} disease genes → {len(common)} hits.")
+        disease_name = (data.get("disease_name") if isinstance(data, dict) else None) \
+                        or disease_id
         return {"status": "ok",
-                "card": "target_table",
-                "message": (f"{len(overlap)} of your predicted targets are "
-                            f"disease-associated in {disease_id} "
-                            f"(out of {len(targets)} total disease genes)."),
-                "data": {"disease_id": disease_id,
-                         "genes_queried": sorted(gene_set),
-                         "targets": overlap[:limit]}}
+                "card": "intersection_venn",
+                "message": (f"{len(common)} common gene(s) between your predicted "
+                            f"targets and {disease_name} "
+                            f"({len(pred_syms)} predicted · {len(disease_syms)} disease-linked)."),
+                "data": {"disease_id":              disease_id,
+                         "disease_name":            disease_name,
+                         "predicted_gene_symbols":  pred_syms,
+                         "disease_gene_symbols":    disease_syms[:500],
+                         "common":                  common,
+                         "predicted_only":          predicted_only,
+                         "disease_only":            disease_only[:500],
+                         "targets":                 overlap_rows[:limit]}}
 
     await progress("building", f"Building target table ({len(targets)} rows)…")
     return {"status": "ok",
@@ -1042,16 +1069,43 @@ def resolve_args(args: dict,
         if not step_res:
             return None
         payload = (step_res.get("result") or {}).get("data") or {}
+        # Support indexed lookups like `$step_1.hits[0]` or `.hits[0].efo_id`
+        idx = None
+        tail = ""
+        if "[" in path and "]" in path:
+            head, _, rest = path.partition("[")
+            idx_str, _, tail = rest.partition("]")
+            if tail.startswith("."):
+                tail = tail[1:]
+            try:
+                idx = int(idx_str)
+            except ValueError:
+                idx = None
+            path = head
         value = payload.get(path) if path else payload
+        if idx is not None and isinstance(value, list):
+            value = value[idx] if 0 <= idx < len(value) else None
+            if tail and isinstance(value, dict):
+                # Support both `.efo_id` directly and alias lookups.
+                subval = value.get(tail)
+                if subval in (None, ""):
+                    _ID_ALIASES = ("efo_id", "mondo_id", "id", "disease_id")
+                    for alt in _ID_ALIASES:
+                        if value.get(alt) not in (None, ""):
+                            subval = value[alt]
+                            break
+                value = subval
         # Compat aliases — Claude sometimes asks for "smiles" while
         # compound_lookup stores the SMILES under `canonical_smiles`, etc.
-        if path and (value is None or value == ""):
+        if path and (value is None or value == "") and isinstance(payload, dict):
             _ALIASES = {
                 "smiles":       ("canonical_smiles", "isomeric_smiles"),
                 "gene":         ("gene_symbol", "symbol"),
                 "gene_symbol":  ("gene", "symbol"),
                 "name":         ("iupac_name", "compound_name"),
                 "compound_name": ("name", "iupac_name"),
+                "id":           ("efo_id", "mondo_id", "disease_id",
+                                 "pubchem_cid", "uniprot_id"),
             }
             for alt in _ALIASES.get(path, ()):
                 if payload.get(alt) not in (None, ""):
@@ -1059,10 +1113,15 @@ def resolve_args(args: dict,
                     break
         if isinstance(value, list) and slice_spec:
             try:
-                start, stop = (slice_spec.split(":") + [""])[:2]
-                s = int(start) if start else None
-                e = int(stop)  if stop  else None
-                value = value[slice(s, e)]
+                if ":" not in slice_spec:
+                    # Bare index, e.g. $prev.hits[0]
+                    ii = int(slice_spec)
+                    value = value[ii] if 0 <= ii < len(value) else None
+                else:
+                    start, stop = (slice_spec.split(":") + [""])[:2]
+                    s = int(start) if start else None
+                    e = int(stop)  if stop  else None
+                    value = value[slice(s, e)]
             except Exception:
                 pass
         return value
