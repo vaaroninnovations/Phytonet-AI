@@ -1315,3 +1315,37 @@ Analysis" CTA. Home page itself is untouched.
 - P1 — AI Report enrichment with real ADMET + docking numbers.
 - P2 — Extract `NetworkCard.jsx` into its own file for React.lazy split.
 - P2 — Phase 2 assistant (PDF export, filters, scheduling).
+
+## 2026-02-06 (late pm) — Fix: Chat Blank & Flicker on First Send ✅
+
+Bug (from user screen recording): after clicking a suggestion or typing in the
+Home chat bar, the newly-opened project tab showed a blank chat area with only
+a "Planning with Claude Sonnet 4.5…" spinner for ~4 s. The user's message
+never appeared. Closing and reopening the project made it "look normal".
+
+**Root cause** — React 18 Strict-Mode dev double-invoked the `load(projectId)`
+effect. Both fetches were in flight; whichever resolved *last* called
+`setProject(data)` and overwrote:
+1. the optimistic user-message bubble we had just added, AND
+2. any real messages the send POST had already returned.
+
+The user perceived this as flicker or blank chat until the tab was
+closed/reopened (fresh mount, no race).
+
+**Fix (`ProjectTab.jsx`)**
+- Converted the load useEffect to an abort-safe pattern with `let alive =
+  true`; any pending fetch is discarded when the cleanup runs.
+- Kept the optimistic setProject for the user message so it appears within
+  ~50 ms of clicking send/suggestion (no more "empty" gap).
+
+**Fix (`useTabState.js`)**
+- `initialPrompt` is now stripped from tabs before persisting to
+  localStorage — otherwise, on reload, the tab would auto-fire the prompt
+  again and create duplicate messages.
+
+**Verified** — t=1 s: user bubble present · t=6 s: real plan card + first
+result · t=10 s: interpretation + 164 compounds table · No flicker.
+
+**Files touched**
+- `frontend/src/components/workspace/ProjectTab.jsx`
+- `frontend/src/hooks/useTabState.js`

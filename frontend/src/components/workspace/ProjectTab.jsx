@@ -29,23 +29,34 @@ export function ProjectTab({ tabId, projectId, initialPrompt, panelRatio,
   const rightScrollRef = useRef(null);
   const initialSent = useRef(false);
 
-  // ─── Load project ────────────────────────────────────────────────
-  const load = useCallback(async (pid) => {
+  // ─── Load project (abort-safe against Strict-Mode double-invoke) ─
+  useEffect(() => {
+    if (!projectId) return;
+    let alive = true;
     setLoading(true);
-    try {
-      const { data } = await authApi.get(`/research/projects/${pid}`);
-      setProject(data);
-      if (onTitleChange && data?.title) onTitleChange(data.title);
-    } catch (e) {
-      toast.error(e?.response?.data?.detail || "Failed to open project");
-    } finally { setLoading(false); }
-  }, [onTitleChange]);
-
-  useEffect(() => { if (projectId) load(projectId); }, [projectId, load]);
+    authApi.get(`/research/projects/${projectId}`)
+      .then(({ data }) => {
+        if (!alive) return;
+        setProject(data);
+        if (onTitleChange && data?.title) onTitleChange(data.title);
+      })
+      .catch((e) => {
+        if (!alive) return;
+        toast.error(e?.response?.data?.detail || "Failed to open project");
+      })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [projectId, onTitleChange]);
 
   // ─── Send message ────────────────────────────────────────────────
   const send = useCallback(async (prompt) => {
     if (!project) return;
+    // Optimistic user message so the composer never appears to "eat" the input.
+    setProject((cur) => cur ? {
+      ...cur,
+      messages: [...(cur.messages || []),
+                 { role: "user", text: prompt, _optimistic: true }],
+    } : cur);
     setSending(true);
     try {
       const { data } = await authApi.post(
@@ -59,6 +70,11 @@ export function ProjectTab({ tabId, projectId, initialPrompt, panelRatio,
       if (newRun?.id) execute(project.id, newRun.id);
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Failed to send message");
+      // Roll back the optimistic bubble.
+      setProject((cur) => cur ? {
+        ...cur,
+        messages: (cur.messages || []).filter((m) => !m._optimistic),
+      } : cur);
     } finally { setSending(false); }
   }, [project, attachments]);
 
@@ -204,7 +220,7 @@ export function ProjectTab({ tabId, projectId, initialPrompt, panelRatio,
                    data-testid="project-tab-left"
                    className="flex-1 overflow-y-auto">
                 <div className="mx-auto max-w-3xl px-5 py-5 space-y-5">
-                  {messages.length === 0 && (
+                  {messages.length === 0 && !sending && (
                     <div className="rounded-2xl border border-white/10 bg-white/5 p-5 text-center backdrop-blur-sm">
                       <Sparkles className="mx-auto text-[#a48bff]" size={20} />
                       <div className="mt-2 text-[14px] font-semibold text-slate-100">

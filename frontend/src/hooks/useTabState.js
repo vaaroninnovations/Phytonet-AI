@@ -37,9 +37,16 @@ export function useTabState(userId) {
     if (s) setState(s);
   }, [userId]);
 
-  // Persist
+  // Persist — but strip transient fields like `initialPrompt` that must not
+  // survive a reload (otherwise the tab would auto-send the prompt again).
   useEffect(() => {
-    try { localStorage.setItem(KEY(userId), JSON.stringify(state)); } catch {}
+    try {
+      const persistable = {
+        ...state,
+        tabs: state.tabs.map(({ initialPrompt, ...rest }) => rest),
+      };
+      localStorage.setItem(KEY(userId), JSON.stringify(persistable));
+    } catch {}
   }, [userId, state]);
 
   const openTab = useCallback((tab) => {
