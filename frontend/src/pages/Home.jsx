@@ -4,7 +4,7 @@
 // FAQ · Final CTA. Design: minimal white background, Manrope headlines,
 // Plus Jakarta Sans body, soft gradients + glassmorphism only where appropriate.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion, useInView } from "framer-motion";
 import {
   ArrowRight, ArrowUpRight, Check, ChevronRight, ChevronDown,
@@ -21,7 +21,9 @@ import { useNodes } from "@/context/NodeContext";
 
 /* ────────────────────────────── HERO ────────────────────────────── */
 function Hero() {
-  const { openModal, user } = useAuth();
+  const { openModal, user, guard } = useAuth();
+  const navigate = useNavigate();
+  const goToApp = () => guard(() => navigate("/app"));
   return (
     <section data-testid="hero" className="relative overflow-hidden pt-16 pb-24 lg:pt-24">
       {/* Blurred colour orbs */}
@@ -54,14 +56,15 @@ function Hero() {
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
-            <Link
-              to="/phytonet-ai"
+            <button
+              type="button"
+              onClick={goToApp}
               data-testid="hero-primary-cta"
               className="group inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#5139ED] via-[#395AED] to-[#8139ED] px-6 py-3.5 text-[14px] font-bold text-white shadow-[0_14px_36px_-10px_rgba(81,57,237,0.7)] transition-all hover:-translate-y-0.5 hover:shadow-[0_22px_48px_-12px_rgba(81,57,237,0.85)]"
             >
               Start Free Analysis
               <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-            </Link>
+            </button>
             <a
               href="#how"
               data-testid="hero-secondary-cta"
@@ -118,6 +121,9 @@ const PHYTONET_STEPS = [
 ];
 
 function WhyChoose() {
+  const { guard } = useAuth();
+  const navigate = useNavigate();
+  const goToApp = () => guard(() => navigate("/app"));
   return (
     <section id="why-phytonet" data-testid="why-choose" className="relative overflow-hidden bg-gradient-to-b from-white via-[#FAFAFF] to-white py-24">
       <div aria-hidden className="brand-blur absolute -left-40 top-20 h-[420px] w-[420px] bg-[#5139ED]" />
@@ -256,14 +262,15 @@ function WhyChoose() {
             PhytoNet AI integrates every stage of medicinal plant research into a single AI-powered
             platform, enabling faster discoveries, reproducible analyses, and publication-ready outputs.
           </p>
-          <Link
-            to="/phytonet-ai"
+          <button
+            type="button"
+            onClick={goToApp}
             data-testid="why-choose-cta"
             className="mt-5 inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#5139ED] via-[#395AED] to-[#8139ED] px-6 py-3 text-[13px] font-bold text-white shadow-[0_14px_36px_-10px_rgba(81,57,237,0.6)] transition-all hover:-translate-y-0.5"
           >
             Start Free Analysis
             <ArrowRight className="h-4 w-4" />
-          </Link>
+          </button>
         </div>
       </div>
     </section>
@@ -1014,6 +1021,9 @@ function Pricing() {
 
 /* ─────────────────────────── FINAL CTA ─────────────────────────── */
 function FinalCTA() {
+  const { guard } = useAuth();
+  const navigate = useNavigate();
+  const goToApp = () => guard(() => navigate("/app"));
   return (
     <section data-testid="final-cta" className="relative isolate overflow-hidden py-24">
       <div aria-hidden className="absolute inset-0 -z-10 bg-gradient-to-br from-[#5139ED] via-[#395AED] to-[#8139ED]" />
@@ -1026,10 +1036,10 @@ function FinalCTA() {
           Start building AI-powered medicinal plant discoveries today. No credit card required.
         </p>
         <div className="mt-8 flex flex-wrap justify-center gap-3">
-          <Link data-testid="final-cta-start" to="/phytonet-ai"
+          <button type="button" data-testid="final-cta-start" onClick={goToApp}
                 className="inline-flex items-center gap-2 rounded-full bg-white px-6 py-3.5 text-[14px] font-extrabold text-[#5139ED] shadow-[0_20px_50px_-15px_rgba(0,0,0,0.4)] hover:-translate-y-0.5">
             Start Research<ArrowRight className="h-4 w-4" />
-          </Link>
+          </button>
           <a data-testid="final-cta-docs" href="#faq"
              className="inline-flex items-center gap-2 rounded-full border border-white/40 bg-white/10 px-6 py-3.5 text-[14px] font-semibold text-white backdrop-blur hover:bg-white/20">
             View Documentation

@@ -3,7 +3,7 @@ import { Bot, User, Sparkles, ArrowRight } from "lucide-react";
 import { PlanCard, ResultCard } from "./cards";
 
 export function ChatMessage({ msg, run, onExecute, executing, onOpenRun, onSend,
-                              onRetryStep, retryingStepId }) {
+                              onRetryStep, retryingStepId, hideResults }) {
   const isUser = msg.role === "user";
   const Icon = isUser ? User : Bot;
   return (
@@ -51,7 +51,9 @@ export function ChatMessage({ msg, run, onExecute, executing, onOpenRun, onSend,
           />
         )}
         {run?.results?.map((res, i) => (
-          <ResultCard key={i} result={res.result} onOpen={() => onOpenRun(run)} />
+          hideResults
+            ? null
+            : <ResultCard key={i} result={res.result} onOpen={() => onOpenRun(run)} />
         ))}
       </div>
       {isUser && (

@@ -1,0 +1,31 @@
+{
+  "summary": "Frontend-only testing of the new /app tabbed workspace. Exercised guest→login→/app redirect via hero CTA, Home tab layout, project tab opening, split-pane drag + persistence, module tab iframe + preservation across tab switches, closability rules (Home not closable), and multi-tab persistence across reload. All 9 required scenarios verified (scenario 6 'new chat via home-chat-send' verified only up to project-tab creation & auto-prompt wiring; did not wait 60s for AI results). 100% of the observable checks passed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "ModuleTab iframe", "issues": ["The iframe loads the standalone route which itself renders SiteChrome (top nav), so users see the outer app header, then the workspace tabbar, then the ModuleTab's own toolbar, then the standalone page's own header inside the iframe — 3 stacked headers. Consider passing a query param (e.g., ?embed=1) that hides SiteChrome inside standalone pages when embedded."]},
+      {"screen": "Console warnings on /app", "issues": ["React hydration warning: <span> cannot be a child of <option> (originates from SiteChrome). Not blocking but should be cleaned up.", "cdn.tailwindcss.com production warning present (pre-existing across app, not new)."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "(Optional/UX) Suppress SiteChrome header inside ModuleTab iframes to avoid stacked-header visual clutter — e.g., set src to `${path}?embed=1` and hide SiteChrome when embed=1.",
+    "(Minor) Fix invalid <span> inside <option> in SiteChrome to eliminate the React hydration console error."
+  ],
+  "critical_code_review_comments": [
+    "useTabState.load: `panelSizes` and `scrollPos` are restored from localStorage — correct. Sanitization forces Home first & non-closable — good.",
+    "AppWorkspace correctly keeps all tabs mounted (display:none) so iframe state + ProjectTab chat state is preserved across tab switches — confirmed empirically.",
+    "SplitPane emits onChange only on mouseup (not on every move) — efficient; ratio persistence works correctly and survives reload.",
+    "ProjectTab uses initialSent ref + checks messages.length===0 before auto-sending initialPrompt — good guard against duplicate sends on reload."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (not requested)", "frontend": "100% (30/30 UI checks passed)"},
+  "test_credentials": "rtest1785979513@phytonetai.com / TestPass123! — worked",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "The /app tabbed workspace is fully functional. All data-testids used in review_request exist and behave as specified. Key confirmed testids: app-workspace, app-tabbar, tab-home (non-closable), tab-project:<id>, tab-module:<key>, home-chat-input/send, home-suggestion-0..3, home-project-<id> (8 cards render), home-modules with all 9 home-module-<key> cards, project-tab-<pid>, split-pane/left/right/divider, composer-input, module-iframe, module-open-new. Panel ratio & multi-tab list persist across page reload via localStorage key phytonet.app.tabs.v1.<userId>. Scenario 6 (new chat auto-execute + AI result cards after ~60s) was not waited out; the wiring (startNewChat → openTab with initialPrompt → ProjectTab auto-send) is verified in code and the project-tab creation path from Home was validated.",
+  "rca_of_the_issue": "N/A — no functional bugs found. Only cosmetic stacked-header suggestion inside ModuleTab iframe."
+}
