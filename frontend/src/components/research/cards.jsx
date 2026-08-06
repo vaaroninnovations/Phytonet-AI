@@ -2,7 +2,7 @@
 // Includes: PlanCard (with retry-failed-step), TableCard, ResultCard, NetworkCard,
 // and CSV / Excel / JSON download helpers.
 import cytoscape from "cytoscape";
-import { memo, useEffect, useMemo, useRef } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import {
   Sparkles, Loader2, CheckCircle2, Circle, XCircle, RotateCcw,
@@ -419,43 +419,7 @@ function ResultCardImpl({ result, onOpen }) {
       ]} />;
   }
   if (card === "enrichment_table") {
-    const kegg = (d.kegg || []).slice(0, 10);
-    const go   = (d.go   || []).slice(0, 10);
-    return <div data-testid="enrichment-card"
-                className="mt-2 rounded-2xl border border-white/10 bg-black/30 p-4 backdrop-blur-sm">
-      <div className="flex items-center gap-2">
-        <div className="text-[15px] font-semibold text-slate-100">Pathway Enrichment</div>
-        <span className="rounded-full bg-[#5139ED]/20 border border-[#5139ED]/40 px-2 py-0.5 text-[10.5px] font-semibold text-[#a48bff]">
-          {(d.genes || []).length} genes
-        </span>
-      </div>
-      <div className="mt-0.5 text-[11px] text-slate-400">{msg}</div>
-      <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-        {[
-          { title: "KEGG (Enrichr)", rows: kegg, testid: "enrichment-kegg" },
-          { title: "GO / Reactome (g:Profiler)", rows: go, testid: "enrichment-go" },
-        ].map((sec) => (
-          <div key={sec.title} data-testid={sec.testid} className="rounded-lg border border-white/5 bg-black/20 p-3">
-            <div className="text-[10.5px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">{sec.title}</div>
-            <ul className="space-y-1">
-              {sec.rows.map((t, i) => (
-                <li key={i} className="flex items-center justify-between gap-2 text-[12px]">
-                  <span className="truncate text-slate-200" title={t.term_name || t.name || t.term || ""}>
-                    {t.term_name || t.name || t.term || "—"}
-                  </span>
-                  <span className="text-[10.5px] font-mono text-emerald-300">
-                    p={((t.adjusted_p_value ?? t.adj_p_value ?? t.p_value ?? t.p_adj ?? t.pvalue) || 0).toExponential(1)}
-                  </span>
-                </li>
-              ))}
-              {sec.rows.length === 0 && (
-                <li className="text-[11px] text-slate-500 italic">No enriched terms.</li>
-              )}
-            </ul>
-          </div>
-        ))}
-      </div>
-    </div>;
+    return <EnrichmentCard data={d} message={msg} />;
   }
   if (card === "intersection_venn") {
     return <IntersectionVennCard data={d} message={msg} />;
@@ -499,7 +463,181 @@ export const ResultCard = memo(ResultCardImpl, (prev, next) => {
   return sig(a) === sig(b);
 });
 
-// ─── IntersectionVennCard (predicted-targets ∩ disease-genes) ────
+// ─── EnrichmentCard (KEGG + GO / Reactome with full workflow parity) ─
+function EnrichmentCard({ data, message }) {
+  const genesCount = (data?.genes || []).length;
+  const keggAll = data?.kegg || [];
+  const goAll   = data?.go   || [];
+  const [tab, setTab] = useState("kegg");
+  const [topN, setTopN] = useState(20);
+  const [maxAdjP, setMaxAdjP] = useState(0.05);
+
+  const rows = tab === "kegg" ? keggAll : goAll;
+
+  // Normalise each row across the two APIs so a single table renders both.
+  // NB: g:Profiler's `p_value` is ALREADY the g:SCS-corrected value, so for
+  // the GO tab we use it as the "adj_p_value" fallback (that's what the
+  // Enrichr KEGG side exposes explicitly).
+  const norm = useMemo(() => rows.map((r) => {
+    const p       = r.p_value ?? r.pvalue ?? null;
+    const adj     = r.adjusted_p_value ?? r.adj_p_value ?? r.p_adj ?? null;
+    const isGo    = tab !== "kegg";
+    return {
+      term:           r.term_name || r.name || r.term || "—",
+      source:         r.source || (tab === "kegg" ? "KEGG" : "GO"),
+      p_value:        p,
+      adj_p_value:    adj ?? (isGo ? p : null),
+      combined_score: r.combined_score ?? r.fold_enrichment ?? null,
+      gene_count:     r.gene_count ?? r.intersection_size ??
+                      (r.overlap_genes?.length ?? null),
+      overlap_genes:  r.overlap_genes || r.intersections || [],
+    };
+  }), [rows, tab]);
+
+  const filtered = useMemo(() => {
+    const passing = norm.filter((r) => (r.adj_p_value ?? 1) <= maxAdjP);
+    const sorted = passing.slice().sort((a, b) => {
+      // Sort by combined_score desc if available, else adj_p_value asc.
+      if (a.combined_score != null && b.combined_score != null)
+        return (b.combined_score || 0) - (a.combined_score || 0);
+      return (a.adj_p_value ?? 1) - (b.adj_p_value ?? 1);
+    });
+    return sorted.slice(0, topN);
+  }, [norm, topN, maxAdjP]);
+
+  const download = () => {
+    const cols = [
+      { key: "term", label: "Pathway" },
+      { key: "source", label: "Source" },
+      { key: "p_value", label: "P-value" },
+      { key: "adj_p_value", label: "Adj. P-value" },
+      { key: "combined_score", label: "Combined Score" },
+      { key: "gene_count", label: "Gene Count" },
+      { key: "overlap_genes", label: "Overlapping Genes",
+        render: (r) => (r.overlap_genes || []).join(";") },
+    ];
+    downloadCsv(filtered, cols, `${tab === "kegg" ? "kegg" : "go"}_pathways.csv`);
+  };
+
+  const maxLog = Math.max(1, ...filtered.map(
+    (r) => -Math.log10(Math.max(r.p_value || 1, 1e-30))));
+
+  return (
+    <div data-testid="enrichment-card"
+         className="mt-2 rounded-2xl border border-white/10 bg-black/30 p-4 backdrop-blur-sm">
+      {/* Header */}
+      <div className="flex flex-wrap items-center gap-2 mb-2">
+        <div className="text-[15px] font-semibold text-slate-100">Pathway Enrichment</div>
+        <span className="rounded-full bg-[#5139ED]/20 border border-[#5139ED]/40 px-2 py-0.5 text-[10.5px] font-semibold text-[#a48bff]">
+          {genesCount} genes
+        </span>
+        <span className="text-[11px] text-slate-500">
+          · {keggAll.length} KEGG · {goAll.length} GO/Reactome
+        </span>
+      </div>
+      <div className="text-[11.5px] text-slate-400 mb-3">{message}</div>
+
+      {/* Controls */}
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <div className="inline-flex rounded-lg border border-white/10 bg-white/5 p-0.5">
+          <button data-testid="enrichment-tab-kegg"
+                  onClick={() => setTab("kegg")}
+                  className={`px-2.5 py-1 rounded-md text-[11.5px] font-semibold ${
+                    tab === "kegg" ? "bg-[#5139ED] text-white" : "text-slate-300 hover:text-white"
+                  }`}>KEGG ({keggAll.length})</button>
+          <button data-testid="enrichment-tab-go"
+                  onClick={() => setTab("go")}
+                  className={`px-2.5 py-1 rounded-md text-[11.5px] font-semibold ${
+                    tab === "go" ? "bg-[#5139ED] text-white" : "text-slate-300 hover:text-white"
+                  }`}>GO / Reactome ({goAll.length})</button>
+        </div>
+        <label className="inline-flex items-center gap-1.5 text-[11px] text-slate-400">
+          Top N
+          <input type="number" data-testid="enrichment-topn"
+                 value={topN} min={1} max={200}
+                 onChange={(e) => setTopN(Math.max(1, Math.min(200, +e.target.value || 20)))}
+                 className="w-14 rounded border border-white/10 bg-black/40 px-1 py-0.5 text-[11px] text-slate-100" />
+        </label>
+        <label className="inline-flex items-center gap-1.5 text-[11px] text-slate-400">
+          Max adj. p
+          <input type="number" step="0.001" data-testid="enrichment-maxp"
+                 value={maxAdjP} min={0} max={1}
+                 onChange={(e) => setMaxAdjP(Math.max(0, Math.min(1, +e.target.value || 0.05)))}
+                 className="w-16 rounded border border-white/10 bg-black/40 px-1 py-0.5 text-[11px] text-slate-100" />
+        </label>
+        <button data-testid="enrichment-download"
+                onClick={download}
+                className="ml-auto inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-slate-200 hover:bg-white/10">
+          <FileText size={11} /> CSV
+        </button>
+      </div>
+
+      {/* Bubble strip — pathway name + gene_count + -log10(p) bar */}
+      <div data-testid="enrichment-rows"
+           className="max-h-[420px] overflow-y-auto rounded-lg border border-white/5 bg-black/20 divide-y divide-white/5">
+        {filtered.length === 0 && (
+          <div className="p-4 text-[12px] italic text-slate-500 text-center">
+            No enriched pathways below adj. p ≤ {maxAdjP}.
+            {norm.length > 0 && ` Try raising Max adj. p (current tab has ${norm.length} raw hits).`}
+          </div>
+        )}
+        {filtered.map((r, i) => {
+          const logp = -Math.log10(Math.max(r.p_value || 1, 1e-30));
+          const barPct = Math.max(4, Math.round(100 * logp / maxLog));
+          return (
+            <div key={i}
+                 className="px-3 py-2 flex items-center gap-3 text-[12.5px] hover:bg-white/[0.02]">
+              <div className="flex-1 min-w-0">
+                <div className="text-slate-100 truncate" title={r.term}>
+                  <span className="font-semibold">{i + 1}.</span> {r.term}
+                </div>
+                <div className="mt-0.5 text-[10.5px] text-slate-500 flex items-center gap-2 flex-wrap">
+                  <span>adj p = <span className="font-mono text-emerald-300">
+                    {(r.adj_p_value ?? 0).toExponential(2)}
+                  </span></span>
+                  {r.combined_score != null && (
+                    <span>· score <span className="font-mono">{(+r.combined_score).toFixed(1)}</span></span>
+                  )}
+                  {r.gene_count != null && (
+                    <span>· {r.gene_count} genes</span>
+                  )}
+                  <span>· {r.source}</span>
+                </div>
+                {(r.overlap_genes || []).length > 0 && (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {r.overlap_genes.slice(0, 8).map((g) => (
+                      <span key={g}
+                            className="inline-block rounded-full border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0 text-[10px] text-emerald-200">
+                        {g}
+                      </span>
+                    ))}
+                    {r.overlap_genes.length > 8 && (
+                      <span className="text-[10px] text-slate-500">
+                        +{r.overlap_genes.length - 8} more
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+              {/* -log10(p) bar */}
+              <div className="w-24 flex-shrink-0">
+                <div className="h-2 rounded bg-white/5 overflow-hidden">
+                  <div className="h-full rounded bg-gradient-to-r from-[#5139ED] to-[#8139ED]"
+                       style={{ width: `${barPct}%` }} />
+                </div>
+                <div className="mt-0.5 text-[9.5px] text-slate-500 text-right">
+                  −log₁₀p = {logp.toFixed(1)}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+
 function IntersectionVennCard({ data, message }) {
   const pred        = data?.predicted_gene_symbols || [];
   const dz          = data?.disease_gene_symbols   || [];
