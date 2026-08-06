@@ -1,0 +1,38 @@
+{
+  "summary": "Frontend-only regression + feature test for CTP Network card (adjustable top-N sliders and node-tap first-degree neighborhood isolation). Verified end-to-end using the live workspace at /app: signed in with rtest1785979513@phytonetai.com, opened an existing CTP project (no sliders — old run predates backend `raw` payload, expected fallback), then ran a NEW research chain ('Study curcumin against type 2 diabetes') which produced a ctp_network step containing data.raw. On that fresh CTP card all new behaviours passed: slider panel renders, moving ctp-slider-kegg to 5 live-rebuilt graph to 41 nodes/119 edges/23 pathways, moving ctp-slider-go to max=122 grew graph to 140 nodes/520 edges/122 pathways, ctp-reset-topn snapped both back to 20/20 (56 nodes/169 edges/38 pathways), clicking a top-hub pill (HDAC2) rendered ctp-isolation-banner with correct node name and visually dimmed non-neighbors in Cytoscape, ctp-clear-isolation removed the banner, and all five downloads (nodes.csv, edges.csv, GraphML, JSON, PNG) fired without console errors. Sibling cards (enrichment-card, target-table, disease-table, venn-svg, admet-table) still render for the same run. No functional regressions found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "tool_ctp_network (result.data)", "issue": "For CTP tool runs, `metrics.n_compounds` and `metrics.n_targets` are reported as 0 even when 18 targets exist upstream (server message reads '0 compounds · 0 targets · 38 pathways · 56 nodes / 169 edges'). The nodes/edges counts and pathway count are correct; only the compound/target stat pills show 0. Reproduced on the freshly-created 'Study curcumin against type 2 diabetes' run. Likely tp.get('targets') rows in raw don't carry compound_name/query_compound or gene fields expected by the compound-target edge builder. This is pre-existing and not caused by this iteration's frontend-only change (client re-derivation matches the server-baked figures)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "(Minor / pre-existing) Investigate why tool_ctp_network reports 0 compounds and 0 targets in metrics even though target_predict returned 18 targets — likely a key-name mismatch when scanning raw.targets rows to build compound→target edges. Both server and client agree on the empty CT set, so the fix belongs in tool_ctp_network's target extraction, not in CTPNetworkCard.",
+    "(Nice-to-have) On old runs whose ctp_network step was persisted before `raw` was added, the slider panel silently hides (correct fallback). Consider surfacing a small hint like 'Re-run this project to enable interactive top-N filtering' so users understand why sliders are missing on legacy runs."
+  ],
+  "critical_code_review_comments": [
+    "CTPNetworkCard correctly gates the slider panel behind `raw && (keggAvail>0 || goAvail>0)` — legacy runs without raw fall back to server-baked nodes/edges, no crash.",
+    "Slider onChange uses parseInt with `|| 0` fallback — safe against NaN.",
+    "topN() filters by adj-p ≤ max_adj_p BEFORE sorting/slicing, matching the backend policy — client-side counts align exactly with server counts at default 20/20.",
+    "Neighborhood isolation useEffect uses cy.batch() and removes/adds classes without re-mounting Cytoscape — efficient. cy.on('tap', node) toggles isolation (tap same node twice clears it), and tap on empty canvas also clears — good UX.",
+    "Reset button uses `Math.min(20, keggAvail)` — correct when available < 20, avoids exceeding slider max.",
+    "Cytoscape instance is destroyed on unmount (cleanup return) — no memory leak.",
+    "Minor: cards.jsx is now 1509 lines — approaching the 700-line soft limit. Consider splitting CTPNetworkCard, EnrichmentCard, VennCard etc. into individual files for maintainability.",
+    "Console shows repeated 'Canvas2D getImageData willReadFrequently' warnings from Cytoscape PNG export — cosmetic only.",
+    "No console errors observed during slider drags, isolation toggling, or downloads on the fresh run."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only per request)", "frontend": "100% (all 7 review-request scenarios passed on a fresh run)"},
+  "test_credentials": "rtest1785979513@phytonetai.com / TestPass123! — worked. Note: signin form has data-testid=signin-email/signin-password/signin-submit; the plain `input[type=email]` selector matches earlier newsletter/contact inputs, so tests must target the auth-modal testids.",
+  "seed_data_creation": "Created a new project 'Study curcumin against type 2 diabetes' under the rtest user to exercise the current-backend CTP payload with `data.raw` populated. Left in place so main agent / next testing agent can reuse.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "The two enhancements are functional end-to-end. IMPORTANT for reuse: (1) OLD projects created before backend added data.raw will NOT show the slider panel — this is by design (raw is required for client-side re-filter). To validate sliders you MUST create a fresh run. (2) Use the native-setter trick to move React-controlled range inputs from Playwright: Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el, v); dispatchEvent input+change. A plain el.value=v does NOT trigger React state. (3) Data-testids confirmed live: ctp-slider-panel, ctp-slider-kegg, ctp-slider-go, ctp-reset-topn, ctp-isolation-banner, ctp-clear-isolation, ctp-hub-0..9, ctp-download-{nodes-csv,edges-csv,graphml,json,png}, ctp-network-card, ctp-network-canvas. (4) Sibling cards remain intact: target-table, disease-table, enrichment-card (with enrichment-tab-kegg/go, enrichment-topn, enrichment-maxp), intersection-venn-card, venn-svg, admet-table. (5) The pre-existing '0 compounds · 0 targets' backend metric bug is unrelated to this iteration and should be filed separately.",
+  "rca_of_the_issue": "No blocking issues to RCA. Minor pre-existing bug: tool_ctp_network's compound/target extraction from tp['targets'] rows appears to fail its (t.compound_name || t.query_compound) and (t.gene || t.gene_symbol || t.symbol) heuristic on the current target_predict output shape, resulting in empty compounds/targets sets even though 18 predicted targets are visible in the target_predict card. Suggested next step: log a sample raw.targets row inside tool_ctp_network and align field names with what target_predict actually emits."
+}

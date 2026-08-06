@@ -470,10 +470,110 @@ export const ResultCard = memo(ResultCardImpl, (prev, next) => {
 function CTPNetworkCard({ data, message }) {
   const ref = useRef(null);
   const cyRef = useRef(null);
-  const nodes = data?.nodes || [];
-  const edges = data?.edges || [];
-  const metrics = data?.metrics || {};
+  const serverNodes = useMemo(() => data?.nodes || [], [data?.nodes]);
+  const serverEdges = useMemo(() => data?.edges || [], [data?.edges]);
+  const metrics     = useMemo(() => data?.metrics || {}, [data?.metrics]);
   const exports = data?.exports || {};
+  const raw = data?.raw || null;
+
+  // ── Interactive slider state — allow live top-N re-filtering ────
+  const keggAvail = metrics.kegg_available ?? (raw?.kegg?.length || 0);
+  const goAvail   = metrics.go_available   ?? (raw?.go?.length   || 0);
+  const maxAdjP   = metrics.max_adj_p ?? 0.05;
+  const [topKegg, setTopKegg] = useState(metrics.top_kegg_used ?? 20);
+  const [topGo,   setTopGo]   = useState(metrics.top_go_used   ?? 20);
+  const [isolatedNodeId, setIsolatedNodeId] = useState(null);
+
+  // Recompute nodes/edges client-side when sliders move. Falls back to
+  // the server-baked graph when raw upstream data isn't available.
+  const { nodes, edges, liveMetrics } = useMemo(() => {
+    if (!raw) {
+      return { nodes: serverNodes, edges: serverEdges, liveMetrics: metrics };
+    }
+
+    const pwScore = (pw) => {
+      const p = pw?.adjusted_p_value ?? pw?.adj_p_value ?? pw?.p_value ?? 1.0;
+      const n = parseFloat(p);
+      return Number.isFinite(n) ? n : 1.0;
+    };
+    const topN = (rows, k) => {
+      const filt = (rows || []).filter((r) => pwScore(r) <= maxAdjP);
+      filt.sort((a, b) => pwScore(a) - pwScore(b));
+      return filt.slice(0, k);
+    };
+
+    const keggTop = topN(raw.kegg, topKegg);
+    const goTop   = topN(raw.go,   topGo);
+
+    // Compound-Target edges
+    const compounds = new Set();
+    const targets   = new Set();
+    const ctEdges   = [];
+    for (const t of raw.targets || []) {
+      const c = (t.compound_name || t.query_compound || "").trim();
+      const g = (t.gene || t.gene_symbol || t.symbol || "").trim().toUpperCase();
+      if (!c || !g) continue;
+      compounds.add(c); targets.add(g);
+      ctEdges.push({ source: c, target: g, interaction: "targets" });
+    }
+
+    // Target-Pathway edges from selected top-N pathways
+    const pathways = new Set();
+    const tpEdges  = [];
+    for (const pw of [...keggTop, ...goTop]) {
+      const pname = (pw.term_name || pw.name || pw.term || "").trim();
+      if (!pname) continue;
+      for (const gene of pw.overlap_genes || []) {
+        const g = (gene || "").trim().toUpperCase();
+        if (!g) continue;
+        pathways.add(pname);
+        tpEdges.push({ source: g, target: pname, interaction: "involved_in" });
+      }
+    }
+
+    // De-dupe edges
+    const seen = new Set();
+    const allEdges = [...ctEdges, ...tpEdges].filter((e) => {
+      const k = `${e.source}→${e.target}→${e.interaction}`;
+      if (seen.has(k)) return false;
+      seen.add(k); return true;
+    });
+
+    // Build node registry with degree
+    const nodeMap = new Map();
+    const addNode = (id, type) => {
+      if (!nodeMap.has(id)) nodeMap.set(id, { id, label: id, type, degree: 0 });
+    };
+    compounds.forEach((c) => addNode(c, "Compound"));
+    targets.forEach((t)   => addNode(t, "Target"));
+    pathways.forEach((p)  => addNode(p, "Pathway"));
+    for (const e of allEdges) {
+      // Ensure endpoints exist (in case raw targets missed a gene that
+      // shows up in a pathway overlap list)
+      if (!nodeMap.has(e.source)) addNode(e.source, "Target");
+      if (!nodeMap.has(e.target)) {
+        addNode(e.target, e.interaction === "involved_in" ? "Pathway" : "Target");
+      }
+      nodeMap.get(e.source).degree += 1;
+      nodeMap.get(e.target).degree += 1;
+    }
+
+    const nodesArr = Array.from(nodeMap.values());
+    return {
+      nodes: nodesArr,
+      edges: allEdges,
+      liveMetrics: {
+        ...metrics,
+        n_compounds: compounds.size,
+        n_targets:   targets.size,
+        n_pathways:  pathways.size,
+        n_nodes:     nodesArr.length,
+        n_edges:     allEdges.length,
+        top_kegg_used: keggTop.length,
+        top_go_used:   goTop.length,
+      },
+    };
+  }, [raw, topKegg, topGo, maxAdjP, serverNodes, serverEdges, metrics]);
 
   useEffect(() => {
     if (!ref.current || !nodes.length) return;
@@ -512,15 +612,54 @@ function CTPNetworkCard({ data, message }) {
             "curve-style": "bezier", "target-arrow-shape": "none" } },
         { selector: "edge[interaction='involved_in']", style: {
             "line-color": "#F5B301", "line-opacity": 0.28 } },
+        // ── Neighborhood isolation styles ─────────────────────────
+        { selector: ".dimmed", style: {
+            "opacity": 0.08, "text-opacity": 0 } },
+        { selector: ".focus", style: {
+            "border-width": 3, "border-color": "#FDE68A",
+            "text-outline-color": "#F59E0B", "text-outline-width": 2,
+            "font-size": 12, "z-index": 999 } },
+        { selector: ".neighbor", style: {
+            "border-width": 2, "border-color": "#FDE68A", "opacity": 1 } },
+        { selector: "edge.highlight", style: {
+            "line-color": "#FDE68A", "line-opacity": 0.95, "width": 2.5,
+            "z-index": 998 } },
       ],
       layout: { name: "cose", nodeRepulsion: 4200, idealEdgeLength: 60,
                 animate: false, padding: 40 },
       textureOnViewport: true, motionBlur: false, pixelRatio: 1,
     });
     cy.autoungrabify(true);
+
+    // Tap a node to isolate its first-degree neighborhood
+    cy.on("tap", "node", (evt) => {
+      const id = evt.target.id();
+      setIsolatedNodeId((prev) => (prev === id ? null : id));
+    });
+    // Tap empty space to reset
+    cy.on("tap", (evt) => { if (evt.target === cy) setIsolatedNodeId(null); });
+
     cyRef.current = cy;
     return () => cy.destroy();
   }, [nodes, edges]);
+
+  // Apply / clear isolation classes without re-mounting Cytoscape
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    cy.batch(() => {
+      cy.elements().removeClass("dimmed focus neighbor highlight");
+      if (!isolatedNodeId) return;
+      const focus = cy.getElementById(isolatedNodeId);
+      if (focus.empty()) return;
+      const neigh = focus.neighborhood();
+      const keep  = focus.union(neigh);
+      cy.elements().not(keep).addClass("dimmed");
+      focus.addClass("focus");
+      neigh.nodes().addClass("neighbor");
+      neigh.edges().addClass("highlight");
+    });
+  }, [isolatedNodeId, nodes, edges]);
 
   const dl = (fname) => {
     const txt = exports?.[fname]; if (!txt) return;
@@ -538,7 +677,7 @@ function CTPNetworkCard({ data, message }) {
       <div className="flex flex-wrap items-center gap-2 mb-1">
         <div className="text-[15px] font-semibold text-slate-100">Compound → Target → Pathway Network</div>
         <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-300">
-          {metrics.n_nodes} nodes · {metrics.n_edges} edges
+          {liveMetrics.n_nodes} nodes · {liveMetrics.n_edges} edges
         </span>
       </div>
       <div className="text-[11.5px] text-slate-400 mb-3">{message}</div>
@@ -546,14 +685,14 @@ function CTPNetworkCard({ data, message }) {
       {/* Stat pills */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-3">
         {[
-          { label: "Compounds", value: metrics.n_compounds, color: "text-[#a48bff]" },
-          { label: "Targets",   value: metrics.n_targets,   color: "text-emerald-300" },
-          { label: metrics.top_kegg_used != null
-                    ? `Top Pathways (${(metrics.top_kegg_used ?? 0) + (metrics.top_go_used ?? 0)}/${(metrics.kegg_available ?? 0) + (metrics.go_available ?? 0)})`
+          { label: "Compounds", value: liveMetrics.n_compounds, color: "text-[#a48bff]" },
+          { label: "Targets",   value: liveMetrics.n_targets,   color: "text-emerald-300" },
+          { label: liveMetrics.top_kegg_used != null
+                    ? `Top Pathways (${(liveMetrics.top_kegg_used ?? 0) + (liveMetrics.top_go_used ?? 0)}/${(keggAvail + goAvail)})`
                     : "Pathways",
-            value: metrics.n_pathways, color: "text-amber-300" },
-          { label: "Nodes",     value: metrics.n_nodes,     color: "text-slate-100" },
-          { label: "Edges",     value: metrics.n_edges,     color: "text-slate-100" },
+            value: liveMetrics.n_pathways, color: "text-amber-300" },
+          { label: "Nodes",     value: liveMetrics.n_nodes,     color: "text-slate-100" },
+          { label: "Edges",     value: liveMetrics.n_edges,     color: "text-slate-100" },
         ].map((s) => (
           <div key={s.label} className="rounded-lg border border-white/5 bg-black/25 px-3 py-2 text-center">
             <div className={`text-[18px] font-bold ${s.color}`}>{s.value ?? "—"}</div>
@@ -561,6 +700,70 @@ function CTPNetworkCard({ data, message }) {
           </div>
         ))}
       </div>
+
+      {/* Interactive sliders — live top-N pathway re-filter */}
+      {raw && (keggAvail > 0 || goAvail > 0) && (
+        <div data-testid="ctp-slider-panel"
+             className="mb-3 rounded-lg border border-white/5 bg-black/25 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <div className="text-[10.5px] font-bold uppercase tracking-widest text-slate-300">
+              Adjust top-N pathways · adj-p ≤ {maxAdjP}
+            </div>
+            <button data-testid="ctp-reset-topn"
+                    onClick={() => {
+                      setTopKegg(Math.min(20, keggAvail));
+                      setTopGo(Math.min(20, goAvail));
+                    }}
+                    className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-semibold text-slate-300 hover:bg-white/10">
+              Reset
+            </button>
+          </div>
+
+          {keggAvail > 0 && (
+            <div className="mb-2">
+              <div className="flex items-center justify-between text-[11px] text-slate-300">
+                <span>Top KEGG pathways</span>
+                <span className="font-mono text-amber-300">{topKegg} / {keggAvail}</span>
+              </div>
+              <input data-testid="ctp-slider-kegg"
+                     type="range" min={0} max={keggAvail} step={1} value={topKegg}
+                     onChange={(e) => setTopKegg(parseInt(e.target.value, 10) || 0)}
+                     className="w-full accent-amber-400" />
+            </div>
+          )}
+
+          {goAvail > 0 && (
+            <div>
+              <div className="flex items-center justify-between text-[11px] text-slate-300">
+                <span>Top GO terms</span>
+                <span className="font-mono text-amber-300">{topGo} / {goAvail}</span>
+              </div>
+              <input data-testid="ctp-slider-go"
+                     type="range" min={0} max={goAvail} step={1} value={topGo}
+                     onChange={(e) => setTopGo(parseInt(e.target.value, 10) || 0)}
+                     className="w-full accent-amber-400" />
+            </div>
+          )}
+          <div className="mt-1 text-[10px] text-slate-500">
+            Tip: click any node in the graph to isolate its neighborhood — click empty space to reset.
+          </div>
+        </div>
+      )}
+
+      {/* Isolation banner */}
+      {isolatedNodeId && (
+        <div data-testid="ctp-isolation-banner"
+             className="mb-2 flex items-center justify-between rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-[11px] text-amber-200">
+          <span>
+            Isolating <span className="font-mono font-semibold">{isolatedNodeId}</span> and its first-degree neighborhood.
+          </span>
+          <button data-testid="ctp-clear-isolation"
+                  onClick={() => setIsolatedNodeId(null)}
+                  className="rounded-md border border-amber-400/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-100 hover:bg-amber-500/20">
+            Clear
+          </button>
+        </div>
+      )}
 
       {/* Legend + downloads */}
       <div className="flex flex-wrap items-center gap-3 mb-2 text-[10.5px] text-slate-400">
@@ -600,28 +803,36 @@ function CTPNetworkCard({ data, message }) {
       <div ref={ref} data-testid="ctp-network-canvas"
            className="w-full h-[500px] rounded-lg border border-white/5 bg-black/40" />
 
-      {/* Top nodes by degree */}
-      {(metrics.top_by_degree || []).length > 0 && (
-        <div className="mt-3">
-          <div className="text-[10.5px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">
-            Top hubs by degree
+      {/* Top nodes by degree — recomputed live from the current graph */}
+      {(() => {
+        const topHubs = raw
+          ? [...nodes].sort((a, b) => (b.degree || 0) - (a.degree || 0)).slice(0, 10)
+          : (metrics.top_by_degree || []);
+        if (!topHubs.length) return null;
+        return (
+          <div className="mt-3">
+            <div className="text-[10.5px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">
+              Top hubs by degree
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {topHubs.map((h, i) => {
+                const tint = h.type === "Compound" ? "text-[#a48bff] border-[#5139ED]/40 bg-[#5139ED]/10"
+                           : h.type === "Target"   ? "text-emerald-200 border-emerald-500/40 bg-emerald-500/10"
+                           : "text-amber-200 border-amber-500/40 bg-amber-500/10";
+                return (
+                  <button key={h.id || i}
+                        data-testid={`ctp-hub-${i}`}
+                        onClick={() => setIsolatedNodeId(h.id)}
+                        title="Click to isolate this node's neighborhood"
+                        className={`inline-flex items-center gap-1 rounded-full border ${tint} px-2 py-0.5 text-[11px] font-semibold hover:brightness-125`}>
+                    {h.id} <span className="text-slate-500 text-[10px]">·{h.degree}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-          <div className="flex flex-wrap gap-1.5">
-            {metrics.top_by_degree.map((h, i) => {
-              const tint = h.type === "Compound" ? "text-[#a48bff] border-[#5139ED]/40 bg-[#5139ED]/10"
-                         : h.type === "Target"   ? "text-emerald-200 border-emerald-500/40 bg-emerald-500/10"
-                         : "text-amber-200 border-amber-500/40 bg-amber-500/10";
-              return (
-                <span key={i}
-                      data-testid={`ctp-hub-${i}`}
-                      className={`inline-flex items-center gap-1 rounded-full border ${tint} px-2 py-0.5 text-[11px] font-semibold`}>
-                  {h.id} <span className="text-slate-500 text-[10px]">·{h.degree}</span>
-                </span>
-              );
-            })}
-          </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
