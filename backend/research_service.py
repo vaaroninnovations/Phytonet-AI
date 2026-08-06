@@ -483,6 +483,21 @@ async def execute_step(step: dict,
     fn = entry["fn"]
     args = resolve_args(step.get("args") or {},
                         prior_results or [], project_context or [])
+
+    # ── Defensive auto-injection for admet_predict ─────────────────
+    # If Claude planned admet_predict without SMILES (e.g. user asked as a
+    # follow-up "now run ADMET"), scan every source for compounds and inject
+    # the most recent list automatically. This makes the chat feel like the
+    # standalone linear workflow — outputs of one step become inputs of the
+    # next, even across turns.
+    if tool_name == "admet_predict" and not (args.get("compounds")
+                                              or args.get("smiles")):
+        found = _auto_pick_compounds(prior_results or [], project_context or [])
+        if found:
+            args["compounds"] = found
+            logger.info(f"[research] admet_predict auto-injected "
+                        f"{len(found)} compounds from project context")
+
     try:
         return await fn(**args)
     except httpx.HTTPStatusError as e:
@@ -496,6 +511,38 @@ async def execute_step(step: dict,
     except Exception as e:
         logger.exception(f"[research] tool {tool_name} error")
         return {"status": "error", "message": f"{tool_name}: {e}"}
+
+
+def _auto_pick_compounds(prior_results: list[dict],
+                         project_context: list[dict],
+                         limit: int = 25) -> list[dict]:
+    """Return the most-recent compound list from anywhere we know about.
+    Order of preference:
+      1. This run's earlier steps (newest first)
+      2. Earlier runs in the same project (newest first)
+      3. SMILES extracted from uploaded CSV/Excel attachments
+    """
+    for pool in (prior_results, project_context):
+        for step in reversed(pool):
+            if step.get("status") != "done":
+                continue
+            data = (step.get("result") or {}).get("data") or {}
+            compounds = data.get("compounds")
+            if isinstance(compounds, list) and compounds:
+                # Slice to a sensible default and require SMILES presence
+                selected = [c for c in compounds
+                            if isinstance(c, dict) and (c.get("smiles")
+                                                       or c.get("canonical_smiles"))]
+                if selected:
+                    return selected[:limit]
+    # Fallback: SMILES from uploaded attachments (packed as pseudo-steps by
+    # _execute_in_background — see routes/research.py)
+    for step in reversed(project_context):
+        data = (step.get("result") or {}).get("data") or {}
+        smis = data.get("smiles_extracted")
+        if isinstance(smis, list) and smis:
+            return [{"smiles": s} for s in smis[:limit]]
+    return []
 
 
 # ═══════════════════════════════════════════════════════════════

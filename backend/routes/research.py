@@ -249,8 +249,8 @@ async def _execute_in_background(db, oid_str: str, pid: str, run_id: str):
     plan_steps = run.get("plan") or []
 
     # Cross-run context — flat list of every step from earlier COMPLETED runs.
-    # Placeholder resolution falls back to this when `$prev.<path>` cannot be
-    # satisfied from within the current run (e.g. single-step follow-ups).
+    # Placeholder resolution + admet_predict auto-injection use this when the
+    # current run's plan doesn't include a producing step.
     project_context: list[dict] = []
     for prior_run in (d.get("runs") or []):
         if prior_run.get("id") == run_id:
@@ -260,6 +260,24 @@ async def _execute_in_background(db, oid_str: str, pid: str, run_id: str):
         for r in (prior_run.get("results") or []):
             if r.get("status") == "done":
                 project_context.append(r)
+
+    # Also treat uploaded attachments as pseudo-steps so ADMET can auto-inject
+    # SMILES from any CSV / SMI / XLSX the user has attached in this project.
+    for msg in (d.get("messages") or []):
+        for att in (msg.get("attachments") or []):
+            smis = att.get("extracted") or []
+            if isinstance(smis, list) and smis:
+                project_context.append({
+                    "id":     f"attachment_{att.get('name','file')}",
+                    "status": "done",
+                    "tool":   "user_attachment",
+                    "result": {"status": "ok",
+                               "card":   "compound_table",
+                               "data":   {
+                                   "smiles_extracted": smis,
+                                   "compounds": [{"smiles": s} for s in smis],
+                               }},
+                })
 
     results: list[dict] = []
     for idx, step in enumerate(plan_steps):
