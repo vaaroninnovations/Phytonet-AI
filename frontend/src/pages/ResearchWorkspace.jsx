@@ -146,6 +146,19 @@ function PlanCard({ plan, title, onExecute, executing, executed }) {
 
 function TableCard({ testid, title, rows, columns, downloadBase, subtitle, onOpen }) {
   const total = rows.length;
+  // For downloads, expose EVERY key from every row (union) — not just the
+  // 12 preview columns. This is what makes CSV/Excel from the chat match the
+  // standalone module's full export.
+  const fullColumns = useMemo(() => {
+    const seen = new Map();
+    for (const c of columns) seen.set(c.key, c.label);
+    for (const r of rows) {
+      for (const k of Object.keys(r)) {
+        if (!seen.has(k)) seen.set(k, k);
+      }
+    }
+    return Array.from(seen, ([key, label]) => ({ key, label }));
+  }, [rows, columns]);
   return (
     <div data-testid={testid}
          className="mt-2 rounded-2xl border border-white/10 bg-black/30 backdrop-blur-sm p-4">
@@ -157,27 +170,32 @@ function TableCard({ testid, title, rows, columns, downloadBase, subtitle, onOpe
                   className="rounded-full bg-[#5139ED]/20 border border-[#5139ED]/40 px-2 py-0.5 text-[10.5px] font-semibold text-[#a48bff]">
               {total} {total === 1 ? "row" : "rows"}
             </span>
+            {fullColumns.length > columns.length && (
+              <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-300">
+                {fullColumns.length} cols in export
+              </span>
+            )}
           </div>
           {subtitle && <div className="mt-0.5 text-[11px] text-slate-400">{subtitle}</div>}
         </div>
         <div className="flex items-center gap-1.5">
           {downloadBase && (
             <>
-              <button onClick={() => downloadCsv(rows, columns, `${downloadBase}.csv`)}
+              <button onClick={() => downloadCsv(rows, fullColumns, `${downloadBase}.csv`)}
                       data-testid={`${testid}-download-csv`}
-                      title="Download CSV"
+                      title={`Download full ${fullColumns.length}-column CSV`}
                       className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-slate-200 hover:bg-white/10">
                 <FileText size={11} /> CSV
               </button>
-              <button onClick={() => downloadExcel(rows, columns, `${downloadBase}.xlsx`, title)}
+              <button onClick={() => downloadExcel(rows, fullColumns, `${downloadBase}.xlsx`, title)}
                       data-testid={`${testid}-download-xlsx`}
-                      title="Download Excel"
+                      title={`Download full ${fullColumns.length}-column Excel`}
                       className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-slate-200 hover:bg-white/10">
                 <FileSpreadsheet size={11} /> Excel
               </button>
               <button onClick={() => downloadJson(rows, `${downloadBase}.json`)}
                       data-testid={`${testid}-download-json`}
-                      title="Download JSON"
+                      title="Download raw JSON"
                       className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-slate-200 hover:bg-white/10">
                 <FileJson size={11} /> JSON
               </button>
@@ -221,6 +239,13 @@ function TableCard({ testid, title, rows, columns, downloadBase, subtitle, onOpe
 
 // ─── Download helpers ─────────────────────────────────────────────
 function _rowsToPlain(rows, columns) {
+  const stringify = (v) => {
+    if (v === null || v === undefined) return "";
+    if (typeof v === "object") {
+      try { return JSON.stringify(v); } catch { return String(v); }
+    }
+    return v;
+  };
   return rows.map((r) => {
     const out = {};
     for (const c of columns) {
@@ -230,10 +255,10 @@ function _rowsToPlain(rows, columns) {
           const rendered = c.render(r);
           v = typeof rendered === "string" || typeof rendered === "number"
                 ? rendered
-                : (r[c.key] ?? "");
-        } catch { v = r[c.key] ?? ""; }
+                : stringify(r[c.key] ?? "");
+        } catch { v = stringify(r[c.key] ?? ""); }
       } else {
-        v = r[c.key] ?? "";
+        v = stringify(r[c.key] ?? "");
       }
       out[c.label] = v;
     }

@@ -171,39 +171,35 @@ async def tool_admet_predict(smiles: list[str] | str | None = None,
         st = (s.get("status") or "").lower()
         if st in ("done", "success", "completed"):
             rows_raw = s.get("compounds") or []
-            # Flatten physchem / druglikeness / admet dicts so the UI's
-            # simple key-based column renderers work without deep paths.
-            rows = []
-            for r in rows_raw:
-                p = r.get("physchem") or {}
-                d = r.get("druglikeness") or {}
-                a = r.get("admet") or {}
-                rows.append({
-                    **r,
-                    "mw":            p.get("mw", r.get("molecular_weight")),
-                    "logp":          p.get("logp"),
-                    "tpsa":          p.get("tpsa"),
-                    "hba":           p.get("hba"),
-                    "hbd":           p.get("hbd"),
-                    "qed":           p.get("qed"),
-                    "lipinski_rules": p.get("lipinski_rules"),
-                    "lipinski_pass": d.get("lipinski_pass"),
-                    "veber_pass":    d.get("veber_pass"),
-                    "ghose_pass":    d.get("ghose_pass"),
-                    "rotatable_bonds": d.get("rotatable_bonds"),
-                    "hia":           a.get("hia"),
-                    "bbb":           a.get("bbb"),
-                    "pgp_inhibitor": a.get("pgp_inhibitor"),
-                    "herg":          a.get("herg"),
-                    "ames":          a.get("ames"),
-                })
+            # Flatten physchem / druglikeness / admet nested dicts so the UI's
+            # simple key-based column renderers work AND every raw property is
+            # available in the CSV/Excel/JSON export — matches the standalone
+            # ADMET page's Excel dump byte-for-byte at the row level.
+            def _flat(r: dict) -> dict:
+                out = {k: r.get(k) for k in ("smiles", "compound_name",
+                                             "molecular_formula",
+                                             "molecular_weight", "source")}
+                for section in ("physchem", "druglikeness", "admet"):
+                    for k, v in (r.get(section) or {}).items():
+                        # Prefer bare key when it doesn't clash; otherwise
+                        # namespace it (e.g. "druglikeness.lipinski_pass").
+                        if k not in out or out.get(k) is None:
+                            out[k] = v
+                        else:
+                            out[f"{section}.{k}"] = v
+                return out
+
+            rows = [_flat(r) for r in rows_raw]
             return {"status": "ok",
                     "card": "admet_table",
                     "message": f"ADMET prediction complete for "
-                               f"{len(rows)} compound(s).",
+                               f"{len(rows)} compound(s). "
+                               f"Every physchem / drug-likeness / ADMET field "
+                               f"available in the CSV / Excel export.",
                     "data": {"job_id": job_id,
                              "total": total,
-                             "results": rows}}
+                             "results": rows,
+                             "raw":     rows_raw}}
         if st in ("error", "failed"):
             return {"status": "error",
                     "message": s.get("error") or "ADMET job failed."}
