@@ -447,7 +447,7 @@ export default function ResearchWorkspace() {
   const loadProjects = useCallback(async () => {
     setProjectsLoading(true);
     try {
-      const { data } = await authApi.get("/api/research/projects");
+      const { data } = await authApi.get("/research/projects");
       setProjects(data || []);
       return data || [];
     } catch (e) {
@@ -461,7 +461,7 @@ export default function ResearchWorkspace() {
   const openProject = async (id) => {
     setLoading(true);
     try {
-      const { data } = await authApi.get(`/api/research/projects/${id}`);
+      const { data } = await authApi.get(`/research/projects/${id}`);
       setActiveProject(data);
       setAttachments([]);
       setVizRun(null);
@@ -472,7 +472,7 @@ export default function ResearchWorkspace() {
 
   const newProject = async (initialTitle = "New Research") => {
     try {
-      const { data } = await authApi.post("/api/research/projects",
+      const { data } = await authApi.post("/research/projects",
                                           { title: initialTitle });
       await loadProjects();
       setActiveProject(data);
@@ -485,7 +485,7 @@ export default function ResearchWorkspace() {
   const deleteProject = async (id) => {
     if (!window.confirm("Delete this research project?")) return;
     try {
-      await authApi.delete(`/api/research/projects/${id}`);
+      await authApi.delete(`/research/projects/${id}`);
       setProjects((ps) => ps.filter((p) => p.id !== id));
       if (activeProject?.id === id) setActiveProject(null);
     } catch (e) {
@@ -503,7 +503,7 @@ export default function ResearchWorkspace() {
   const send = async (prompt) => {
     let proj = activeProject;
     if (!proj) {
-      const { data } = await authApi.post("/api/research/projects", { title: prompt.slice(0, 80) });
+      const { data } = await authApi.post("/research/projects", { title: prompt.slice(0, 80) });
       proj = data;
       setActiveProject(proj);
       loadProjects();
@@ -511,11 +511,11 @@ export default function ResearchWorkspace() {
     setSending(true);
     try {
       const { data } = await authApi.post(
-        `/api/research/projects/${proj.id}/message`,
+        `/research/projects/${proj.id}/message`,
         { prompt, attachments },
       );
       // Refetch to get authoritative state including new run
-      const { data: fresh } = await authApi.get(`/api/research/projects/${proj.id}`);
+      const { data: fresh } = await authApi.get(`/research/projects/${proj.id}`);
       setActiveProject(fresh);
       setAttachments([]);
       loadProjects();
@@ -533,7 +533,7 @@ export default function ResearchWorkspace() {
   const execute = async (pid, runId) => {
     setExecuting(runId);
     try {
-      await authApi.post(`/api/research/projects/${pid}/execute/${runId}`);
+      await authApi.post(`/research/projects/${pid}/execute/${runId}`);
       startPolling(pid, runId);
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Failed to start execution");
@@ -546,7 +546,7 @@ export default function ResearchWorkspace() {
     pollRef.current = setInterval(async () => {
       try {
         const { data: status } = await authApi.get(
-          `/api/research/projects/${pid}/status/${runId}`,
+          `/research/projects/${pid}/status/${runId}`,
         );
         setActiveProject((cur) => {
           if (!cur) return cur;
@@ -560,7 +560,7 @@ export default function ResearchWorkspace() {
           pollRef.current = null;
           setExecuting(null);
           // Refetch to get any final assistant interpretation message
-          const { data: fresh } = await authApi.get(`/api/research/projects/${pid}`);
+          const { data: fresh } = await authApi.get(`/research/projects/${pid}`);
           setActiveProject(fresh);
           setVizRun(status);
         }
@@ -573,7 +573,7 @@ export default function ResearchWorkspace() {
   const attach = async (files) => {
     let pid = activeProject?.id;
     if (!pid) {
-      const { data } = await authApi.post("/api/research/projects", { title: "New Research" });
+      const { data } = await authApi.post("/research/projects", { title: "New Research" });
       pid = data.id;
       setActiveProject(data);
       loadProjects();
@@ -583,7 +583,7 @@ export default function ResearchWorkspace() {
       fd.append("file", f);
       try {
         const { data } = await authApi.post(
-          `/api/research/projects/${pid}/upload`, fd,
+          `/research/projects/${pid}/upload`, fd,
           { headers: { "Content-Type": "multipart/form-data" } },
         );
         setAttachments((cur) => [...cur, data]);

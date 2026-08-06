@@ -1,0 +1,34 @@
+{
+  "summary": "Frontend re-validation of the /api/api/ double-prefix fix on /research and end-to-end AI Research Assistant chat flow. The URL fix is confirmed working — no double-prefix 404s observed on any /research endpoint. All core user journeys pass: login, New Research, plan card, auto-execute plant_search against IMPPAT/LOTUS (81 compounds returned for Withania somnifera), compound-table + JSON download, suggested-prompt tile auto-send, CSV attachment with SMILES count chip, and page regressions (/phytonet, /phytonet-ai, /plant-database). One minor UX gap: the right-side Viz Panel does NOT auto-open when a run completes — user must click the 'View' button on the completed run card. The panel itself renders correctly (compounds table + green Interpretation box) once opened.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ResearchWorkspace VizPanel auto-open", "issue": "After a run reaches 'completed' state, setVizRun(status) is called in startPolling (line 565) but the right-side VizPanel (data-testid=viz-panel) does not become visible automatically. It only appears after the user clicks the 'View' button on the completed run card. Reproduced on both freshly-executed runs and pre-existing completed projects opened from the sidebar.", "selector": "[data-testid='viz-panel']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Global (React console)", "issues": ["Hydration warning: '<span> cannot be a child of <option>' — SiteChrome/select rendering. Not blocking but should be cleaned up."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Investigate why setVizRun(status) inside startPolling does not visually open the right VizPanel on run completion. Suspect either (a) status object shape doesn't satisfy `if (!activeRun) return null` (e.g., activeRun.title missing on the /status payload), or (b) setVizRun is being reset by a subsequent state update (e.g., setActiveProject re-render). Consider passing the fresh run object from `fresh.runs.find(r=>r.id===runId)` instead of the raw `status` from the poll endpoint.",
+    "Fix the hydration warning about <span> inside <option> in SiteChrome (custom select dropdown)."
+  ],
+  "critical_code_review_comments": [
+    "ResearchWorkspace.jsx is 701 lines — consider splitting into: ProjectsSidebar, MessageStream, PlanCard, ResultCard, VizPanel, Composer sub-modules to stay under the 700-line guideline.",
+    "startPolling passes the raw `status` (from /status/{runId}) to setVizRun. If the /status endpoint returns a minimal payload lacking `title`, `results`, or `interpretation`, the VizPanel will render empty. Safer to use `fresh.runs.find(r=>r.id===runId)` which is guaranteed to have the full run object.",
+    "AuthContext.jsx defines `const API = ${REACT_APP_BACKEND_URL}/api` and exports `authApi` with that baseURL — this is the root cause of the fixed double-prefix bug. Consider renaming the export (e.g., `apiClient`) or adding a JSDoc warning so future paths never start with `/api/...`."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested (per request)", "frontend": "95%"},
+  "test_credentials": "rtest1785979513@phytonetai.com / TestPass123! — works",
+  "seed_data_creation": "None — used existing test account. Two new projects were created during testing (New Research + suggested-prompt project) and left in place for next iteration.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The /api/api/ double-prefix bug is fully resolved — network trace shows only clean /api/research/... calls. All happy-path flows work end-to-end including live IMPPAT/LOTUS calls (81 real compounds returned). Only outstanding issue is the VizPanel not auto-opening after run completion (must click View). Login is via the AuthModal (data-testid=signin-email / signin-password / signin-submit) — the /login route by itself does not render the modal; navigate to / and click the 'Sign In' header button, or ensure your test also opens the modal.",
+  "rca of the issue": "Original /api/api/ bug: AuthContext exported `authApi = axios.create({ baseURL: `${REACT_APP_BACKEND_URL}/api` })` while ResearchWorkspace.jsx used `authApi.get('/api/research/...')`, resulting in `/api/api/research/...` 404s. Fix: all authApi paths in ResearchWorkspace.jsx now start with `/research/...` (11 occurrences verified via grep). Confirmed via live network capture — zero 4xx responses from any /research endpoint during full E2E flow."
+}
