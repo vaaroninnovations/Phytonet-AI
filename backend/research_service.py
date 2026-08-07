@@ -1171,6 +1171,38 @@ step in the same plan when in doubt.
 the user names a specific protein (e.g. "resolve AKT1") and target_predict \
 when the user asks which targets a compound might bind.
 
+HARD RULES FOR docking
+──────────────────────
+• When the user names ONE OR MORE specific protein targets to dock against \
+(e.g. "dock curcumin against INSR", "dock quercetin against AKT1, EGFR, \
+TP53"), pass them directly as the `targets` argument of the docking step \
+— DO NOT emit a target_predict step for those compounds. `targets` accepts \
+a list of gene symbols or UniProt accessions and each one is auto-resolved.
+• Only emit `target_predict` before `docking` when the user has NOT named \
+their target(s) and wants the assistant to pick them.
+• Similarly, when the user names ONE OR MORE specific compounds to dock \
+(e.g. "dock curcumin against …"), pass them directly as the `compounds` \
+argument of the docking step (list of bare names or {{name, smiles}} dicts) \
+— DO NOT emit an admet_predict / plant_search step just to feed the docker.
+
+DOCKING EXAMPLES
+────────────────
+User: "Dock curcumin against INSR using AutoDock Vina."
+Plan (CORRECT — no target_predict, no admet_predict):
+  step_1  compound_lookup   {{"query": "curcumin"}}
+  step_2  docking           {{"compounds": [{{"name":"curcumin","smiles":"$step_1.smiles"}}], "targets": ["INSR"]}}
+
+User: "Dock curcumin against AKT1, EGFR and TP53."
+Plan (CORRECT — pass all three targets in one docking step, no target_predict):
+  step_1  compound_lookup   {{"query": "curcumin"}}
+  step_2  docking           {{"compounds": [{{"name":"curcumin","smiles":"$step_1.smiles"}}], "targets": ["AKT1","EGFR","TP53"], "top_genes": 3}}
+
+User: "Which proteins does curcumin bind — then dock the top ones."
+Plan (CORRECT — user did not name targets, so predict first):
+  step_1  compound_lookup   {{"query": "curcumin"}}
+  step_2  target_predict    {{"compounds": [{{"name":"curcumin","smiles":"$step_1.smiles"}}]}}
+  step_3  docking           {{}}
+
 OUTPUT FORMAT
 ─────────────
 Return ONLY a JSON object matching this exact schema — no prose before or \

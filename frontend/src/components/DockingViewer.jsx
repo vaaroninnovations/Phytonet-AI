@@ -67,7 +67,7 @@ export default function DockingViewer({ jobId, pairId, ligandName, receptor, bes
       )}
 
       {expanded && (
-        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="mt-4 grid grid-cols-1 gap-4">
           <Complex3DViewer
             jobId={jobId} pairId={pairId} interactions={interactions}
             interactionSvgRef={diagramSvgRef}
