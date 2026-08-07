@@ -16,7 +16,6 @@ import MolecularDynamics from "@/pages/MolecularDynamics";
 import AIScientificReport from "@/pages/AIScientificReport";
 import MyProjects from "@/pages/MyProjects";
 import VerifyEmail from "@/pages/VerifyEmail";
-import PhytoNet from "@/pages/PhytoNet";
 import GoogleCallback from "@/pages/GoogleCallback";
 import Resources from "@/pages/Resources";
 import Dashboard from "@/pages/Dashboard";
@@ -115,8 +114,8 @@ function App() {
                       <Route path="/ai-scientific-report" element={<AIScientificReport />} />
                       <Route path="/projects" element={<MyProjects />} />
                       <Route path="/verify-email" element={<VerifyEmail />} />
-                      <Route path="/phytonet" element={<PhytoNet />} />
-                      <Route path="/ai-assistant" element={<PhytoNet />} />
+                      <Route path="/phytonet" element={<Navigate to="/app" replace />} />
+                      <Route path="/ai-assistant" element={<Navigate to="/app" replace />} />
                       <Route path="/auth/google/callback" element={<GoogleCallback />} />
                       <Route path="/tool/:slug" element={<ComingSoon />} />
 
