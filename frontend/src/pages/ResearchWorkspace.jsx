@@ -248,7 +248,7 @@ export default function ResearchWorkspace() {
               {sending && (
                 <div className="flex items-center gap-2 text-[13px] text-slate-400">
                   <Loader2 size={14} className="animate-spin text-[#a48bff]" />
-                  Planning workflow with Claude Sonnet 4.5…
+                  PhytoNet AI is planning…
                 </div>
               )}
             </div>
