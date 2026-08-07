@@ -459,15 +459,29 @@ async def compound_lookup(name: str = Query(..., min_length=2, max_length=200)):
 @api_router.get("/target/resolve")
 async def target_resolve(query: str = Query(..., min_length=2, max_length=100),
                          organism: str = Query("Homo sapiens", max_length=64)):
-    """Resolve a *gene symbol* or *protein name* to a UniProt entry.
+    """Resolve a *gene symbol* / *protein name* / *UniProt accession* to a
+    reviewed UniProt entry.
+
+    Accepts:
+      • A gene symbol (e.g. "AKT1", "CYP2C19")
+      • A protein name (e.g. "Insulin receptor")
+      • A UniProt accession (e.g. "P33261", "P0DTC2")
 
     Queries the UniProt REST API restricted to reviewed (SwissProt) entries.
     Returns the best-scoring match plus available PDB cross-references.
     """
     q = query.strip()
-    # UniProt query: prefer exact gene symbol match, restricted to the requested organism
+    # UniProt accession pattern (canonical + isoform-style secondary IDs).
+    _UNIPROT_ACC_RE = re.compile(r"^[OPQ][0-9][A-Z0-9]{3}[0-9]$|"
+                                  r"^[A-NR-Z][0-9](?:[A-Z][A-Z0-9]{2}[0-9]){1,2}$")
+    is_accession = bool(_UNIPROT_ACC_RE.match(q.upper()))
+    # Prefer exact gene / protein name; add accession clause when it looks
+    # like one so raw UniProt IDs resolve correctly.
+    clauses = [f'gene_exact:"{q}"', f'protein_name:"{q}"']
+    if is_accession:
+        clauses.insert(0, f'accession:{q.upper()}')
     uniprot_query = (
-        f'(gene_exact:"{q}" OR protein_name:"{q}") AND '
+        f'({ " OR ".join(clauses) }) AND '
         f'organism_name:"{organism}" AND reviewed:true'
     )
     fields = "accession,id,protein_name,gene_names,organism_name,length,cc_function,cc_disease,xref_pdb"
@@ -486,6 +500,20 @@ async def target_resolve(query: str = Query(..., min_length=2, max_length=100),
         results = r.json().get("results", [])
     except Exception:
         raise HTTPException(status_code=502, detail="UniProt returned unparseable JSON")
+    # Accession fallback — if the search didn't match (organism filter can
+    # be strict on some entries) try a direct fetch by accession.
+    if not results and is_accession:
+        try:
+            async with httpx.AsyncClient() as client_:
+                r2 = await client_.get(
+                    f"https://rest.uniprot.org/uniprotkb/{q.upper()}.json",
+                    params={"fields": fields},
+                    timeout=15.0, headers={"User-Agent": USER_AGENT},
+                )
+            if r2.status_code == 200:
+                results = [r2.json()]
+        except Exception:
+            pass
     if not results:
         raise HTTPException(status_code=404, detail=f"No UniProt match for '{query}' ({organism}).")
     top = results[0]

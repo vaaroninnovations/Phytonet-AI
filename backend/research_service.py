@@ -665,19 +665,28 @@ async def tool_docking(progress=_noop_progress,
                         prior_results=None, project_context=None,
                         top_compounds: int = 5, top_genes: int = 3,
                         exhaustiveness: int = 8, num_modes: int = 9,
-                        box_padding: float = 8.0, **_) -> dict:
+                        box_padding: float = 8.0,
+                        targets: list | None = None,
+                        genes: list | None = None,
+                        compounds: list | None = None,
+                        **_) -> dict:
     """Molecular docking of the top-N compounds × top-M genes.
 
     Auto-picks compounds from a prior admet_predict step (ranked by QED /
     drug-likeness score if present) or from any earlier compound source.
-    Auto-picks target genes from a prior target_predict step, ranked by
-    frequency (or degree if a ctp_network step has already run). Each gene
-    carries the UniProt accession so `docking_service.run_docking_batch`
-    can auto-fetch a PDB structure.
+    Auto-picks target genes from a prior target_predict / target_resolve
+    step; each gene carries the UniProt accession so
+    `docking_service.run_docking_batch` can auto-fetch a PDB structure.
 
-    Emits a `docking` card containing the full results table and enough
-    metadata for the frontend to plug the existing `DockingViewer` into any
-    row on demand (interactive 3D complex + interactions + downloads).
+    Args (all optional — everything is inferred from prior steps when
+    omitted):
+      • targets / genes: list of gene symbols or UniProt IDs to dock
+        against. Each item can be a bare string ("INSR") or a dict
+        `{gene_symbol, uniprot_id}`. When supplied, symbols are resolved
+        via /api/target/resolve so the planner can dock against an
+        explicitly-named target without running target_predict first.
+      • compounds: list of `{name, smiles}` or bare compound names —
+        looked up via /api/compound/lookup when needed.
     """
     import docking_service
 
@@ -710,8 +719,43 @@ async def tool_docking(progress=_noop_progress,
                 or (smi[:20] if smi else "compound"))
 
     # ── 1. Rank + pick compounds ─────────────────────────────────
-    def _rank_compounds() -> list[dict]:
-        # Prefer ADMET-scored compounds if present.
+    async def _resolve_compound_by_name(name: str) -> dict | None:
+        try:
+            d = await _get("/api/compound/lookup", {"query": name})
+            smi = (d.get("canonical_smiles") or d.get("isomeric_smiles")
+                   or d.get("smiles") or "")
+            nm  = (d.get("name") or d.get("compound_name")
+                   or d.get("iupac_name") or name).strip()
+            if smi:
+                # Backfill the smiles→name index so labels stay pretty.
+                if smi not in smiles_to_name:
+                    smiles_to_name[smi] = nm[:1].upper() + nm[1:] if nm.islower() else nm
+                return {"name": smiles_to_name.get(smi, nm), "smiles": smi}
+        except Exception as e:
+            logger.warning(f"[research] docking: compound_lookup failed for '{name}': {e}")
+        return None
+
+    async def _rank_compounds() -> list[dict]:
+        # 1a. Explicit `compounds` arg wins — resolve bare names to SMILES
+        if compounds:
+            out: list[dict] = []
+            for c in compounds:
+                if isinstance(c, dict):
+                    smi = (c.get("smiles") or c.get("canonical_smiles") or "").strip()
+                    if smi:
+                        nm = (c.get("name") or c.get("compound_name")
+                              or "").strip() or _friendly(smi)
+                        out.append({"name": nm, "smiles": smi})
+                        continue
+                    name = (c.get("name") or c.get("compound_name") or "").strip()
+                    if not name: continue
+                    resolved = await _resolve_compound_by_name(name)
+                    if resolved: out.append(resolved)
+                else:
+                    resolved = await _resolve_compound_by_name(str(c).strip())
+                    if resolved: out.append(resolved)
+            if out: return out
+        # 1b. Prefer ADMET-scored compounds if present.
         for pool in (prior_results, project_context):
             for step in reversed(pool):
                 if step.get("status") != "done": continue
@@ -729,7 +773,7 @@ async def tool_docking(progress=_noop_progress,
                               (r.get("compound_name") or "").strip()),
                          "smiles": r.get("canonical_smiles") or r.get("smiles")}
                         for r in picked]
-        # Fallback: use whichever compound source exists.
+        # 1c. Fallback: use whichever compound source exists.
         out: list[dict] = []
         for c in _auto_pick_compounds(prior_results, project_context):
             smi = c.get("canonical_smiles") or c.get("smiles") or ""
@@ -741,7 +785,7 @@ async def tool_docking(progress=_noop_progress,
             })
         return out
 
-    compounds_all = _rank_compounds()
+    compounds_all = await _rank_compounds()
     if not compounds_all:
         return {"status": "error",
                 "message": "Docking needs at least one compound. Run "
@@ -750,8 +794,82 @@ async def tool_docking(progress=_noop_progress,
     compounds = compounds_all[:max(1, int(top_compounds))]
 
     # ── 2. Rank + pick target genes (with UniProt) ───────────────
+    # ── 2a. If the planner passed explicit target/gene identifiers,
+    #        resolve them via /api/target/resolve (which handles both
+    #        gene symbols and raw UniProt accessions) and use those.
+    explicit_target_input = []
+    for raw in ((targets or []) + (genes or [])):
+        if not raw: continue
+        if isinstance(raw, dict):
+            gene = (raw.get("gene_symbol") or raw.get("gene")
+                    or raw.get("symbol") or "").strip()
+            uid  = (raw.get("uniprot_id") or raw.get("uniprot") or "").strip()
+            if uid and gene:
+                explicit_target_input.append({
+                    "gene_symbol": gene.upper(), "uniprot_id": uid,
+                    "count": 1, "best_score": 1.0,
+                })
+                continue
+            q = uid or gene
+        else:
+            q = str(raw).strip()
+        if not q: continue
+        try:
+            resolved = await _get("/api/target/resolve", {"query": q})
+        except Exception as e:
+            logger.warning(f"[research] docking: target_resolve failed for '{q}': {e}")
+            continue
+        uid  = (resolved.get("uniprot_id") or "").strip()
+        # /api/target/resolve returns `primary_gene` (string) + `gene_symbols`
+        # (list) — not `gene_symbol`. Read all three for robustness.
+        gene = ""
+        for k in ("primary_gene", "gene_symbol", "gene"):
+            v = resolved.get(k)
+            if isinstance(v, str) and v.strip():
+                gene = v.strip(); break
+        if not gene:
+            arr = resolved.get("gene_symbols") or resolved.get("gene_names") or []
+            if isinstance(arr, list) and arr:
+                gene = str(arr[0] or "").strip()
+        if not gene:
+            gene = q
+        if uid:
+            explicit_target_input.append({
+                "gene_symbol": gene.upper(), "uniprot_id": uid,
+                "count": 1, "best_score": 1.0,
+            })
+
     def _rank_genes() -> list[dict]:
-        # Best-effort: pull unique genes from the most recent target_predict.
+        # 2b. Explicit args take precedence
+        if explicit_target_input:
+            return explicit_target_input
+        # 2c. Prefer target_resolve steps — when the planner emitted one,
+        # the user asked for a SPECIFIC target, so dock against that
+        # (even if a target_predict step is also present with broader hits).
+        resolved: list[dict] = []
+        for pool in (prior_results, project_context):
+            for step in pool:
+                if step.get("status") != "done": continue
+                if step.get("tool") != "target_resolve": continue
+                d = (step.get("result") or {}).get("data") or {}
+                uid  = (d.get("uniprot_id") or "").strip()
+                # target_resolve returns `primary_gene` (str) + `gene_symbols` (list)
+                gene = ""
+                for k in ("primary_gene", "gene_symbol"):
+                    v = d.get(k)
+                    if isinstance(v, str) and v.strip(): gene = v.strip(); break
+                if not gene:
+                    arr = d.get("gene_symbols") or d.get("gene_names") or []
+                    if isinstance(arr, list) and arr:
+                        gene = str(arr[0] or "").strip()
+                if uid and gene:
+                    resolved.append({
+                        "gene_symbol": gene.upper(), "uniprot_id": uid,
+                        "count": 1, "best_score": 1.0,
+                    })
+        if resolved:
+            return resolved
+        # 2d. Use the most recent target_predict step if any
         for pool in (prior_results, project_context):
             for step in reversed(pool):
                 if step.get("status") != "done": continue
@@ -792,23 +910,25 @@ async def tool_docking(progress=_noop_progress,
                 return ranked
         return []
 
-    genes_all = _rank_genes()
-    if not genes_all:
+    picked_genes = _rank_genes()
+    if not picked_genes:
         return {"status": "error",
                 "message": "Docking needs at least one target gene with a "
-                           "UniProt ID. Run target_predict first."}
-    genes = genes_all[:max(1, int(top_genes))]
+                           "UniProt ID. Either pass an explicit `targets` "
+                           "or `genes` argument (e.g. \"INSR\"), or run "
+                           "target_predict / target_resolve first."}
+    picked_genes = picked_genes[:max(1, int(top_genes))]
 
-    total_pairs = len(compounds) * len(genes)
+    total_pairs = len(compounds) * len(picked_genes)
     await progress("submitting",
                    f"Preparing to dock {len(compounds)} compound(s) × "
-                   f"{len(genes)} target(s) = {total_pairs} pair(s)…")
+                   f"{len(picked_genes)} target(s) = {total_pairs} pair(s)…")
     await progress("running",
                    f"Fetching PDB structures and building receptor grids…")
 
     # ── 3. Run docking batch (reuses AutoDock Vina pipeline) ────
     targets_payload = [{"uniprot_id": g["uniprot_id"],
-                        "gene_symbol": g["gene_symbol"]} for g in genes]
+                        "gene_symbol": g["gene_symbol"]} for g in picked_genes]
     try:
         batch = await docking_service.run_docking_batch(
             compounds=compounds,
@@ -829,7 +949,7 @@ async def tool_docking(progress=_noop_progress,
     # frontend can render `Compound × GENE (PDB)` without a re-lookup.
     # DockResult carries `receptor_uniprot` (NOT `uniprot_id`), so key
     # the lookup off that.
-    uid_to_gene = {g["uniprot_id"]: g["gene_symbol"] for g in genes}
+    uid_to_gene = {g["uniprot_id"]: g["gene_symbol"] for g in picked_genes}
     for r in results:
         uid = r.get("receptor_uniprot") or r.get("uniprot_id") or ""
         r["gene_symbol"] = uid_to_gene.get(uid, "")
@@ -864,7 +984,7 @@ async def tool_docking(progress=_noop_progress,
     return {"status": "ok",
             "card": "docking",
             "message": (f"Docked top {len(compounds)} compound(s) × top "
-                        f"{len(genes)} target(s) = {total_pairs} pair(s). "
+                        f"{len(picked_genes)} target(s) = {total_pairs} pair(s). "
                         f"{len(successful)} succeeded, {len(strong)} strong "
                         f"binder(s) with affinity ≤ −7 kcal/mol."
                         + (f" Best: {metrics['best_pair']} at "
