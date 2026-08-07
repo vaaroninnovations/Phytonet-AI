@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useNetwork } from "@/context/NetworkContext";
 import { compoundLookup, targetResolve } from "@/lib/api";
+import { authApi } from "@/context/AuthContext";
 import { toast } from "sonner";
 
 /* ────────────────────── Compound resolver card ────────────────────── */
@@ -373,7 +374,10 @@ export default function StandaloneDockingInput() {
       uniprot_id: t.uniprot_id,
       protein_name: t.protein_name,
       confidence: 5, score: 1,
-      pdb_id: t.pdb_ids?.[0] || undefined,
+      pdb_id: t.pdb_ids?.[0] || t.pdb_id || undefined,
+      // Preserve the local-PDB path so the downstream docking pipeline
+      // skips the RCSB fetch for user-uploaded receptors.
+      pdb_upload_path: t.pdb_upload_path || undefined,
     }));
     if (tgts.length === 0 && advUniprot.trim()) {
       tgts.push({
@@ -552,6 +556,46 @@ export default function StandaloneDockingInput() {
             >
               <ListPlus className="h-3.5 w-3.5" /> Bulk
             </button>
+            <label
+              data-testid="target-upload-pdb"
+              title="Upload a local PDB file to use as a docking receptor"
+              className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-[#5139ED]/40 bg-white px-3 py-2 text-[11.5px] font-semibold text-[#5139ED] hover:bg-[#F5F3FE]"
+            >
+              <ListPlus className="h-3.5 w-3.5" /> Upload PDB
+              <input
+                type="file"
+                accept=".pdb,.ent,chemical/x-pdb"
+                className="hidden"
+                data-testid="target-upload-pdb-input"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (!file) return;
+                  const fd = new FormData();
+                  fd.append("file", file);
+                  setTargetBusy(true);
+                  try {
+                    const { data } = await authApi.post("/docking/upload-pdb", fd, {
+                      headers: { "Content-Type": "multipart/form-data" },
+                    });
+                    const key = (data.uniprot_id || "").toLowerCase();
+                    let added = false;
+                    setTargetList((prev) => {
+                      if (prev.some((t) => (t.uniprot_id || "").toLowerCase() === key)) return prev;
+                      added = true;
+                      return [...prev, { ...data, _uploaded: true }];
+                    });
+                    if (added) toast.success(`Uploaded ${file.name} (${data.pdb_id})`);
+                    else toast.info("That PDB is already in the target list.");
+                  } catch (err) {
+                    toast.error(err?.response?.data?.detail
+                      || `Upload failed: ${err.message || err}`);
+                  } finally {
+                    setTargetBusy(false);
+                  }
+                }}
+              />
+            </label>
           </div>
           {targetBulkOpen && (
             <BulkImportPanel
@@ -577,17 +621,30 @@ export default function StandaloneDockingInput() {
               {targetList.map((t, i) => (
                 <li key={`${t.uniprot_id}-${i}`}
                     data-testid={`target-chip-${i}`}
-                    className="flex items-center justify-between gap-2 rounded-xl border border-[#DB2777]/30 bg-[#FDF2F8] px-3 py-2">
+                    className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 ${
+                      t._uploaded ? "border-[#5139ED]/40 bg-[#F5F3FE]"
+                                  : "border-[#DB2777]/30 bg-[#FDF2F8]"}`}>
                   <div className="min-w-0">
-                    <div className="truncate text-[12.5px] font-semibold text-[#831843]">
+                    <div className={`truncate text-[12.5px] font-semibold ${
+                      t._uploaded ? "text-[#3E28C4]" : "text-[#831843]"}`}>
                       {t.primary_gene || t.uniprot_id}{t.protein_name && t.primary_gene ? ` — ${t.protein_name}` : ""}
+                      {t._uploaded && (
+                        <span data-testid={`target-chip-${i}-uploaded-badge`}
+                              className="ml-1.5 inline-block rounded-full bg-[#5139ED] px-1.5 py-0 text-[9px] font-bold uppercase tracking-widest text-white">
+                          Uploaded
+                        </span>
+                      )}
                     </div>
-                    <div className="truncate font-mono text-[10.5px] text-[#BE185D]">
-                      UniProt {t.uniprot_id}{t.pdb_ids?.[0] ? ` · PDB ${t.pdb_ids[0]}` : ""}
+                    <div className={`truncate font-mono text-[10.5px] ${
+                      t._uploaded ? "text-[#5139ED]" : "text-[#BE185D]"}`}>
+                      {t._uploaded
+                        ? `Local PDB · ${t.pdb_id || "USR"}`
+                        : `UniProt ${t.uniprot_id}${t.pdb_ids?.[0] ? ` · PDB ${t.pdb_ids[0]}` : ""}`}
                     </div>
                   </div>
                   <button data-testid={`remove-target-${i}`} onClick={() => removeTarget(i)}
-                          className="shrink-0 rounded-full p-1 text-[#BE185D] hover:bg-[#DB2777]/20">
+                          className={`shrink-0 rounded-full p-1 hover:bg-white/40 ${
+                            t._uploaded ? "text-[#5139ED]" : "text-[#BE185D]"}`}>
                     <XCircle className="h-4 w-4" />
                   </button>
                 </li>

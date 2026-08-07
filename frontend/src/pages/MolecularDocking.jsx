@@ -247,7 +247,9 @@ export default function MolecularDocking() {
     try {
       const targets = selectedGenes.map((g) => {
         const t = targetOptions.find((x) => x.gene_symbol === g);
-        return { uniprot_id: t?.uniprot_id, gene_symbol: g, pdb_id: pdbSelections[g] || undefined };
+        return { uniprot_id: t?.uniprot_id, gene_symbol: g,
+                 pdb_id: pdbSelections[g] || t?.pdb_id || undefined,
+                 pdb_upload_path: t?.pdb_upload_path || undefined };
       }).filter((t) => t.uniprot_id);
       const body = { compounds: selectedComp, targets, exhaustiveness, num_modes: numModes, box_padding: padding };
 

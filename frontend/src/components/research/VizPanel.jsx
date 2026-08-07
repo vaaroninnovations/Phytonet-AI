@@ -19,6 +19,16 @@ export function VizPanel({ activeRun, onClose, onSend }) {
         {(activeRun.results || []).map((r, i) => (
           <ResultCard key={i} result={r.result} />
         ))}
+        {/* Live partial-result cards from any still-running step (e.g.
+            docking streaming pair-by-pair). Rendered after the completed
+            cards so they appear at the bottom of the chronological feed. */}
+        {(activeRun.plan || [])
+          .filter((s) => s.status !== "done"
+                      && s.status !== "error"
+                      && s.partial_result)
+          .map((s) => (
+            <ResultCard key={`partial-${s.id}`} result={s.partial_result} />
+          ))}
         {activeRun.interpretation && (
           <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-[13px] leading-relaxed text-slate-200">
             <div className="text-[10px] font-bold uppercase tracking-widest text-emerald-300 mb-1">Interpretation</div>

@@ -57,7 +57,7 @@ async def _post(path: str, json_body: dict | None = None, timeout: float = 120.0
         return r.json()
 
 
-async def _noop_progress(stage: str, detail: str = "") -> None:
+async def _noop_progress(stage: str, detail: str = "", partial=None) -> None:
     return None
 
 
@@ -939,10 +939,48 @@ async def tool_docking(progress=_noop_progress,
     # Live per-pair progress — forwarded via the existing `progress()`
     # channel so the frontend plan-card ticker updates smoothly for
     # long-running batches instead of appearing frozen for 10+ minutes.
+    # Also accumulates partial results so the frontend can render a
+    # live DockingCard as each pair completes (see routes/research.py
+    # `_step_progress` which writes `partial_result` to Mongo).
+    partial_results: list[dict] = []
+    partial_uid_to_gene = {g["uniprot_id"]: g["gene_symbol"] for g in picked_genes}
     async def _dock_progress(kind: str, msg: str, done: int, total: int,
-                             _result=None):
+                             result: dict | None = None):
         stage = "running" if kind == "pair_done" else "preparing"
-        await progress(stage, msg)
+        partial = None
+        if kind == "pair_done" and result:
+            uid = result.get("receptor_uniprot") or result.get("uniprot_id") or ""
+            result = {**result,
+                      "gene_symbol": partial_uid_to_gene.get(uid, ""),
+                      "pdb_id": result.get("receptor_pdb") or ""}
+            partial_results.append(result)
+            # Build a partial DockingCard-compatible payload
+            ok = [r for r in partial_results if not r.get("error")
+                                              and r.get("best_affinity")]
+            ok_sorted = sorted(ok, key=lambda r: float(r.get("best_affinity") or 0.0))
+            strong = [r for r in ok if float(r.get("best_affinity") or 0.0) <= -7.0]
+            best = ok_sorted[0] if ok_sorted else None
+            partial = {
+                "card": "docking",
+                "status": "streaming",
+                "message": f"Streaming docking results — {done}/{total} pair(s) complete.",
+                "data": {
+                    "job_id": (result.get("job_id") or ""),
+                    "metrics": {
+                        "n_pairs": total, "n_success": len(ok),
+                        "n_failed": len(partial_results) - len(ok),
+                        "n_strong": len(strong),
+                        "best_affinity": (float(best["best_affinity"]) if best else None),
+                        "best_pair": ((f'{best.get("ligand_name")} × '
+                                       f'{best.get("gene_symbol") or best.get("receptor_uniprot")} '
+                                       f'({best.get("pdb_id")})') if best else None),
+                        "top_compounds": top_compounds, "top_genes": top_genes,
+                        "streaming_done": done, "streaming_total": total,
+                    },
+                    "results": partial_results,
+                },
+            }
+        await progress(stage, msg, partial=partial)
     try:
         batch = await docking_service.run_docking_batch(
             compounds=compounds,

@@ -399,18 +399,25 @@ async def _execute_in_background(db, oid_str: str, pid: str, run_id: str):
 
         # Progress callback — updates Mongo so the frontend poller sees
         # live sub-status (e.g. "Querying IMPPAT…", "Removing duplicates…").
+        # Optional `partial` payload lets long-running tools (docking!)
+        # persist intermediate results so the frontend can render a live-
+        # partial card instead of waiting for the full batch to finish.
         async def _step_progress(stage: str, detail: str = "",
+                                   partial: dict | None = None,
                                    _idx=idx):
             try:
+                update = {
+                    f"runs.$.plan.{_idx}.progress": {
+                        "stage": stage,
+                        "detail": detail,
+                        "at": datetime.now(timezone.utc).isoformat(),
+                    }
+                }
+                if partial is not None:
+                    update[f"runs.$.plan.{_idx}.partial_result"] = partial
                 await col.update_one(
                     {"_id": oid, "runs.id": run_id},
-                    {"$set": {
-                        f"runs.$.plan.{_idx}.progress": {
-                            "stage": stage,
-                            "detail": detail,
-                            "at": datetime.now(timezone.utc).isoformat(),
-                        }
-                    }},
+                    {"$set": update},
                 )
             except Exception as e:
                 logger.warning(f"[research] progress persist failed: {e}")

@@ -719,16 +719,18 @@ async def run_docking_batch(compounds: List[Dict[str, str]],
                             exhaustiveness: int = 8,
                             num_modes: int = 9,
                             box_padding: float = 8.0,
-                            progress_cb=None) -> Dict[str, Any]:
+                            progress_cb=None,
+                            concurrency: int = 3) -> Dict[str, Any]:
     """Run docking for every (compound, target) pair.
 
     compounds: [{name, smiles}]
     targets:   [{uniprot_id, pdb_id (optional; auto if omitted), gene_symbol}]
     progress_cb: optional async callable — invoked as
         `await progress_cb(kind, message, done, total, result?)` after each
-        receptor prep completes and after each dock pair completes. Lets the
-        caller stream fine-grained progress to a UI. `result` is the just-
-        computed DockResult (as dict) when `kind == "pair_done"`.
+        receptor prep completes and after each dock pair completes.
+    concurrency: max number of docking pairs run in parallel (2-3 works well
+        on typical VPS resources; each AutoDock Vina process is single-
+        threaded so wall-time roughly divides by this factor).
     """
     async def _emit(kind, msg, done, total, result=None):
         if progress_cb:
@@ -741,11 +743,39 @@ async def run_docking_batch(compounds: List[Dict[str, str]],
     n_targets  = len(targets)
     n_pairs    = len(compounds) * n_targets
     receptors: Dict[str, Dict[str, Any]] = {}
+    # ── Receptor prep: still sequential (fast; ~5s per receptor) ─────
     for i, t in enumerate(targets, start=1):
         uid = t["uniprot_id"]
         if uid in receptors:
             continue
         pdb_id = t.get("pdb_id")
+        # User-uploaded PDB — skip UniProt→RCSB fetch entirely.
+        upload_path = t.get("pdb_upload_path")
+        if upload_path:
+            try:
+                pdb_path = Path(upload_path)
+                if not pdb_path.exists():
+                    raise FileNotFoundError(f"Uploaded PDB missing: {upload_path}")
+                recpt_pdbqt = job_dir / f"{pdb_id or 'USER'}.pdbqt"
+                prepare_receptor_pdbqt(pdb_path, recpt_pdbqt)
+                box = detect_binding_box(pdb_path, padding=box_padding)
+                receptors[uid] = {"pdb_id": pdb_id or "USER",
+                                  "pdb_path": str(pdb_path),
+                                  "pdbqt_path": str(recpt_pdbqt), "box": box,
+                                  "uniprot_id": uid,
+                                  "gene_symbol": t.get("gene_symbol"),
+                                  "uploaded": True}
+                await _emit("receptor_ready",
+                    f"Receptor ready (uploaded): {t.get('gene_symbol') or uid}",
+                    i, n_targets)
+            except Exception as e:
+                logger.exception(f"Uploaded receptor prep failed for {uid}: {e}")
+                receptors[uid] = {"error": str(e), "uniprot_id": uid,
+                                  "pdb_id": pdb_id or "USER"}
+                await _emit("receptor_error",
+                    f"Uploaded PDB prep failed for {t.get('gene_symbol') or uid}: {e}",
+                    i, n_targets)
+            continue
         if not pdb_id:
             cands = await rcsb_candidates_for_uniprot(uid, limit=5)
             if not cands:
@@ -774,12 +804,17 @@ async def run_docking_batch(compounds: List[Dict[str, str]],
             await _emit("receptor_error",
                 f"Receptor prep failed for {t.get('gene_symbol') or uid}: {e}",
                 i, n_targets)
-    # Batch dock — sequential to keep resource usage in check.
+
+    # ── Batch dock: bounded concurrency via asyncio.Semaphore ──────
+    #    AutoDock Vina is single-threaded so 2-3 concurrent processes on a
+    #    typical VPS cut wall-time roughly by `concurrency`. Cap at 4 to
+    #    stay memory-safe.
+    sem = asyncio.Semaphore(max(1, min(4, int(concurrency))))
     pairs: List[DockResult] = []
-    done = 0
-    for c in compounds:
-        for t in targets:
-            done += 1
+    completed = [0]                                    # mutable counter
+
+    async def _run_one(c: Dict[str, str], t: Dict[str, str]) -> DockResult:
+        async with sem:
             rec = receptors.get(t["uniprot_id"])
             if not rec or rec.get("error"):
                 r = DockResult(c["name"], c["smiles"], t["uniprot_id"],
@@ -788,20 +823,27 @@ async def run_docking_batch(compounds: List[Dict[str, str]],
                                pose_pdbqt_path="", log_path="", job_id=job_id,
                                pair_id=f"{c['name']}_x_{t['uniprot_id']}",
                                error=(rec or {}).get("error", "no receptor"))
-                pairs.append(r)
+                completed[0] += 1
                 await _emit("pair_done",
                     f"Skipped {c['name']} × {t.get('gene_symbol') or t['uniprot_id']} "
-                    f"(no receptor)", done, n_pairs, asdict(r))
-                continue
+                    f"(no receptor)", completed[0], n_pairs, asdict(r))
+                return r
             res = await dock_pair(job_dir, Path(rec["pdbqt_path"]), Path(rec["pdb_path"]),
                                   {"name": c["name"], "smiles": c["smiles"], "uniprot_id": t["uniprot_id"]},
                                   rec["box"], exhaustiveness=exhaustiveness, num_modes=num_modes)
-            pairs.append(res)
+            completed[0] += 1
             aff = res.best_affinity if res.best_affinity else 0.0
             gene = t.get("gene_symbol") or t["uniprot_id"]
             await _emit("pair_done",
-                f"Pair {done}/{n_pairs}: {c['name']} × {gene} → "
-                f"{aff:.2f} kcal/mol", done, n_pairs, asdict(res))
+                f"Pair {completed[0]}/{n_pairs}: {c['name']} × {gene} → "
+                f"{aff:.2f} kcal/mol", completed[0], n_pairs, asdict(res))
+            return res
+
+    tasks = [asyncio.create_task(_run_one(c, t))
+             for c in compounds for t in targets]
+    pairs = await asyncio.gather(*tasks)
+    pairs = list(pairs)
+
     pairs.sort(key=lambda p: p.best_affinity if p.best_affinity else 0.0)
     return {
         "job_id": job_id,

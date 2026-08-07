@@ -25,6 +25,10 @@ class DockTarget(BaseModel):
     uniprot_id: str
     gene_symbol: Optional[str] = None
     pdb_id: Optional[str] = None
+    # When set, the docking pipeline uses this local PDB directly instead
+    # of downloading via UniProt→RCSB. Populated by the /docking/upload-pdb
+    # endpoint below.
+    pdb_upload_path: Optional[str] = None
 
 
 class DockPDBCandidatesRequest(BaseModel):
@@ -96,6 +100,64 @@ def build_router() -> APIRouter:
         except Exception as e:
             logging.exception("Docking batch failed")
             raise HTTPException(status_code=500, detail=str(e))
+
+    @router.post("/docking/upload-pdb")
+    async def docking_upload_pdb(file: UploadFile = File(...)):
+        """Upload a local PDB structure to use as a docking receptor.
+
+        Users can drop a PDB (e.g. an AlphaFold model, a mutant, or a
+        custom refined structure) instead of relying on the UniProt→RCSB
+        auto-fetch pipeline. The file is validated, saved into a persistent
+        upload directory, and a synthetic target payload is returned that
+        the standalone docking flow / run_docking_batch understands.
+
+        Response mirrors /target/resolve for drop-in UI compatibility so
+        the uploaded receptor renders as a normal target chip.
+        """
+        import hashlib, pathlib, uuid
+        raw = await file.read()
+        if len(raw) < 200 or len(raw) > 20 * 1024 * 1024:
+            raise HTTPException(400, "PDB file must be between 200 B and 20 MB")
+        text = raw.decode("utf-8", errors="ignore")
+        # Cheap structural validation — must start with a HEADER/ATOM/
+        # HETATM/CRYST1/MODEL record.
+        first = next((ln for ln in text.splitlines() if ln.strip()), "")
+        rec = (first[:6] or "").strip().upper()
+        if rec not in {"HEADER", "ATOM", "HETATM", "CRYST1", "MODEL", "REMARK", "TITLE"}:
+            raise HTTPException(400, "File does not look like a PDB — no HEADER/ATOM records found.")
+        # Try to extract the 4-letter PDB ID from the HEADER; otherwise
+        # synthesise "USR-<hash6>" so the docking pipeline has a stable key.
+        header_id = ""
+        for ln in text.splitlines()[:10]:
+            if ln.startswith("HEADER"):
+                chunk = ln[62:66].strip()
+                if chunk and len(chunk) == 4:
+                    header_id = chunk.upper(); break
+        digest = hashlib.sha1(raw).hexdigest()[:8]
+        pdb_id = header_id or f"USR{digest[:1].upper()}"   # stays 4-char
+        uniprot_syn = f"USR-{digest}"
+        upload_root = docking_service.DOCK_ROOT / "user_uploads"
+        upload_root.mkdir(parents=True, exist_ok=True)
+        save_path = upload_root / f"{uniprot_syn}_{pdb_id}.pdb"
+        pathlib.Path(save_path).write_bytes(raw)
+        base = file.filename or f"uploaded_{digest}.pdb"
+        name = base.rsplit(".", 1)[0][:60]
+        return {
+            # Mirrors /target/resolve response shape so the frontend can
+            # add this as a target chip without special-casing.
+            "uniprot_id":       uniprot_syn,
+            "primary_gene":     name.upper(),
+            "gene_symbols":     [name.upper()],
+            "protein_name":     f"Uploaded structure ({base})",
+            "organism":         "user-supplied",
+            "sequence_length":  None,
+            "pdb_ids":          [pdb_id],
+            "pdb_id":           pdb_id,
+            "pdb_upload_path":  str(save_path),
+            "function":         "Uploaded receptor — will be used directly in docking without RCSB fetch.",
+            "uniprot_url":      None,
+            "size_bytes":       len(raw),
+        }
 
     @router.post("/docking/validate")
     async def docking_validate(payload: DockValidateRequest):

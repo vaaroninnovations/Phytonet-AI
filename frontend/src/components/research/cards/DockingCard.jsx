@@ -59,6 +59,14 @@ export function DockingCard({ data, message }) {
         <div className="text-[15px] font-semibold text-slate-100">
           Molecular Docking · Top compounds × Top targets
         </div>
+        {metrics.streaming_done != null && metrics.streaming_total != null
+          && metrics.streaming_done < metrics.streaming_total && (
+          <span data-testid="docking-streaming-badge"
+                className="inline-flex items-center gap-1 rounded-full bg-amber-400/15 border border-amber-400/30 px-2 py-0.5 text-[10.5px] font-semibold text-amber-200">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-300 animate-pulse" />
+            Streaming · {metrics.streaming_done}/{metrics.streaming_total}
+          </span>
+        )}
         {metrics.n_strong != null && (
           <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-300">
             {metrics.n_strong} strong binder{metrics.n_strong === 1 ? "" : "s"} (≤ −7 kcal/mol)

@@ -55,6 +55,15 @@ export function ChatMessage({ msg, run, onExecute, executing, onOpenRun, onSend,
             ? null
             : <ResultCard key={i} result={res.result} onOpen={() => onOpenRun(run)} />
         ))}
+        {/* Live partial results (e.g. docking streaming). Only shown in the
+            main chat feed when hideResults is false — the workspace's
+            VizPanel already has its own copy. */}
+        {!hideResults && (run?.plan || [])
+          .filter((s) => s.status !== "done" && s.status !== "error" && s.partial_result)
+          .map((s) => (
+            <ResultCard key={`partial-${s.id}`} result={s.partial_result}
+                        onOpen={() => onOpenRun(run)} />
+          ))}
       </div>
       {isUser && (
         <div className="flex-shrink-0 mt-1 h-8 w-8 rounded-lg bg-white/10 border border-white/10 flex items-center justify-center">
