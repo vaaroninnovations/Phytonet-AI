@@ -16,6 +16,7 @@ import { ResultCard } from "@/components/research/cards";
 import { ProjectHeader } from "@/components/research/ProjectHeader";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { ShareInterpretationButton } from "@/components/ui/ShareInterpretationButton";
+import { WorkspaceMetricsCard } from "@/components/research/WorkspaceMetricsCard";
 
 export function ProjectTab({ tabId, projectId, initialPrompt, panelRatio,
                               onPanelRatioChange, onTitleChange }) {
@@ -352,6 +353,8 @@ export function ProjectTab({ tabId, projectId, initialPrompt, panelRatio,
                   if (!lastInterp) return null;
                   const streaming = !!lastInterp.interp_streaming;
                   return (
+                    <>
+                    <WorkspaceMetricsCard run={lastInterp} />
                     <div data-testid="interpretation-card"
                          id="interpretation"
                          className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-[13px] leading-relaxed text-slate-100">
@@ -390,6 +393,7 @@ export function ProjectTab({ tabId, projectId, initialPrompt, panelRatio,
                         )}
                       </div>
                     </div>
+                    </>
                   );
                 })()}
               </div>
