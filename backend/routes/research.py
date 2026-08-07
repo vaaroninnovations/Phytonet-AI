@@ -75,6 +75,8 @@ def _serialize_run(r: dict) -> dict:
         "title":  r.get("title"),
         "status": r.get("status", "pending"),
         "plan":   r.get("plan") or [],
+        "cost":   r.get("cost"),
+        "reasoning": r.get("reasoning"),
         "results": r.get("results") or [],
         "interpretation": r.get("interpretation"),
         "interp_streaming": bool(r.get("interp_streaming", False)),
@@ -144,12 +146,32 @@ def build_router(db) -> APIRouter:
 
         if planner.get("mode") == "plan" and planner.get("plan"):
             run_id = str(ObjectId())
+            # Compute preflight node cost so the frontend can render
+            # "This plan will use ~14 nodes" on the plan card.
+            from routes import nodes as _nodes
+            cost_breakdown = _nodes.compute_research_run_cost(planner["plan"])
+            # Fetch the user's current balance + free-run status
+            balance = None; free_runs_used = 0
+            try:
+                udoc = await db["users"].find_one({"_id": ObjectId(str(user["_id"]))})
+                balance = int((udoc or {}).get("nodes_balance") or 0)
+                free_runs_used = int((udoc or {}).get("free_research_runs_used") or 0)
+            except Exception:
+                pass
+            free_runs_left = max(0, _nodes.FREE_RESEARCH_RUNS - free_runs_used)
+            cost_breakdown["balance"]      = balance
+            cost_breakdown["free_runs_left"] = free_runs_left
+            cost_breakdown["billable"]     = free_runs_left <= 0
+            cost_breakdown["insufficient"] = (free_runs_left <= 0
+                                              and balance is not None
+                                              and balance < cost_breakdown["total"])
             run_doc = {
                 "id":     run_id,
                 "title":  planner.get("title") or "Workflow",
                 "status": "pending",
                 "reasoning": planner.get("reasoning"),
                 "plan":   planner["plan"],
+                "cost":   cost_breakdown,
                 "results": [],
                 "created_at": now_iso,
                 "completed_at": None,
@@ -159,6 +181,7 @@ def build_router(db) -> APIRouter:
                 "run_id": run_id,
                 "title":  run_doc["title"],
                 "plan":   run_doc["plan"],
+                "cost":   cost_breakdown,
             })
             # Auto-set project title on the first plan run
             if (d.get("title") in (None, "", "New Research")
@@ -342,6 +365,8 @@ async def _execute_in_background(db, oid_str: str, pid: str, run_id: str):
     d = await col.find_one({"_id": oid})
     run = next(r for r in d.get("runs", []) if r.get("id") == run_id)
     plan_steps = run.get("plan") or []
+    # Project owner — used for node metering per-tool.
+    owner_user_id = d.get("user_id")
 
     # Cross-run context — flat list of every step from earlier COMPLETED runs.
     # Placeholder resolution + admet_predict auto-injection use this when the
@@ -427,6 +452,33 @@ async def _execute_in_background(db, oid_str: str, pid: str, run_id: str):
             progress=_step_progress,
         )
         status = "done" if result.get("status") == "ok" else "error"
+
+        # ── Node metering — charge on success only ──────────────
+        # Free-tier grace covers the first FREE_RESEARCH_RUNS of every
+        # user (see routes/nodes.py). Beyond that the user is billed
+        # per-tool with an idempotent debit keyed on (run_id, step_id).
+        charge_info = None
+        if status == "done":
+            from routes import nodes as _nodes
+            if step.get("tool") == "docking":
+                pairs = ((result.get("data") or {}).get("metrics") or {}).get("n_pairs")
+                if not pairs:
+                    args = step.get("args") or {}
+                    tc = int(args.get("top_compounds") or 5)
+                    tg = int(args.get("top_genes")     or 3)
+                    pairs = tc * tg
+                cost = int(pairs) * _nodes.RESEARCH_DOCKING_COST_PER_PAIR
+            else:
+                cost = _nodes.RESEARCH_TOOL_COSTS.get(step.get("tool"), 0)
+            if cost > 0:
+                charge_info = await _nodes.research_charge_step(
+                    user_id=owner_user_id or "",
+                    run_id=run_id, step_id=step_id,
+                    tool=step.get("tool"), amount=cost,
+                )
+                logger.info(f"[research] charge {step.get('tool')} "
+                            f"({cost} nodes) → {charge_info}")
+
         step_out = {
             "id": step_id,
             "label": step.get("label"),
@@ -434,6 +486,7 @@ async def _execute_in_background(db, oid_str: str, pid: str, run_id: str):
             "args": step.get("args"),
             "status": status,
             "result": result,
+            "cost": charge_info,
             "completed_at": datetime.now(timezone.utc).isoformat(),
         }
         results.append(step_out)

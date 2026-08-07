@@ -99,6 +99,122 @@ MODULE_COSTS = {
     # Free modules are absent from this map by design (implicit cost = 0).
 }
 
+# ── Per-tool costs for the AI Research Assistant orchestrator. The chat
+#    charges nodes per successful tool execution instead of a flat run
+#    price, so cheap runs stay cheap and heavy multi-docking runs pay
+#    proportionally. `docking` bills per-pair via a multiplier.
+RESEARCH_TOOL_COSTS = {
+    # Free discovery tools
+    "compound_lookup": 0, "plant_search": 0, "lotus_search": 0,
+    "disease_search":  0, "target_resolve": 0,
+    # 1-node analytical tools
+    "target_predict": 1, "admet_predict": 1, "disease_targets": 1,
+    "pathway_enrichment": 1, "ctp_network": 1,
+    # Interpretation is folded into the planner cost
+    # "interpret": 0,
+}
+RESEARCH_DOCKING_COST_PER_PAIR = 3
+RESEARCH_PLANNER_COST = 1
+FREE_RESEARCH_RUNS = 3          # per-user grace runs — full plans, no charge
+
+
+def compute_research_run_cost(plan: list) -> dict:
+    """Compute the preflight cost of an entire research plan.
+
+    Returns a breakdown so the frontend plan-card can show
+    `~14 nodes (1 planner + 4 tools + 9 docking pairs)`.
+    """
+    per_tool = 0
+    dock_pairs = 0
+    dock_cost = 0
+    breakdown = []
+    for step in plan or []:
+        tool = step.get("tool")
+        if tool == "docking":
+            args = step.get("args") or {}
+            tc = int(args.get("top_compounds") or 5)
+            tg = int(args.get("top_genes")     or 3)
+            pairs = max(1, tc * tg)
+            dock_pairs += pairs
+            cost = pairs * RESEARCH_DOCKING_COST_PER_PAIR
+            dock_cost += cost
+            breakdown.append({"tool": tool, "step_id": step.get("id"),
+                              "cost": cost, "pairs": pairs})
+        else:
+            c = RESEARCH_TOOL_COSTS.get(tool, 0)
+            per_tool += c
+            breakdown.append({"tool": tool, "step_id": step.get("id"), "cost": c})
+    planner = RESEARCH_PLANNER_COST
+    total = planner + per_tool + dock_cost
+    return {"total": total, "planner": planner, "tools": per_tool,
+            "docking": dock_cost, "docking_pairs": dock_pairs,
+            "steps": breakdown}
+
+
+# Module-level references filled in by attach_routes() below so the
+# research orchestrator can charge nodes without an HTTP round-trip.
+_users_col = None
+_ledger_col = None
+_apply_transaction_ref = None
+_ensure_node_fields_ref = None
+
+
+async def research_charge_step(user_id: str, run_id: str, step_id: str,
+                                tool: str, amount: int) -> dict:
+    """Called by the research orchestrator after each successful step.
+
+    Idempotent per (run_id, step_id) — retrying the same step never
+    double-charges. Returns {ok, balance, charged, free_run, insufficient?}.
+    """
+    if amount <= 0:
+        return {"ok": True, "balance": None, "charged": 0, "free_run": False}
+    if _users_col is None or _apply_transaction_ref is None:
+        return {"ok": True, "balance": None, "charged": 0,
+                "free_run": False, "note": "node-charge system not attached"}
+    try:
+        uid_obj = ObjectId(user_id)
+    except Exception:
+        return {"ok": False, "balance": None, "charged": 0,
+                "free_run": False, "error": "invalid_user_id"}
+    user = await _users_col.find_one({"_id": uid_obj})
+    if not user:
+        return {"ok": False, "error": "user_not_found"}
+    user = await _ensure_node_fields_ref(user)
+    # Free-run policy — first N runs of every account are free (planner
+    # + tools + docking). Tracked by counting distinct run-ids seen in
+    # the ledger's `meta.research_run_id` field.
+    if (user.get("free_research_runs_used") or 0) < FREE_RESEARCH_RUNS:
+        already = user.get("research_free_runs_seen") or []
+        if run_id in already:
+            return {"ok": True, "balance": user.get("nodes_balance", 0),
+                    "charged": 0, "free_run": True}
+        # First step of a new free run — bump the counter.
+        await _users_col.update_one(
+            {"_id": uid_obj},
+            {"$addToSet": {"research_free_runs_seen": run_id},
+             "$inc":      {"free_research_runs_used": 1}},
+        )
+        return {"ok": True, "balance": user.get("nodes_balance", 0),
+                "charged": 0, "free_run": True}
+    # Charge — idempotent per (run_id, step_id)
+    job_id = f"research:{run_id}:{step_id}"
+    try:
+        res = await _apply_transaction_ref(
+            user, "debit", int(amount),
+            module="phytonet-ai-agent",
+            workflow=run_id, job_id=job_id,
+            reason=f"research tool: {tool}",
+            meta={"research_run_id": run_id, "step_id": step_id, "tool": tool},
+        )
+        return {"ok": True, "balance": res.get("balance"),
+                "charged": int(amount), "free_run": False,
+                "idempotent": res.get("idempotent", False)}
+    except HTTPException as e:
+        det = e.detail if isinstance(e.detail, dict) else {"error": str(e.detail)}
+        return {"ok": False, "insufficient_nodes": True,
+                "balance": det.get("balance"), "required": det.get("required"),
+                "charged": 0, "free_run": False}
+
 
 class ChargePayload(BaseModel):
     module: str = Field(..., min_length=2, max_length=64)
@@ -124,6 +240,12 @@ def build_router(db, get_current_user):
 
     users = db["users"]
     ledger = db["node_transactions"]
+    # Expose collection + helpers at module scope so the research
+    # orchestrator (research_service.py) can charge nodes per-tool
+    # without an HTTP round-trip.
+    global _users_col, _ledger_col, _apply_transaction_ref, _ensure_node_fields_ref
+    _users_col   = users
+    _ledger_col  = ledger
 
     async def _ensure_node_fields(user_doc: dict) -> dict:
         """Backfill node fields for existing users who registered before this
@@ -226,6 +348,14 @@ def build_router(db, get_current_user):
             "lifetime_used": fresh.get("nodes_lifetime_used", 0),
             "lifetime_purchased": fresh.get("nodes_lifetime_purchased", 0),
         }
+
+    # Wire the closure helpers into the module-scope refs so the research
+    # orchestrator can call `research_charge_step()` without importing
+    # closure locals.
+    _apply_transaction_ref = _apply_transaction   # noqa: F841
+    _ensure_node_fields_ref = _ensure_node_fields  # noqa: F841
+    globals()["_apply_transaction_ref"]  = _apply_transaction
+    globals()["_ensure_node_fields_ref"] = _ensure_node_fields
 
     # ─────────────────────────── endpoints ───────────────────────────
 

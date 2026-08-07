@@ -3,8 +3,12 @@ import {
   Sparkles, Loader2, CheckCircle2, Circle, XCircle, RotateCcw,
 } from "lucide-react";
 
-export function PlanCard({ plan, title, onExecute, executing, executed,
+export function PlanCard({ plan, title, cost, onExecute, executing, executed,
                            onRetryStep, retryingStepId }) {
+  const total    = cost?.total;
+  const insuff   = !!cost?.insufficient;
+  const freeLeft = cost?.free_runs_left;
+  const billable = !!cost?.billable;
   return (
     <div data-testid="plan-card"
          className="mt-2 rounded-2xl border border-[#5139ED]/25 bg-gradient-to-br from-[#5139ED]/10 to-[#8139ED]/5 p-4 backdrop-blur-sm">
@@ -12,12 +16,42 @@ export function PlanCard({ plan, title, onExecute, executing, executed,
         <div>
           <div className="text-[10px] font-bold uppercase tracking-widest text-[#a48bff]">Execution Plan</div>
           <div className="mt-1 text-[15px] font-semibold text-slate-100">{title}</div>
+          {total != null && (
+            <div data-testid="plan-cost-pill" className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+              {billable ? (
+                <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-semibold ${
+                  insuff ? "border-rose-500/40 bg-rose-500/10 text-rose-200"
+                         : "border-[#5139ED]/40 bg-[#5139ED]/10 text-[#c4b5fd]"
+                }`}>
+                  ~{total} node{total === 1 ? "" : "s"}
+                  {cost?.docking_pairs > 0 && (
+                    <span className="opacity-70">
+                      · {cost.tools + cost.planner} tools + {cost.docking_pairs} dock pairs
+                    </span>
+                  )}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 font-semibold text-emerald-200">
+                  Free run · {freeLeft} left after this
+                </span>
+              )}
+              {billable && cost?.balance != null && (
+                <span className="text-slate-400">Balance: {cost.balance} nodes</span>
+              )}
+              {insuff && (
+                <span className="text-rose-300 font-semibold">
+                  Insufficient — top up to run
+                </span>
+              )}
+            </div>
+          )}
         </div>
         {!executed && (
           <button
             data-testid="plan-execute-btn"
             onClick={onExecute}
-            disabled={executing}
+            disabled={executing || insuff}
+            title={insuff ? "Not enough nodes — please top up first." : undefined}
             className="inline-flex items-center gap-1.5 rounded-lg bg-[#5139ED] px-3 py-1.5 text-xs font-semibold text-white shadow hover:bg-[#4128d4] disabled:opacity-60"
           >
             {executing ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}

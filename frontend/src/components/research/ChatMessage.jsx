@@ -43,6 +43,7 @@ export function ChatMessage({ msg, run, onExecute, executing, onOpenRun, onSend,
           <PlanCard
             plan={run.plan || msg.plan || []}
             title={msg.title || run.title}
+            cost={run.cost || msg.cost}
             onExecute={() => onExecute(run.id)}
             executing={executing === run.id || run.status === "running"}
             executed={run.status === "completed" || run.status === "failed"}
