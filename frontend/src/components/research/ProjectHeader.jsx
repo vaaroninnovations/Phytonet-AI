@@ -1,14 +1,48 @@
 // Research Workspace — Project header with Share popover
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { authApi } from "@/context/AuthContext";
-import { Loader2, Share2, Copy, Check } from "lucide-react";
+import { Loader2, Share2, Copy, Check, Zap } from "lucide-react";
 import { toast } from "sonner";
+
+// Compute a live "Nodes used: X / Y" summary from the newest active run.
+// While a run is executing we sum the per-step `charge` records (populated
+// by routes/research.py after each successful step) so the meter climbs
+// pair-by-pair. Free runs render as a green "Free run" pill so users
+// don't get confused by a zero-out-of-N counter.
+function useLiveNodeTicker(project) {
+  return useMemo(() => {
+    const runs = project?.runs || [];
+    if (!runs.length) return null;
+    // Pick the most-recent run that has a cost object.
+    const run = [...runs].reverse().find((r) => r.cost);
+    if (!run) return null;
+    const cost = run.cost || {};
+    const total = cost.total ?? 0;
+    const running = run.status === "running" || run.status === "pending";
+    const isFree  = cost.billable === false && cost.free_runs_left != null;
+
+    const usedFromSteps = (run.plan || []).reduce((sum, s) => {
+      const c = s?.cost || {};
+      if (s.status !== "done") return sum;
+      return sum + (c.charged || 0);
+    }, 0);
+
+    return {
+      total, used: usedFromSteps, running, isFree,
+      status: run.status,
+      insufficient: !!cost.insufficient,
+      balance: cost.balance,
+      pairs: cost.docking_pairs || 0,
+    };
+  }, [project]);
+}
 
 export function ProjectHeader({ project }) {
   const [busy, setBusy] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
   const [copied, setCopied] = useState(false);
   const [open, setOpen] = useState(false);
+  const ticker = useLiveNodeTicker(project);
 
   const enable = async () => {
     setBusy(true);
@@ -50,6 +84,43 @@ export function ProjectHeader({ project }) {
         <div className="truncate text-[14px] font-semibold text-slate-100">{project.title || "New Research"}</div>
         <div className="text-[11px] text-slate-500">{(project.messages || []).length} messages · {(project.runs || []).length} runs</div>
       </div>
+
+      {/* Live nodes-used ticker — shows while a run is active or has cost data */}
+      {ticker && ticker.total > 0 && (
+        <div data-testid="nodes-used-ticker"
+             title={ticker.isFree
+                     ? "This run is free — first 3 runs of every account cost 0 nodes."
+                     : `Balance: ${ticker.balance ?? "?"} nodes${
+                         ticker.pairs ? ` · ${ticker.pairs} docking pair${ticker.pairs === 1 ? "" : "s"}` : ""
+                       }`}
+             className={`ml-auto mr-2 hidden md:flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11.5px] font-semibold ${
+               ticker.isFree
+                 ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+                 : ticker.insufficient
+                   ? "border-rose-500/40 bg-rose-500/10 text-rose-200"
+                   : "border-[#5139ED]/40 bg-[#5139ED]/10 text-[#c4b5fd]"
+             }`}>
+          <Zap size={12} className={ticker.running ? "animate-pulse" : ""} />
+          {ticker.isFree ? (
+            <span>Free run · <span className="opacity-80">0 / {ticker.total} nodes</span></span>
+          ) : (
+            <>
+              <span data-testid="nodes-used-value">
+                {ticker.used} / {ticker.total} nodes
+              </span>
+              {/* mini progress bar */}
+              <span className="ml-1 hidden lg:inline-block h-1 w-24 rounded bg-white/10 overflow-hidden">
+                <span className="block h-full rounded bg-gradient-to-r from-[#5139ED] to-[#8139ED] transition-all"
+                      style={{ width: `${Math.min(100, Math.round(100 * ticker.used / Math.max(1, ticker.total)))}%` }} />
+              </span>
+            </>
+          )}
+          {ticker.running && (
+            <span className="ml-1 text-[10px] text-slate-400 italic">running…</span>
+          )}
+        </div>
+      )}
+
       <div className="relative">
         <button data-testid="share-project-btn"
                 onClick={() => (shareUrl ? setOpen((o) => !o) : enable())}
