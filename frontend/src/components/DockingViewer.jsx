@@ -20,6 +20,7 @@ import {
 } from "@/lib/figureExporters";
 import { CustomizeFigureButton } from "@/components/CustomizeFigureButton";
 import { useAppliedStyle } from "@/context/ChartStyleContext";
+import { CopyButton } from "@/components/ui/CopyButton";
 
 const INTERACTION_STYLE = {
   hydrogen_bond:   { color: "#2BB673", stroke: "#0F7A47", label: "H-Bond" },
@@ -574,15 +575,23 @@ function InterpretButton({ jobId, pairId }) {
       </button>
       {open && text && (
         <div className="mt-3 w-full rounded-2xl border border-[#5139ED]/25 bg-gradient-to-br from-[#F5F3FE] to-white p-4">
-          <div className="mb-2 flex items-center justify-between">
+          <div className="mb-2 flex items-center justify-between gap-2">
             <p className="font-heading text-[10px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">
               PhytoNet AI · Docking Interpretation
             </p>
-            {meta && (
-              <span className="rounded-full bg-[#5139ED] px-2 py-0.5 text-[10px] font-bold text-white">
-                {meta.class} · score {meta.score} · LE {meta.ligand_efficiency}
-              </span>
-            )}
+            <div className="flex items-center gap-1.5">
+              {meta && (
+                <span className="rounded-full bg-[#5139ED] px-2 py-0.5 text-[10px] font-bold text-white">
+                  {meta.class} · score {meta.score} · LE {meta.ligand_efficiency}
+                </span>
+              )}
+              <CopyButton
+                testid={`ai-interpret-copy-${pairId}`}
+                text={text}
+                label="Copy"
+                className="!text-[#5139ED] !border-[#5139ED]/30 !bg-white hover:!bg-[#F5F3FE]"
+              />
+            </div>
           </div>
           <div className="prose prose-sm max-w-none text-[12px] leading-relaxed text-[#0B0B18] whitespace-pre-wrap">
             {text}

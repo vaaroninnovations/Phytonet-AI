@@ -14,6 +14,7 @@ import { Composer } from "@/components/research/Composer";
 import { ChatMessage } from "@/components/research/ChatMessage";
 import { ResultCard } from "@/components/research/cards";
 import { ProjectHeader } from "@/components/research/ProjectHeader";
+import { CopyButton } from "@/components/ui/CopyButton";
 
 export function ProjectTab({ tabId, projectId, initialPrompt, panelRatio,
                               onPanelRatioChange, onTitleChange }) {
@@ -362,6 +363,14 @@ export function ProjectTab({ tabId, projectId, initialPrompt, panelRatio,
                             <span className="h-1 w-1 rounded-full bg-emerald-300 animate-pulse" />
                             LIVE
                           </span>
+                        )}
+                        {!streaming && lastInterp.interpretation && (
+                          <CopyButton
+                            testid="interpretation-copy"
+                            text={lastInterp.interpretation}
+                            label="Copy"
+                            className="ml-auto"
+                          />
                         )}
                       </div>
                       <div data-testid="interpretation-text"
