@@ -184,6 +184,7 @@ export default function MolecularDocking() {
   const [exhaustiveness, setExhaustiveness] = useState(DEFAULT_EXHAUSTIVENESS);
   const [numModes, setNumModes] = useState(DEFAULT_MODES);
   const [padding, setPadding] = useState(DEFAULT_PADDING);
+  const [concurrency, setConcurrency] = useState(3);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState(null); // {job_id, receptors, results}
 
@@ -251,7 +252,7 @@ export default function MolecularDocking() {
                  pdb_id: pdbSelections[g] || t?.pdb_id || undefined,
                  pdb_upload_path: t?.pdb_upload_path || undefined };
       }).filter((t) => t.uniprot_id);
-      const body = { compounds: selectedComp, targets, exhaustiveness, num_modes: numModes, box_padding: padding };
+      const body = { compounds: selectedComp, targets, exhaustiveness, num_modes: numModes, box_padding: padding, concurrency };
 
       // ── SSE stream: parse events off a ReadableStream, updating UI live ──
       const resp = await dockingRunStream(body);
@@ -550,6 +551,10 @@ export default function MolecularDocking() {
               <label className="flex flex-col gap-1 text-[10px] font-bold uppercase tracking-widest text-[#64748B]">
                 Box padding (Å)<HelpTip text="Extra grid-box padding beyond the reference ligand's bounding box." />
                 <input data-testid="dock-padding" type="number" min={0} max={30} step={0.5} value={padding} onChange={(e) => setPadding(Number(e.target.value))} className="brand-focus w-20 rounded-lg border border-[#E7E7F3] bg-white px-3 py-1.5 text-sm text-[#0B0B18]" />
+              </label>
+              <label className="flex flex-col gap-1 text-[10px] font-bold uppercase tracking-widest text-[#64748B]">
+                Concurrency<HelpTip text="How many docking pairs run in parallel (1–4). Higher = faster on beefy machines, but uses more RAM/CPU. Default 3." />
+                <input data-testid="dock-concurrency" type="number" min={1} max={4} value={concurrency} onChange={(e) => setConcurrency(Math.max(1, Math.min(4, Number(e.target.value) || 1)))} className="brand-focus w-20 rounded-lg border border-[#E7E7F3] bg-white px-3 py-1.5 text-sm text-[#0B0B18]" />
               </label>
               <button data-testid="dock-load-pdbs" onClick={loadPDBCandidates} disabled={candidateLoading || selectedGenes.length === 0} className="inline-flex items-center gap-2 rounded-full border border-[#E7E7F3] bg-white px-4 py-2 text-xs font-bold uppercase tracking-widest text-[#0B0B18] hover:border-[#5139ED]/50 disabled:opacity-40">
                 {candidateLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}

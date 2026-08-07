@@ -131,6 +131,47 @@ async def download_pdb(pdb_id: str, dest: Path) -> Path:
     return dest
 
 
+async def download_alphafold(uniprot_id: str, dest: Path) -> Optional[Path]:
+    """Fetch the AlphaFold-DB PDB model for a UniProt accession.
+
+    Uses the /api/prediction/{uniprot} endpoint to resolve the latest
+    version's pdbUrl — AlphaFold has bumped from v4 → v6 in 2025 and
+    hardcoded URLs 404. Returns the destination Path on success, None on
+    any failure so callers can fall back gracefully.
+    """
+    if not uniprot_id or uniprot_id.startswith("USR-"):
+        return None
+    api = f"https://alphafold.ebi.ac.uk/api/prediction/{uniprot_id}"
+    try:
+        async with httpx.AsyncClient(timeout=45.0, follow_redirects=True) as client:
+            meta_r = await client.get(api)
+            if meta_r.status_code != 200:
+                return None
+            meta = meta_r.json()
+            if not isinstance(meta, list) or not meta:
+                return None
+            entry = meta[0]
+            pdb_url = entry.get("pdbUrl")
+            if not pdb_url:
+                # Construct from latestVersion + modelEntityId as fallback
+                ver = entry.get("latestVersion")
+                model_id = entry.get("modelEntityId")
+                if ver and model_id:
+                    pdb_url = f"https://alphafold.ebi.ac.uk/files/{model_id}-model_v{ver}.pdb"
+            if not pdb_url:
+                return None
+            r = await client.get(pdb_url)
+            if r.status_code != 200 or len(r.content) < 500:
+                return None
+            head = r.content[:6].decode("ascii", errors="ignore").upper()
+            if head not in ("HEADER", "ATOM  ", "MODEL "):
+                return None
+            dest.write_bytes(r.content)
+        return dest
+    except Exception:
+        return None
+
+
 def _extract_hetatms(pdb_path: Path) -> List[Tuple[str, List[Tuple[float, float, float]]]]:
     """Return list of (resname, atom_coords[]) for non-water HETATMs."""
     groups: Dict[str, List[Tuple[float, float, float]]] = {}
@@ -779,9 +820,41 @@ async def run_docking_batch(compounds: List[Dict[str, str]],
         if not pdb_id:
             cands = await rcsb_candidates_for_uniprot(uid, limit=5)
             if not cands:
-                receptors[uid] = {"error": "No PDB structure found", "uniprot_id": uid}
+                # ── AlphaFold fallback ─────────────────────────────
+                # Some reviewed UniProts have no reviewed RCSB entry
+                # (poorly-studied proteins, membrane proteins, etc.).
+                # AlphaFold-DB ships high-quality predicted structures
+                # for every UniProt in the reference proteome — try that
+                # before giving up.
+                af_dest = job_dir / f"AF-{uid}.pdb"
+                af_path = await download_alphafold(uid, af_dest)
+                if af_path:
+                    try:
+                        recpt_pdbqt = job_dir / f"AF-{uid}.pdbqt"
+                        prepare_receptor_pdbqt(af_path, recpt_pdbqt)
+                        box = detect_binding_box(af_path, padding=box_padding)
+                        pdb_label = f"AF-{uid}"
+                        receptors[uid] = {"pdb_id": pdb_label,
+                                          "pdb_path": str(af_path),
+                                          "pdbqt_path": str(recpt_pdbqt),
+                                          "box": box, "uniprot_id": uid,
+                                          "gene_symbol": t.get("gene_symbol"),
+                                          "alphafold": True}
+                        await _emit("receptor_ready",
+                            f"Receptor ready (AlphaFold model): "
+                            f"{t.get('gene_symbol') or uid}",
+                            i, n_targets)
+                        continue
+                    except Exception as e:
+                        logger.exception(
+                            f"AlphaFold prep failed for {uid}: {e}")
+                # AlphaFold also missed — give up on this target
+                receptors[uid] = {"error": "No PDB structure found (RCSB + "
+                                          "AlphaFold both empty)",
+                                  "uniprot_id": uid}
                 await _emit("receptor_error",
-                    f"No PDB structure found for {t.get('gene_symbol') or uid}",
+                    f"No structure found (RCSB + AlphaFold) for "
+                    f"{t.get('gene_symbol') or uid}",
                     i, n_targets)
                 continue
             pdb_id = cands[0]["pdb_id"]

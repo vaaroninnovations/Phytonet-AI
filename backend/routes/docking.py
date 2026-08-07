@@ -42,6 +42,7 @@ class DockRunRequest(BaseModel):
     exhaustiveness: int = 8
     num_modes: int = 9
     box_padding: float = 8.0
+    concurrency: int = 3       # 1-4; pairs run in parallel
 
 
 class DockValidateRequest(BaseModel):
@@ -96,6 +97,7 @@ def build_router() -> APIRouter:
                 exhaustiveness=payload.exhaustiveness,
                 num_modes=payload.num_modes,
                 box_padding=payload.box_padding,
+                concurrency=payload.concurrency,
             )
         except Exception as e:
             logging.exception("Docking batch failed")
