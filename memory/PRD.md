@@ -1696,3 +1696,56 @@ Cytoscape memoisation on `network-card` still prevents flicker.
 - P1: Wire ⌘K command palette to search open tabs and past projects.
 - P2: One-tap "Generate Report" button on the interpretation card once
   docking finishes, so users close the loop without leaving the workspace.
+
+
+## 2026-02-07 (iter 49) — Share Interpretation + AI Report Enrichment ✅
+
+### Share Interpretation
+- New reusable component `components/ui/ShareInterpretationButton.jsx` — one-click generator of a public read-only URL that scrolls to the interpretation paragraph.
+- Reuses the pre-existing `POST /api/research/projects/{pid}/share` endpoint (idempotent) so multiple clicks return the same slug.
+- URL shape: `${origin}/research/shared/${slug}#interpretation`.
+- Wired next to the `CopyButton` in `workspace/ProjectTab.jsx` (testid `interpretation-share`) — appears only after streaming completes.
+- `SharedResearch.jsx` now reads `location.hash` on load, scrolls smoothly to the anchored interpretation `<div id="interpretation">` and briefly rings it in emerald for orientation. Multiple runs get numbered ids (`#interpretation`, `#interpretation-1`, `#interpretation-2` …).
+- Fallback UX: if the browser blocks clipboard access, the toast surfaces the URL as description text so the user can still copy it manually.
+
+Verified live: click on the seeded docking project → real API call → toast displays the fully-qualified URL (visible in screenshot: `https://herbal-nexus.preview.emergentagent.com/research/shared/exQ5M2q1Eak3sg#interpretation`).
+
+### AI Report Enrichment
+Enhanced three report sections in `lib/reportBuilder.js` to compute
+publication-grade statistics from the real data payloads (no
+placeholder text left in the paragraphs):
+
+**Docking (§3.8)** — now reports:
+- Mean, min and max ΔG across successful poses
+- Strong-binder count (ΔG ≤ −7 kcal/mol) and very-strong count (ΔG ≤ −9)
+- Explicit top-3 binder identities with ΔG values
+- Mean H-bond count per complex (specificity indicator)
+
+**ADMET (§3.2)** — now reports:
+- Mean MW / cLogP / TPSA / QED across the evaluated cohort
+- Lipinski Ro5 compliance percentage
+- Veber criteria compliance percentage
+- QED ≥ 0.5 drug-like fraction
+- BBB permeability positive fraction
+- hERG cardiotoxicity risk fraction (P ≥ 0.5)
+- Ames mutagenicity risk fraction (P ≥ 0.5)
+
+**Network Analysis (§3.5)** — now reports:
+- Mean node degree and graph density from the reconstructed PPI subnetwork
+- Top-3 hub genes with combined score + degree explicitly named
+- Scale-free topology commentary comparing top-hub degree vs. mean
+
+**Files touched**
+- `components/ui/CopyButton.jsx` (previous iter — reused)
+- `components/ui/ShareInterpretationButton.jsx` (new)
+- `components/workspace/ProjectTab.jsx` (Copy + Share group)
+- `pages/SharedResearch.jsx` (anchor + auto-scroll to interpretation)
+- `lib/reportBuilder.js` (docking + ADMET + network §s)
+
+**Next Action Items**
+- P1: Wire ⌘K command palette to search open tabs and past projects.
+- P2: One-tap "Generate Report" button on the interpretation card once
+  docking finishes so users close the loop without leaving the workspace.
+- P2: Expose the same publication-grade metrics as an in-workspace
+  summary card next to the interpretation so users see them without
+  downloading the PDF report.

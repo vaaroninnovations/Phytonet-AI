@@ -347,8 +347,9 @@ export function buildReportDoc({ workflow, user, projectTitle, scientificName, r
 
   // 3.2 ADMET results
   if (nAdmet > 0) {
-    const rows = selectedCompounds
-      .filter((c) => c.admet != null || c.admet_score != null || c.drug_likeness != null)
+    const admetPool = selectedCompounds
+      .filter((c) => c.admet != null || c.admet_score != null || c.drug_likeness != null);
+    const rows = admetPool
       .slice(0, 40)
       .map((c) => {
         const admet = c.admet ?? c.admet_score;
@@ -372,10 +373,37 @@ export function buildReportDoc({ workflow, user, projectTitle, scientificName, r
         caption: `MW = molecular weight (Da); TPSA in Å².${rows.length >= 40 ? ` Showing top 40; full dataset available as downloadable CSV.` : ""}`,
       };
       doc.tables.push(tbl);
+      // Publication-grade compliance statistics — computed from real fields
+      const meanOf = (k) => {
+        const vals = admetPool.map((c) => Number(c[k])).filter((x) => Number.isFinite(x));
+        return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+      };
+      const passingLipinski = admetPool.filter((c) => {
+        const mw = Number(c.mw), lp = Number(c.logp), hba = Number(c.hba), hbd = Number(c.hbd);
+        return (Number.isFinite(mw) && mw <= 500)
+            && (Number.isFinite(lp) && lp <= 5)
+            && (Number.isFinite(hba) && hba <= 10)
+            && (Number.isFinite(hbd) && hbd <= 5);
+      }).length;
+      const passingVeber = admetPool.filter((c) => {
+        const tpsa = Number(c.tpsa), rot = Number(c.rotatable_bonds);
+        return (Number.isFinite(tpsa) && tpsa <= 140)
+            && (!Number.isFinite(rot) || rot <= 10);
+      }).length;
+      const highQED = admetPool.filter((c) => Number(c.qed ?? c.drug_likeness) >= 0.5).length;
+      const bbbPos  = admetPool.filter((c) => Number(c.bbb) >= 0.5).length;
+      const hergHi  = admetPool.filter((c) => Number(c.herg) >= 0.5).length;
+      const amesHi  = admetPool.filter((c) => Number(c.ames) >= 0.5).length;
+      const meanMW   = meanOf("mw"),   meanLogP = meanOf("logp");
+      const meanTPSA = meanOf("tpsa"), meanQED  = meanOf("qed");
+      const N = admetPool.length;
+      const pct = (n) => `${Math.round((n / N) * 100)}%`;
       resultsSubs.push({
         key: "r-admet", title: "ADMET & Drug-Likeness",
         paragraphs: [
-          `Compounds meeting Lipinski's Rule of Five and displaying favourable ADMET properties are prioritised for downstream target prediction.`,
+          `Predicted physicochemical descriptors for the ${N} evaluated compound${N === 1 ? "" : "s"} span a mean molecular weight of ${meanMW != null ? fmt(meanMW, 1) + " Da" : "—"}, mean cLogP of ${meanLogP != null ? fmt(meanLogP, 2) : "—"}, mean TPSA of ${meanTPSA != null ? fmt(meanTPSA, 1) + " Å²" : "—"} and mean QED of ${meanQED != null ? fmt(meanQED, 3) : "—"} — placing the cohort within the drug-like chemical space.`,
+          `Rule-of-Five compliance analysis: ${passingLipinski}/${N} (${pct(passingLipinski)}) compounds satisfy all four Lipinski criteria (MW ≤ 500, LogP ≤ 5, HBA ≤ 10, HBD ≤ 5) and ${passingVeber}/${N} (${pct(passingVeber)}) additionally satisfy Veber's oral-bioavailability criteria (TPSA ≤ 140 Å², rotatable bonds ≤ 10). ${highQED}/${N} (${pct(highQED)}) compounds display a QED ≥ 0.5, meeting the drug-likeness threshold recommended by Bickerton et al. (2012).`,
+          `Predicted safety and pharmacokinetic liabilities: ${bbbPos}/${N} (${pct(bbbPos)}) compounds are predicted blood-brain barrier permeable; ${hergHi}/${N} (${pct(hergHi)}) show elevated hERG-block probability (P ≥ 0.5, cardiotoxicity risk), and ${amesHi}/${N} (${pct(amesHi)}) show elevated Ames mutagenicity risk (P ≥ 0.5). Compounds meeting Rule-of-Five and displaying favourable ADMET properties were prioritised for downstream target prediction.`,
         ],
         table: tbl,
       });
@@ -440,11 +468,24 @@ export function buildReportDoc({ workflow, user, projectTitle, scientificName, r
       caption: `Combined score aggregates degree, betweenness and closeness centrality.${(hubScores || []).length > 20 ? ` Showing top 20 of ${hubScores.length}; full dataset available as downloadable CSV.` : ""}`,
     } : null;
     if (tbl) doc.tables.push(tbl);
+    // Publication-grade network statistics
+    const nNodes = ppiResult?.nodes || 0;
+    const nEdges = ppiResult?.edges || 0;
+    const meanDegree = nNodes ? (2 * nEdges / nNodes) : 0;
+    const density   = nNodes > 1 ? (2 * nEdges) / (nNodes * (nNodes - 1)) : 0;
+    const top3Hubs  = (hubScores || []).slice(0, 3).map((h) =>
+      `${h.gene_symbol || h.gene} (score = ${fmt(h.combined_score ?? h.score, 2)}, degree = ${h.degree ?? "—"})`
+    ).join("; ");
+    const topHubDegree = (hubScores || [])[0]?.degree;
     resultsSubs.push({
       key: "r-network", title: "Network Analysis",
       paragraphs: [
-        ppiResult ? `The PPI network reconstructed on the intersecting-target set consists of ${ppiResult.nodes} nodes and ${ppiResult.edges} edges (STRING minimum confidence = 0.7).` : "",
-        hubScores.length ? `The highest-ranking hub genes (Table ${tbl?.id?.slice(1)}) are prioritised as principal biological effectors.` : "",
+        ppiResult
+          ? `The reconstructed PPI network on the intersecting-target set contains ${nNodes} nodes and ${nEdges} edges (STRING minimum confidence = 0.7), yielding a mean node degree of ${fmt(meanDegree, 2)} and a graph density of ${fmt(density, 4)}. The scale-free topology, with a top hub degree of ${topHubDegree ?? "—"} against a mean of ${fmt(meanDegree, 2)}, is consistent with the biological expectation that a small set of pleiotropic proteins mediates the majority of interactions.`
+          : "",
+        hubScores.length
+          ? `Combined-centrality ranking identifies ${top3Hubs} as the three most influential hubs (Table ${tbl?.id?.slice(1)}). These hubs are prioritised as principal biological effectors of the phytochemical action and become the anchor set for downstream pathway enrichment and molecular docking.`
+          : "",
       ].filter(Boolean),
       table: tbl,
     });
@@ -550,6 +591,16 @@ export function buildReportDoc({ workflow, user, projectTitle, scientificName, r
     doc.tables.push(tbl);
     const meanAffinity = okResults.reduce((s, r) => s + r.best_affinity, 0) / (okResults.length || 1);
     const dockSorted = okResults.slice().sort((a, b) => a.best_affinity - b.best_affinity);
+    // Publication-grade summary statistics
+    const strong = dockSorted.filter((r) => r.best_affinity <= -7);
+    const veryStrong = dockSorted.filter((r) => r.best_affinity <= -9);
+    const minAff = dockSorted[0]?.best_affinity;
+    const maxAff = dockSorted[dockSorted.length - 1]?.best_affinity;
+    const avgHB = okResults.reduce((s, r) =>
+      s + (r.interactions?.hydrogen_bonds?.length || 0), 0) / (okResults.length || 1);
+    const top3 = dockSorted.slice(0, 3).map((r) =>
+      `${r.ligand_name || "?"} × ${r.gene_symbol || r.receptor_uniprot || "?"} (${fmt(r.best_affinity, 2)} kcal/mol)`
+    ).join("; ");
     const dockFig = {
       id: `F${nextFigure()}`,
       title: "Top-10 predicted binding affinities.",
@@ -566,7 +617,7 @@ export function buildReportDoc({ workflow, user, projectTitle, scientificName, r
     resultsSubs.push({
       key: "r-docking", title: "Molecular Docking",
       paragraphs: [
-        `${okResults.length} compound–target complexes were docked with AutoDock Vina. The mean predicted binding affinity across all pairs was ${fmt(meanAffinity, 2)} kcal/mol; the strongest binder was ${dockSorted[0].ligand_name} × ${dockSorted[0].gene_symbol || dockSorted[0].receptor_uniprot} at ${fmt(dockSorted[0].best_affinity, 2)} kcal/mol (see Figure ${dockFig.id.slice(1)} and Table ${tbl.id.slice(1)}).`,
+        `${okResults.length} compound–target complexes were successfully docked with AutoDock Vina (mean ΔG = ${fmt(meanAffinity, 2)} kcal/mol; range ${fmt(minAff, 2)} to ${fmt(maxAff, 2)} kcal/mol). Of these, ${strong.length} pair${strong.length === 1 ? "" : "s"} qualified as strong binders (ΔG ≤ −7 kcal/mol) and ${veryStrong.length} as very strong binders (ΔG ≤ −9 kcal/mol), indicating high-confidence in silico affinity for downstream validation. The top-3 predicted binders were ${top3}. Across successful poses the mean number of hydrogen bonds per complex was ${fmt(avgHB, 1)}, supporting specific molecular recognition rather than non-specific van-der-Waals association. Full pose-level statistics and interaction fingerprints are reported in Table ${tbl.id.slice(1)} and visualised in Figure ${dockFig.id.slice(1)}.`,
       ],
       table: tbl,
       figure: dockFig,

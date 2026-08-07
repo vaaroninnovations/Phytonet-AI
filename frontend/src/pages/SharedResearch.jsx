@@ -27,6 +27,24 @@ export default function SharedResearch() {
     return () => { alive = false; };
   }, [slug]);
 
+  // After the project renders, scroll to the URL hash (e.g.
+  // #interpretation) so a shared "interpretation link" lands the reader
+  // right on the paragraph a colleague wanted to highlight.
+  useEffect(() => {
+    if (state.loading || !state.project) return;
+    const hash = window.location.hash?.slice(1);
+    if (!hash) return;
+    const t = setTimeout(() => {
+      const el = document.getElementById(hash);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+        el.classList.add("ring-2", "ring-emerald-300/60");
+        setTimeout(() => el.classList.remove("ring-2", "ring-emerald-300/60"), 2400);
+      }
+    }, 120);
+    return () => clearTimeout(t);
+  }, [state.loading, state.project]);
+
   if (state.loading) {
     return (
       <div data-testid="shared-loading"
@@ -123,7 +141,9 @@ export default function SharedResearch() {
                 </span>
               </div>
               {r.interpretation && (
-                <div className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-[13px] leading-relaxed text-emerald-100">
+                <div id={i === 0 ? "interpretation" : `interpretation-${i}`}
+                     data-testid={`shared-interpretation-${i}`}
+                     className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-[13px] leading-relaxed text-emerald-100">
                   {r.interpretation}
                 </div>
               )}

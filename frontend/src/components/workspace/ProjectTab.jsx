@@ -15,6 +15,7 @@ import { ChatMessage } from "@/components/research/ChatMessage";
 import { ResultCard } from "@/components/research/cards";
 import { ProjectHeader } from "@/components/research/ProjectHeader";
 import { CopyButton } from "@/components/ui/CopyButton";
+import { ShareInterpretationButton } from "@/components/ui/ShareInterpretationButton";
 
 export function ProjectTab({ tabId, projectId, initialPrompt, panelRatio,
                               onPanelRatioChange, onTitleChange }) {
@@ -352,6 +353,7 @@ export function ProjectTab({ tabId, projectId, initialPrompt, panelRatio,
                   const streaming = !!lastInterp.interp_streaming;
                   return (
                     <div data-testid="interpretation-card"
+                         id="interpretation"
                          className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-[13px] leading-relaxed text-slate-100">
                       <div className="flex items-center gap-2 mb-1">
                         <div className="text-[10px] font-bold uppercase tracking-widest text-emerald-300">
@@ -365,12 +367,18 @@ export function ProjectTab({ tabId, projectId, initialPrompt, panelRatio,
                           </span>
                         )}
                         {!streaming && lastInterp.interpretation && (
-                          <CopyButton
-                            testid="interpretation-copy"
-                            text={lastInterp.interpretation}
-                            label="Copy"
-                            className="ml-auto"
-                          />
+                          <div className="ml-auto flex items-center gap-1.5">
+                            <CopyButton
+                              testid="interpretation-copy"
+                              text={lastInterp.interpretation}
+                              label="Copy"
+                            />
+                            <ShareInterpretationButton
+                              testid="interpretation-share"
+                              projectId={projectId}
+                              anchor="interpretation"
+                            />
+                          </div>
                         )}
                       </div>
                       <div data-testid="interpretation-text"
