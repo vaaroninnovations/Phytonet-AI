@@ -46,6 +46,7 @@ import { AuthModal } from "@/components/AuthModal";
 import ResumeSessionModal from "@/components/ResumeSessionModal";
 import { PurchaseNodesModal, InsufficientNodesModal } from "@/components/nodes/NodeModals";
 import { FeedbackProvider } from "@/components/feedback/FeedbackDialog";
+import { FloatingFeedbackBubble } from "@/components/feedback/FloatingFeedbackBubble";
 import { Toaster } from "sonner";
 
 function SiteChrome({ children }) {
@@ -134,6 +135,7 @@ function App() {
                         <Route path="profile" element={<AdminProfile />} />
                       </Route>
                     </Routes>
+                    <FloatingFeedbackBubble />
                     </SiteChrome>
                     <AuthModal />
                     <ResumeSessionModal />

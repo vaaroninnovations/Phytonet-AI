@@ -43,13 +43,41 @@ export function FeedbackProvider({ children }) {
   );
 }
 
-/** Small hook — modules call this and invoke `open(taskId)` when a run
- *  completes successfully. Passing the same task-id twice is a no-op. */
+/** Small hook — kept for backwards-compat with existing module pages that
+ *  call `.open(taskId)` when a run completes. As of Feb-2026 auto-popups
+ *  are DISABLED (they were experienced as intrusive); the trigger now
+ *  silently marks the module as "feedback available" so the persistent
+ *  floating bubble can react (e.g. show a small dot badge) — the user
+ *  decides when to open the dialog. */
 export function useFeedbackTrigger(module) {
   const ctx = useContext(FeedbackCtx);
   return {
-    open: (taskId, workflowId) => ctx?.open({ module, taskId, workflowId }),
+    open: (taskId, workflowId) => {
+      if (!module || !taskId) return;
+      // Cheap breadcrumb — the floating bubble reads this on mount so it
+      // can flag "we noticed you just finished a run, tap for feedback".
+      try {
+        localStorage.setItem("phytonet_fb_last_task",
+          JSON.stringify({ module, taskId, workflowId, at: Date.now() }));
+      } catch {}
+      // Broadcast for same-window listeners (localStorage 'storage' events
+      // don't fire in the tab that wrote the value).
+      try {
+        window.dispatchEvent(new CustomEvent("phytonet:feedback-available",
+          { detail: { module, taskId, workflowId } }));
+      } catch {}
+    },
+    /** Programmatic manual-open — used by the floating bubble. */
+    openManual: (module_, taskId, workflowId) =>
+      ctx?.open({ module: module_ || module, taskId, workflowId }),
   };
+}
+
+/** Direct access to the FeedbackDialog opener, needed by the floating
+ *  bubble that doesn't know its module until click time. */
+export function useFeedbackOpener() {
+  const ctx = useContext(FeedbackCtx);
+  return ctx?.open;
 }
 
 /* ─────────────────────── Dialog ─────────────────────── */
