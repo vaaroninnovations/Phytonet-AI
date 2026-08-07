@@ -32,7 +32,7 @@ import os
 from typing import Any, Optional
 
 import httpx
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+from llm_provider import new_chat as _llm_new_chat, UserMessage, TextDelta
 
 logger = logging.getLogger(__name__)
 
@@ -1337,12 +1337,8 @@ def _emergent_key() -> str:
     return key
 
 
-def _new_chat(session_id: str, system: str) -> LlmChat:
-    return LlmChat(
-        api_key=_emergent_key(),
-        session_id=session_id,
-        system_message=system,
-    ).with_model(_MODEL_PROVIDER, _MODEL_NAME)
+def _new_chat(session_id: str, system: str):
+    return _llm_new_chat(session_id, system, model=_MODEL_NAME)
 
 
 async def plan(prompt: str, history: list[dict], project_id: str,
@@ -1452,8 +1448,6 @@ async def interpret_stream(plan: dict, results: list[dict], project_id: str):
         } for r in results],
     }
     try:
-        # Local import to avoid a hard dependency at module load.
-        from emergentintegrations.llm.chat import TextDelta
         stream = chat.stream_message(UserMessage(
             text=json.dumps(payload, default=str)[:8000]
         ))

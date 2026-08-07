@@ -16,7 +16,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+from llm_provider import new_chat as _llm_new_chat, UserMessage
 
 logger = logging.getLogger(__name__)
 
@@ -200,19 +200,18 @@ async def generate_report(workflow: Dict[str, Any],
         # 401 (bad key), 429 (rate-limited), timeouts, etc. Log + fall through.
         logger.warning(f"Groq scientific writer failed, falling back to Emergent: {e}")
 
-    # ── Fallback: Emergent LLM key (Claude Sonnet) ──────────────
-    api_key = os.environ.get("EMERGENT_LLM_KEY")
-    if not api_key:
-        return {"error": "No LLM configured (set GROQ_API_KEY or EMERGENT_LLM_KEY)",
+    # ── Fallback: LLM provider (Anthropic direct or Emergent) ──────────────
+    try:
+        chat = _llm_new_chat(session_id, SYSTEM_PROMPT, model=model)
+    except RuntimeError as e:
+        return {"error": f"No LLM configured: {e}",
                 "markdown": "", "meta": {}}
-    chat = LlmChat(api_key=api_key, session_id=session_id,
-                   system_message=SYSTEM_PROMPT).with_model("anthropic", model)
     msg = UserMessage(text=prompt)
     try:
-        # Emergent LLM's chat SDK doesn't expose a timeout kwarg — wrap with
-        # asyncio.wait_for so a stuck upstream can't tie up the FastAPI worker
-        # long enough for Cloudflare to return a 5xx. 45 s keeps us inside
-        # the ingress timeout so we always return a clean HTTP 500 JSON.
+        # Wrap with asyncio.wait_for so a stuck upstream can't tie up the
+        # FastAPI worker long enough for Cloudflare to return a 5xx. 45 s
+        # keeps us inside the ingress timeout so we always return a clean
+        # HTTP 500 JSON.
         response = await asyncio.wait_for(chat.send_message(msg), timeout=45.0)
     except asyncio.TimeoutError:
         logger.error("Emergent LLM fallback timed out after 45 s")

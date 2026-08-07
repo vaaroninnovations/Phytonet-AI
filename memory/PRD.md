@@ -1,5 +1,24 @@
 # Dr. / — Network Pharmacology SaaS
 
+## 2026-02-10 — Portable LLM provider (Hostinger-ready)
+- Added `backend/llm_provider.py`: dual-provider wrapper that auto-selects
+  direct Anthropic SDK when `ANTHROPIC_API_KEY` is set, else falls back to
+  `emergentintegrations` + `EMERGENT_LLM_KEY`.
+- Refactored `research_service.py`, `report_service.py`, and
+  `routes/report.py` to route every LLM call through `llm_provider.new_chat`.
+  Public interface (`UserMessage`, `TextDelta`, `send_message`,
+  `stream_message`) is unchanged for callers.
+- Added `ANTHROPIC_API_KEY` to `backend/.env` (user-provided).
+- Added `anthropic==0.121.0` to `requirements.txt`.
+- Added `/app/HOSTINGER_DEPLOYMENT.md` — full VPS deployment guide covering
+  system deps, MongoDB, supervisor, nginx (with SSE-safe proxy config), HTTPS
+  via certbot, and troubleshooting.
+- **Note**: user-provided Anthropic key currently has $0 balance; they must
+  add credits at console.anthropic.com/settings/billing before Claude
+  responds (verified — key authenticates, only billing blocks).
+
+
+
 ## Original Problem Statement
 Build a production-ready SaaS web application for Network Pharmacology with a
 modern, clean, scientific interface (white background, palette #5139ED /

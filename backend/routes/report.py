@@ -108,12 +108,15 @@ def build_router() -> APIRouter:
     @router.post("/report/interpret")
     async def report_interpret(payload: ReportInterpretRequest):
         """Per-module + optional overall interpretation via Claude Sonnet 4.5.
-        Uses the Emergent LLM key. Skips modules with no data (no fabrication).
+        Uses the configured LLM provider (Anthropic direct or Emergent).
+        Skips modules with no data (no fabrication).
         Returns {"per_module": {module_id: text}, "overall": text|None, "model": "…"}"""
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        api_key = os.environ.get("EMERGENT_LLM_KEY")
-        if not api_key:
-            raise HTTPException(status_code=500, detail="EMERGENT_LLM_KEY not configured")
+        from llm_provider import new_chat as _llm_new_chat, UserMessage
+        try:
+            # Fail fast if no key is configured for either provider.
+            _llm_new_chat("healthcheck", "hi", model=payload.model)
+        except RuntimeError as e:
+            raise HTTPException(status_code=500, detail=str(e))
 
         w = payload.workflow or {}
         plant = payload.plant_name or w.get("plant_name") or w.get("plantName") or "the plant"
@@ -136,8 +139,8 @@ def build_router() -> APIRouter:
                 "Write the AI Interpretation subsection for THIS module only."
             )
             try:
-                chat = LlmChat(api_key=api_key, session_id=uuid.uuid4().hex,
-                               system_message=MODULE_INTERPRET_SYSTEM).with_model("anthropic", payload.model)
+                chat = _llm_new_chat(uuid.uuid4().hex, MODULE_INTERPRET_SYSTEM,
+                                     model=payload.model)
                 resp = await asyncio.wait_for(chat.send_message(UserMessage(text=prompt)), timeout=30.0)
                 text = str(resp).strip()
                 return text or "No results generated for this analysis."
@@ -163,8 +166,8 @@ def build_router() -> APIRouter:
                     "Write the Overall Summary integrating every module above."
                 )
                 try:
-                    chat = LlmChat(api_key=api_key, session_id=uuid.uuid4().hex,
-                                   system_message=OVERALL_INTERPRET_SYSTEM).with_model("anthropic", payload.model)
+                    chat = _llm_new_chat(uuid.uuid4().hex, OVERALL_INTERPRET_SYSTEM,
+                                         model=payload.model)
                     resp = await asyncio.wait_for(chat.send_message(UserMessage(text=prompt)), timeout=45.0)
                     overall = str(resp).strip() or None
                 except Exception as e:
