@@ -718,17 +718,30 @@ async def run_docking_batch(compounds: List[Dict[str, str]],
                             targets: List[Dict[str, str]],
                             exhaustiveness: int = 8,
                             num_modes: int = 9,
-                            box_padding: float = 8.0) -> Dict[str, Any]:
+                            box_padding: float = 8.0,
+                            progress_cb=None) -> Dict[str, Any]:
     """Run docking for every (compound, target) pair.
 
     compounds: [{name, smiles}]
     targets:   [{uniprot_id, pdb_id (optional; auto if omitted), gene_symbol}]
+    progress_cb: optional async callable — invoked as
+        `await progress_cb(kind, message, done, total, result?)` after each
+        receptor prep completes and after each dock pair completes. Lets the
+        caller stream fine-grained progress to a UI. `result` is the just-
+        computed DockResult (as dict) when `kind == "pair_done"`.
     """
+    async def _emit(kind, msg, done, total, result=None):
+        if progress_cb:
+            try: await progress_cb(kind, msg, done, total, result)
+            except Exception: pass
+
     job_id = uuid.uuid4().hex[:12]
     job_dir = DOCK_ROOT / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
+    n_targets  = len(targets)
+    n_pairs    = len(compounds) * n_targets
     receptors: Dict[str, Dict[str, Any]] = {}
-    for t in targets:
+    for i, t in enumerate(targets, start=1):
         uid = t["uniprot_id"]
         if uid in receptors:
             continue
@@ -737,6 +750,9 @@ async def run_docking_batch(compounds: List[Dict[str, str]],
             cands = await rcsb_candidates_for_uniprot(uid, limit=5)
             if not cands:
                 receptors[uid] = {"error": "No PDB structure found", "uniprot_id": uid}
+                await _emit("receptor_error",
+                    f"No PDB structure found for {t.get('gene_symbol') or uid}",
+                    i, n_targets)
                 continue
             pdb_id = cands[0]["pdb_id"]
         pdb_path = job_dir / f"{pdb_id}.pdb"
@@ -749,26 +765,43 @@ async def run_docking_batch(compounds: List[Dict[str, str]],
             receptors[uid] = {"pdb_id": pdb_id, "pdb_path": str(pdb_path),
                               "pdbqt_path": str(recpt_pdbqt), "box": box,
                               "uniprot_id": uid, "gene_symbol": t.get("gene_symbol")}
+            await _emit("receptor_ready",
+                f"Receptor ready: {t.get('gene_symbol') or uid} ({pdb_id})",
+                i, n_targets)
         except Exception as e:
             logger.exception(f"Receptor prep failed for {uid}/{pdb_id}: {e}")
             receptors[uid] = {"error": str(e), "uniprot_id": uid, "pdb_id": pdb_id}
+            await _emit("receptor_error",
+                f"Receptor prep failed for {t.get('gene_symbol') or uid}: {e}",
+                i, n_targets)
     # Batch dock — sequential to keep resource usage in check.
     pairs: List[DockResult] = []
+    done = 0
     for c in compounds:
         for t in targets:
+            done += 1
             rec = receptors.get(t["uniprot_id"])
             if not rec or rec.get("error"):
-                pairs.append(DockResult(c["name"], c["smiles"], t["uniprot_id"],
-                                        receptor_pdb=(rec or {}).get("pdb_id", ""),
-                                        best_affinity=0.0, poses=[], interactions={},
-                                        pose_pdbqt_path="", log_path="", job_id=job_id,
-                                        pair_id=f"{c['name']}_x_{t['uniprot_id']}",
-                                        error=(rec or {}).get("error", "no receptor")))
+                r = DockResult(c["name"], c["smiles"], t["uniprot_id"],
+                               receptor_pdb=(rec or {}).get("pdb_id", ""),
+                               best_affinity=0.0, poses=[], interactions={},
+                               pose_pdbqt_path="", log_path="", job_id=job_id,
+                               pair_id=f"{c['name']}_x_{t['uniprot_id']}",
+                               error=(rec or {}).get("error", "no receptor"))
+                pairs.append(r)
+                await _emit("pair_done",
+                    f"Skipped {c['name']} × {t.get('gene_symbol') or t['uniprot_id']} "
+                    f"(no receptor)", done, n_pairs, asdict(r))
                 continue
             res = await dock_pair(job_dir, Path(rec["pdbqt_path"]), Path(rec["pdb_path"]),
                                   {"name": c["name"], "smiles": c["smiles"], "uniprot_id": t["uniprot_id"]},
                                   rec["box"], exhaustiveness=exhaustiveness, num_modes=num_modes)
             pairs.append(res)
+            aff = res.best_affinity if res.best_affinity else 0.0
+            gene = t.get("gene_symbol") or t["uniprot_id"]
+            await _emit("pair_done",
+                f"Pair {done}/{n_pairs}: {c['name']} × {gene} → "
+                f"{aff:.2f} kcal/mol", done, n_pairs, asdict(res))
     pairs.sort(key=lambda p: p.best_affinity if p.best_affinity else 0.0)
     return {
         "job_id": job_id,

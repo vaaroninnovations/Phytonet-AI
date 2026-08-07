@@ -920,8 +920,14 @@ async def tool_docking(progress=_noop_progress,
     picked_genes = picked_genes[:max(1, int(top_genes))]
 
     total_pairs = len(compounds) * len(picked_genes)
+    LARGE_THRESHOLD = 20
+    is_large = total_pairs > LARGE_THRESHOLD
+    est_min = max(1, round(total_pairs * 0.75))   # ~45s per pair conservative
+    prelude = (f"Large batch ({total_pairs} pairs, ~{est_min} min) — "
+               f"streaming results as each pair completes. "
+               if is_large else "")
     await progress("submitting",
-                   f"Preparing to dock {len(compounds)} compound(s) × "
+                   f"{prelude}Preparing to dock {len(compounds)} compound(s) × "
                    f"{len(picked_genes)} target(s) = {total_pairs} pair(s)…")
     await progress("running",
                    f"Fetching PDB structures and building receptor grids…")
@@ -929,6 +935,14 @@ async def tool_docking(progress=_noop_progress,
     # ── 3. Run docking batch (reuses AutoDock Vina pipeline) ────
     targets_payload = [{"uniprot_id": g["uniprot_id"],
                         "gene_symbol": g["gene_symbol"]} for g in picked_genes]
+
+    # Live per-pair progress — forwarded via the existing `progress()`
+    # channel so the frontend plan-card ticker updates smoothly for
+    # long-running batches instead of appearing frozen for 10+ minutes.
+    async def _dock_progress(kind: str, msg: str, done: int, total: int,
+                             _result=None):
+        stage = "running" if kind == "pair_done" else "preparing"
+        await progress(stage, msg)
     try:
         batch = await docking_service.run_docking_batch(
             compounds=compounds,
@@ -936,6 +950,7 @@ async def tool_docking(progress=_noop_progress,
             exhaustiveness=int(exhaustiveness),
             num_modes=int(num_modes),
             box_padding=float(box_padding),
+            progress_cb=_dock_progress,
         )
     except Exception as e:
         logger.exception("[research] docking batch failed")
@@ -1202,6 +1217,22 @@ Plan (CORRECT — user did not name targets, so predict first):
   step_1  compound_lookup   {{"query": "curcumin"}}
   step_2  target_predict    {{"compounds": [{{"name":"curcumin","smiles":"$step_1.smiles"}}]}}
   step_3  docking           {{}}
+
+User: "Dock curcumin, quercetin and rutin against AKT1, EGFR and TP53."
+Plan (CORRECT — 3×3 matrix, ALL 9 pairs from a SINGLE docking step,
+compound_lookup runs once per compound in parallel, no target_predict):
+  step_1  compound_lookup   {{"query": "curcumin"}}
+  step_2  compound_lookup   {{"query": "quercetin"}}
+  step_3  compound_lookup   {{"query": "rutin"}}
+  step_4  docking           {{"compounds": [{{"name":"curcumin","smiles":"$step_1.smiles"}}, {{"name":"quercetin","smiles":"$step_2.smiles"}}, {{"name":"rutin","smiles":"$step_3.smiles"}}], "targets": ["AKT1","EGFR","TP53"], "top_compounds": 3, "top_genes": 3}}
+
+DOCKING BATCH SIZE
+──────────────────
+• Docking is expensive (~30-60s per compound-target pair on our default \
+Vina settings). When the plan implies a batch bigger than 20 pairs, warn \
+the user in your `reasoning` (e.g. "This is a 5×8 matrix — 40 pairs, ~20 min").
+• Feel free to lower `exhaustiveness` to 4 for large exploratory batches; \
+default 8 for focused runs.
 
 OUTPUT FORMAT
 ─────────────
