@@ -354,7 +354,7 @@ export function ProjectTab({ tabId, projectId, initialPrompt, panelRatio,
                          className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-[13px] leading-relaxed text-slate-100">
                       <div className="flex items-center gap-2 mb-1">
                         <div className="text-[10px] font-bold uppercase tracking-widest text-emerald-300">
-                          {streaming ? "Writing Interpretation…" : "Latest Interpretation"}
+                          {streaming ? "PhytoNet AI is interpreting…" : "Latest Interpretation"}
                         </div>
                         {streaming && (
                           <span data-testid="interp-streaming-badge"
