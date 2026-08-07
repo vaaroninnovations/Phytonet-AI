@@ -4,8 +4,7 @@ import { useEffect, useState } from "react";
 import { authApi } from "@/context/AuthContext";
 import {
   Sparkles, Send, Beaker, Atom, Dna, FlaskConical, Microscope,
-  Waves, FileText, Database, LayoutGrid, MessageSquare, ArrowRight,
-  Loader2,
+  MessageSquare, ArrowRight, Loader2,
 } from "lucide-react";
 import { SUGGESTIONS } from "@/components/research/EmptyState";
 
@@ -16,27 +15,18 @@ const MODULES = [
   { key: "plant-db",      icon: Beaker,       path: "/plant-database",
     title: "Plant Database",
     blurb: "Phytochemicals & references across IMPPAT + LOTUS." },
+  { key: "admet",         icon: FlaskConical, path: "/admet",
+    title: "ADMET & Drug-Likeness",
+    blurb: "Lipinski, PK, hERG, LD50 and 20+ properties." },
   { key: "target-pred",   icon: Atom,         path: "/compound-target-prediction",
-    title: "Compound → Target",
+    title: "Compound Target Prediction",
     blurb: "Predict protein targets with ChEMBL + Swiss + Open Targets." },
   { key: "disease-target",icon: Dna,          path: "/disease-target-identification",
-    title: "Disease Targets",
+    title: "Disease Target Prediction",
     blurb: "Genes associated with a disease from Open Targets." },
-  { key: "admet",         icon: FlaskConical, path: "/admet",
-    title: "ADMET / Drug-Likeness",
-    blurb: "Lipinski, PK, hERG, LD50 and 20+ properties." },
   { key: "docking",       icon: Microscope,   path: "/molecular-docking",
     title: "Molecular Docking",
     blurb: "AutoDock Vina bulk docking with pose viewer." },
-  { key: "md",            icon: Waves,        path: "/molecular-dynamics",
-    title: "Molecular Dynamics",
-    blurb: "GROMACS-ready system builder + downloadable inputs." },
-  { key: "report",        icon: FileText,     path: "/ai-scientific-report",
-    title: "AI Scientific Report",
-    blurb: "Generate a publication-ready manuscript from your run." },
-  { key: "resources",     icon: Database,     path: "/resources",
-    title: "Databases",
-    blurb: "One-stop links to KEGG, ChEMBL, DrugBank, and more." },
 ];
 
 function ProjectCard({ p, onOpen }) {
