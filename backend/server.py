@@ -1328,6 +1328,15 @@ api_router_nodes = APIRouter(prefix="/api")
 api_router_nodes.include_router(_nodes_router)
 app.include_router(api_router_nodes)
 
+# ─── Referrals (mutual 10-node reward) — mounted at /api/referrals ───
+from routes import referrals as _referrals_routes  # noqa: E402
+_referrals_router = _referrals_routes.build_router(
+    db, get_current_user=auth_service.make_get_current_user(db)
+)
+api_router_referrals = APIRouter(prefix="/api")
+api_router_referrals.include_router(_referrals_router)
+app.include_router(api_router_referrals)
+
 # ─── Feedback (post-task ratings) — mounted at /api/feedback ───
 from routes import feedback as _feedback_routes  # noqa: E402
 _feedback_router = _feedback_routes.build_router(
@@ -1386,6 +1395,12 @@ logger = logging.getLogger(__name__)
 async def _startup():
     """Seed the plants index and set indexes on first boot."""
     try:
+        # Seed default promo codes (idempotent).
+        try:
+            from routes import nodes as _nodes_mod
+            await _nodes_mod._seed_default_promos(db)
+        except Exception:
+            logging.exception("promo seed failed")
         # TTL index on cache
         await plant_cache_col.create_index("cached_at", expireAfterSeconds=CACHE_TTL_SECONDS)
         await plants_col.create_index("name_lc", unique=True)

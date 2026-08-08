@@ -166,25 +166,39 @@ def _is_academic_email(email: Optional[str]) -> bool:
 
 
 # ── Promo codes (first-time buyer discounts) ───────────────────────
-# Kept in-code for the first tier of codes so we can ship without an admin UI.
-# When we outgrow this, migrate to a `promo_codes` collection + admin CRUD.
-PROMO_CODES = {
-    "RESEARCH20": {
-        "id": "RESEARCH20",
-        "kind": "first_bundle",              # only redeemable on the user's FIRST bundle purchase
+# Codes live in the `promo_codes` MongoDB collection so admins can spin new
+# ones up from `/admin/promos` without a code deploy. The RESEARCH20 seed
+# below is inserted on startup by `_seed_default_promos` if the collection
+# is empty. Keep this list minimal — new codes should be added via admin UI.
+DEFAULT_PROMOS = [
+    {
+        "code":        "RESEARCH20",
+        "kind":        "first_bundle",
         "percent_off": 20,
-        "applies_to_kinds": ("bundle",),      # bundles only — not subscription/enterprise/student
+        "flat_off_inr": None,
+        "applies_to_kinds": ["bundle"],
         "description": "20% off your first PhytoNet AI bundle. Welcome to the community!",
-        "active": True,
+        "active":      True,
+        "max_redemptions": None,   # None = unlimited (still 1-per-user for first_bundle kind)
     },
-}
+]
 
-def _resolve_promo(code: Optional[str]) -> Optional[dict]:
+async def _seed_default_promos(db):
+    """Idempotent — inserts default codes if the collection is empty. Safe to
+    call on every startup."""
+    if await db["promo_codes"].count_documents({}) > 0:
+        return
+    now = datetime.now(timezone.utc)
+    for p in DEFAULT_PROMOS:
+        await db["promo_codes"].insert_one({**p, "created_at": now, "redemptions": 0})
+
+
+async def _resolve_promo(db, code: Optional[str]) -> Optional[dict]:
     """Case-insensitive lookup that ignores whitespace. Returns None if unknown/inactive."""
     if not code:
         return None
     normalized = code.strip().upper()
-    promo = PROMO_CODES.get(normalized)
+    promo = await db["promo_codes"].find_one({"code": normalized})
     if not promo or not promo.get("active"):
         return None
     return promo
@@ -198,13 +212,17 @@ async def _promo_eligibility(db, promo: dict, user_doc: dict, plan: dict) -> tup
     """
     if plan.get("kind") not in promo.get("applies_to_kinds", ()):
         return False, "This promo only applies to one-time bundle purchases."
+    # Global redemption cap (across all users).
+    max_red = promo.get("max_redemptions")
+    if max_red and int(promo.get("redemptions") or 0) >= int(max_red):
+        return False, "This promo has reached its redemption limit."
     if promo["kind"] == "first_bundle":
         # First-purchase gate — reject if user has ever purchased or redeemed.
         if int(user_doc.get("nodes_lifetime_purchased") or 0) > 0:
             return False, "This promo is only valid on your first purchase."
         prior = await db["promo_redemptions"].find_one({
             "user_id": str(user_doc["_id"]),
-            "promo_id": promo["id"],
+            "promo_code": promo["code"],
         })
         if prior:
             return False, "You've already used this promo."
@@ -935,7 +953,7 @@ def build_router(db, get_current_user):
             )
 
         # ── Promo code validation + discount ──
-        promo = _resolve_promo(payload.promo_code)
+        promo = await _resolve_promo(db, payload.promo_code)
         promo_info: Optional[dict] = None
         applied_discount_paise = 0
         if payload.promo_code and not promo:
@@ -945,7 +963,7 @@ def build_router(db, get_current_user):
             ok, reason = await _promo_eligibility(db, promo, _u, plan)
             if not ok:
                 raise HTTPException(status_code=400, detail=reason)
-            promo_info = {"id": promo["id"], "percent_off": promo.get("percent_off"),
+            promo_info = {"code": promo["code"], "percent_off": promo.get("percent_off"),
                           "flat_off_inr": promo.get("flat_off_inr")}
 
         client = _razorpay_client()
@@ -977,7 +995,7 @@ def build_router(db, get_current_user):
             "amount_paise": amount_paise,
             "original_amount_paise": original_paise,
             "discount_paise": applied_discount_paise,
-            "promo_id": (promo or {}).get("id"),
+            "promo_code": (promo or {}).get("code"),
             "status": "created",
             "created_at": now,
         })
@@ -1040,7 +1058,7 @@ def build_router(db, get_current_user):
         """Preview a promo code before checkout. Returns the discounted amount
         so the pricing UI can show "Was ₹500, Now ₹400 (20% off)" before the
         user commits to Razorpay checkout."""
-        promo = _resolve_promo(payload.code)
+        promo = await _resolve_promo(db, payload.code)
         if not promo:
             raise HTTPException(status_code=404, detail="Invalid or expired promo code.")
         plan = next((p for p in PRICING_PLANS if p["id"] == payload.plan_id), None)
@@ -1053,7 +1071,7 @@ def build_router(db, get_current_user):
         original_paise = int(plan["price_inr"]) * 100
         discounted_paise = _apply_promo_discount(original_paise, promo)
         return {
-            "code": promo["id"],
+            "code": promo["code"],
             "description": promo.get("description"),
             "percent_off": promo.get("percent_off"),
             "flat_off_inr": promo.get("flat_off_inr"),
@@ -1164,22 +1182,35 @@ def build_router(db, get_current_user):
             }},
         )
         # ── Record promo redemption (idempotent — this row is the ledger). ──
-        if intent.get("promo_id"):
+        if intent.get("promo_code"):
             try:
                 await db["promo_redemptions"].insert_one({
                     "user_id":  str(user["_id"]),
-                    "promo_id": intent["promo_id"],
+                    "promo_code": intent["promo_code"],
                     "plan_id":  intent.get("plan_id"),
                     "intent_id": str(intent["_id"]),
                     "razorpay_order_id": payload.razorpay_order_id,
                     "discount_paise": int(intent.get("discount_paise") or 0),
                     "at": now,
                 })
+                # Bump the global redemption counter (best-effort).
+                await db["promo_codes"].update_one(
+                    {"code": intent["promo_code"]},
+                    {"$inc": {"redemptions": 1}},
+                )
             except Exception:
                 # Non-fatal — the user still gets their nodes even if we
                 # fail to record the redemption row.
                 pass
 
+        # ── Referral reward: credit BOTH invitee + referrer 10 nodes on
+        #    the invitee's first paid bundle. Idempotent internally. ──
+        if intent.get("plan_kind") == "bundle":
+            try:
+                from routes import referrals as _ref
+                await _ref.award_referral_on_first_purchase(db, str(user["_id"]))
+            except Exception:
+                pass
         # Re-read the user so we can return their fresh Pro status.
         fresh = upd or await users.find_one({"_id": user["_id"]})
         # ── Analytics: purchase / pro activation event ──

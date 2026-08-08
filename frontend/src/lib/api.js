@@ -112,6 +112,10 @@ export const createPurchaseIntent = (plan_id, promo_code) =>
   api.post("/nodes/purchase-intent", { plan_id, promo_code }).then((r) => r.data);
 export const validatePromo = (code, plan_id) =>
   api.post("/nodes/promo/validate", { code, plan_id }).then((r) => r.data);
+export const getReferralInfo = () =>
+  api.get("/referrals/me").then((r) => r.data);
+export const applyReferral = (code) =>
+  api.post("/referrals/apply", { code }).then((r) => r.data);
 export const verifyPayment = (payload) =>
   api.post("/nodes/verify-payment", payload).then((r) => r.data);
 export const contactSales = (payload) =>

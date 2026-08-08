@@ -10,6 +10,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useNodes } from "@/context/NodeContext";
 import { GoldenLeaf } from "@/components/nodes/NodeBadge";
 import { getNodeHistory, listProjects } from "@/lib/api";
+import ReferralCard from "@/components/referrals/ReferralCard";
 
 function Card({ icon: Ic, label, value, tint = "#5139ED", testid }) {
   return (
@@ -142,6 +143,10 @@ export default function Dashboard() {
       </div>
 
       {/* Usage History */}
+      <section id="referral" className="mt-8">
+        <ReferralCard />
+      </section>
+
       <section id="usage" className="mt-10">
         <div className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-[#0F172A]">
           <History className="h-4 w-4" /> Usage History

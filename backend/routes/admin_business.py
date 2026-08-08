@@ -27,12 +27,29 @@ import admin_service as adm
 logger = logging.getLogger(__name__)
 
 SALES_STATUS_VALUES = ("new", "in_progress", "won", "lost", "closed")
+VALID_PROMO_KINDS = ("first_bundle", "general")
+VALID_PLAN_KINDS = ("bundle", "student", "subscription", "enterprise")
 
 
 class UpdateInquiryPayload(BaseModel):
     status: Optional[str] = Field(default=None, pattern="^(new|in_progress|won|lost|closed)$")
     notes:  Optional[str] = Field(default=None, max_length=4000)
     assignee: Optional[str] = Field(default=None, max_length=100)
+
+
+class PromoPayload(BaseModel):
+    """Create/update payload for /admin/promos.
+    Any field left as None on PATCH is left untouched. On create the code +
+    at least one of (percent_off, flat_off_inr) is required."""
+    code:         Optional[str]  = Field(default=None, min_length=3, max_length=32,
+                                          pattern=r"^[A-Z0-9_]+$")
+    kind:         Optional[str]  = Field(default=None, pattern="^(first_bundle|general)$")
+    percent_off:  Optional[int]  = Field(default=None, ge=1, le=90)
+    flat_off_inr: Optional[int]  = Field(default=None, ge=1, le=100000)
+    applies_to_kinds: Optional[list[str]] = Field(default=None)
+    description:  Optional[str]  = Field(default=None, max_length=280)
+    active:       Optional[bool] = None
+    max_redemptions: Optional[int] = Field(default=None, ge=1, le=1000000)
 
 
 def build_router(db):
@@ -214,6 +231,94 @@ def build_router(db):
             if not r["_id"]: continue
             rows.append({"module": r["_id"], "events": r["events"], "nodes": r["nodes"]})
         return {"rows": rows, "days": days}
+
+    # ─────────────────── Promo Codes CRUD ────────────────────────
+    promos = db["promo_codes"]
+
+    @router.get("/promos")
+    async def list_promos(admin=Depends(require_admin)):
+        rows = []
+        async for r in promos.find({}).sort("created_at", -1):
+            rows.append({
+                "code": r.get("code"),
+                "kind": r.get("kind"),
+                "percent_off": r.get("percent_off"),
+                "flat_off_inr": r.get("flat_off_inr"),
+                "applies_to_kinds": r.get("applies_to_kinds", []),
+                "description": r.get("description"),
+                "active": bool(r.get("active", True)),
+                "max_redemptions": r.get("max_redemptions"),
+                "redemptions": int(r.get("redemptions") or 0),
+                "created_at": (r.get("created_at") or datetime.now(timezone.utc)).isoformat(),
+                "updated_at": r["updated_at"].isoformat() if r.get("updated_at") else None,
+            })
+        return {"rows": rows, "total": len(rows)}
+
+    @router.post("/promos")
+    async def create_promo(payload: PromoPayload, admin=Depends(require_admin)):
+        if not payload.code:
+            raise HTTPException(status_code=400, detail="`code` is required")
+        if not (payload.percent_off or payload.flat_off_inr):
+            raise HTTPException(status_code=400,
+                detail="Provide either `percent_off` or `flat_off_inr`")
+        code = payload.code.strip().upper()
+        if await promos.find_one({"code": code}):
+            raise HTTPException(status_code=409, detail=f"Code '{code}' already exists")
+        applies_to = payload.applies_to_kinds or ["bundle"]
+        for k in applies_to:
+            if k not in VALID_PLAN_KINDS:
+                raise HTTPException(status_code=400,
+                    detail=f"Invalid plan kind '{k}' in applies_to_kinds")
+        now = datetime.now(timezone.utc)
+        doc = {
+            "code": code,
+            "kind": payload.kind or "general",
+            "percent_off":  payload.percent_off,
+            "flat_off_inr": payload.flat_off_inr,
+            "applies_to_kinds": applies_to,
+            "description": payload.description or f"{payload.percent_off or 0}% off",
+            "active": payload.active if payload.active is not None else True,
+            "max_redemptions": payload.max_redemptions,
+            "redemptions": 0,
+            "created_at": now,
+            "created_by": admin.get("email") or str(admin.get("_id")),
+        }
+        await promos.insert_one(doc)
+        return {"ok": True, "code": code}
+
+    @router.patch("/promos/{code}")
+    async def update_promo(code: str, payload: PromoPayload,
+                           admin=Depends(require_admin)):
+        code = code.strip().upper()
+        existing = await promos.find_one({"code": code})
+        if not existing:
+            raise HTTPException(status_code=404, detail=f"Promo '{code}' not found")
+        upd = {}
+        for f in ("kind", "percent_off", "flat_off_inr", "description",
+                  "active", "max_redemptions"):
+            v = getattr(payload, f, None)
+            if v is not None:
+                upd[f] = v
+        if payload.applies_to_kinds is not None:
+            for k in payload.applies_to_kinds:
+                if k not in VALID_PLAN_KINDS:
+                    raise HTTPException(status_code=400,
+                        detail=f"Invalid plan kind '{k}' in applies_to_kinds")
+            upd["applies_to_kinds"] = payload.applies_to_kinds
+        if not upd:
+            raise HTTPException(status_code=400, detail="No fields to update")
+        upd["updated_at"] = datetime.now(timezone.utc)
+        upd["updated_by"] = admin.get("email") or str(admin.get("_id"))
+        await promos.update_one({"code": code}, {"$set": upd})
+        return {"ok": True, "code": code}
+
+    @router.delete("/promos/{code}")
+    async def delete_promo(code: str, admin=Depends(require_admin)):
+        code = code.strip().upper()
+        res = await promos.delete_one({"code": code})
+        if res.deleted_count == 0:
+            raise HTTPException(status_code=404, detail=f"Promo '{code}' not found")
+        return {"ok": True}
 
     return router
 

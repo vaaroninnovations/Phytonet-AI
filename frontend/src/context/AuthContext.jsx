@@ -53,6 +53,16 @@ export function AuthProvider({ children }) {
   const register = async (payload) => {
     const { data } = await authApi.post("/auth/register", payload);
     setUser(data.user);
+    // If the visitor arrived via ?ref=CODE we stashed the code in localStorage
+    // (see ReferralPickup). Attempt to attach it now — silent on failure so
+    // signup itself never breaks.
+    try {
+      const pending = localStorage.getItem("phytonet_ref_code");
+      if (pending) {
+        await authApi.post("/referrals/apply", { code: pending });
+        localStorage.removeItem("phytonet_ref_code");
+      }
+    } catch (e) { /* ignore */ }
     setModalOpen(false);
     setTimeout(runPending, 100);
     return data;

@@ -31,6 +31,8 @@ import AdminFeedback from "@/pages/admin/AdminFeedback";
 import AdminContact from "@/pages/admin/AdminContact";
 import AdminSales from "@/pages/admin/AdminSales";
 import AdminMetrics from "@/pages/admin/AdminMetrics";
+import AdminPromos from "@/pages/admin/AdminPromos";
+import ReferralPickup from "@/components/ReferralPickup";
 import AdminSettings from "@/pages/admin/AdminSettings";
 import AdminProfile from "@/pages/admin/AdminProfile";
 import { AdminForgotPassword, AdminResetPassword } from "@/pages/admin/AdminPasswordReset";
@@ -84,6 +86,7 @@ function App() {
                 <NetworkProvider>
                   <ProjectProvider>
                     <ChartStyleProvider>
+                    <ReferralPickup />
                     <SiteChrome>
                     <Routes>
                       <Route path="/" element={<Home />} />
@@ -137,6 +140,7 @@ function App() {
                         <Route path="contact" element={<AdminContact />} />
                         <Route path="sales" element={<AdminSales />} />
                         <Route path="metrics" element={<AdminMetrics />} />
+                        <Route path="promos" element={<AdminPromos />} />
                         <Route path="settings" element={<AdminSettings />} />
                         <Route path="profile" element={<AdminProfile />} />
                       </Route>
