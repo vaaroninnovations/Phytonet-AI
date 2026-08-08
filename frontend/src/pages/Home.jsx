@@ -121,7 +121,7 @@ function Hero() {
         <motion.div className="col-span-12 lg:col-span-5 relative"
                     initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.9, delay: 0.15 }}>
-          <div className="relative aspect-[5/4] w-full lg:aspect-auto lg:h-[520px]">
+          <div className="relative aspect-[5/4] w-full lg:aspect-auto lg:h-[600px]">
             <HeroMoleculeField />
           </div>
         </motion.div>
