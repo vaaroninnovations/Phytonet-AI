@@ -5,6 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import NodeBadge from "@/components/nodes/NodeBadge";
 import SaveProjectMenu from "@/components/SaveProjectMenu";
 import BrandLogo from "@/components/BrandLogo";
+import { useCommandPalette } from "@/context/CommandPaletteContext";
 
 const NAV = [
   { label: "Home", to: "/" },
@@ -21,6 +22,7 @@ export default function SiteHeader() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const navigate = useNavigate();
+  const { open: openPalette } = useCommandPalette();
   // These marketing routes use the dark canvas — switch header to dark-glass
   // so the transition into each hero feels seamless.
   const dark = pathname === "/"
@@ -118,6 +120,8 @@ export default function SiteHeader() {
         <div className="flex items-center gap-2">
           <button
             data-testid="header-search"
+            type="button"
+            onClick={openPalette}
             className={`hidden items-center gap-2 rounded-full border px-3 py-1.5 text-[12px] font-medium md:inline-flex ${
               dark
                 ? "border-[#FAFAFF]/10 bg-[#FAFAFF]/[0.04] text-[#E7E7F3]/70 hover:border-[#c4b5fd]/40 hover:text-[#FAFAFF]"

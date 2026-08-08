@@ -15,6 +15,7 @@ import { useNodes } from "@/context/NodeContext";
 import NodeBadge from "@/components/nodes/NodeBadge";
 import SaveProjectMenu from "@/components/SaveProjectMenu";
 import BrandLogo from "@/components/BrandLogo";
+import { useCommandPalette } from "@/context/CommandPaletteContext";
 
 const TYPE_ICONS = {
   home:    HomeIcon,
@@ -118,6 +119,7 @@ function AvatarMenu({ user, navigate, logout }) {
 
 export function TabBar({ tabs, activeId, onActivate, onClose }) {
   const { user, logout } = useAuth();
+  const { open: openPalette } = useCommandPalette();
   const navigate = useNavigate();
   return (
     <div data-testid="app-header"
@@ -172,6 +174,8 @@ export function TabBar({ tabs, activeId, onActivate, onClose }) {
       <div className="flex-shrink-0 flex items-center gap-2 pr-4 py-2">
         <button
           data-testid="header-search"
+          type="button"
+          onClick={openPalette}
           className="hidden md:inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[12px] font-medium text-slate-300 hover:text-white hover:border-[#5139ED]/40"
           aria-label="Search"
         >

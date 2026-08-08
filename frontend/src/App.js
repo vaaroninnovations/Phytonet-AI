@@ -48,6 +48,7 @@ import { AuthProvider } from "@/context/AuthContext";
 import { AdminAuthProvider } from "@/context/AdminAuthContext";
 import { ProjectProvider } from "@/context/ProjectContext";
 import { ChartStyleProvider } from "@/context/ChartStyleContext";
+import { CommandPaletteProvider } from "@/context/CommandPaletteContext";
 import { NodeProvider } from "@/context/NodeContext";
 import { AuthModal } from "@/components/AuthModal";
 import ResumeSessionModal from "@/components/ResumeSessionModal";
@@ -88,6 +89,7 @@ function App() {
                 <NetworkProvider>
                   <ProjectProvider>
                     <ChartStyleProvider>
+                    <CommandPaletteProvider>
                     <ReferralPickup />
                     <SiteChrome>
                     <Routes>
@@ -155,6 +157,7 @@ function App() {
                     <ResumeSessionModal />
                     <PurchaseNodesModal />
                     <InsufficientNodesModal />
+                    </CommandPaletteProvider>
                     </ChartStyleProvider>
                   </ProjectProvider>
                 </NetworkProvider>

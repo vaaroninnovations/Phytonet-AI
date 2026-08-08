@@ -18,7 +18,9 @@ export default function HeroPremiumScene() {
       className="relative h-full w-full overflow-hidden"
       style={{
         background:
-          "radial-gradient(70% 60% at 45% 55%, rgba(43,182,115,0.10) 0%, rgba(15,14,36,0.0) 60%), #0F0E24",
+          "radial-gradient(65% 55% at 60% 45%, rgba(14,175,122,0.10) 0%, rgba(15,14,36,0.0) 60%), " +
+          "radial-gradient(65% 55% at 85% 90%, rgba(129,57,237,0.14) 0%, rgba(15,14,36,0.0) 60%), " +
+          "#0F0E24",
       }}
     >
       {/* Oversized protein — scale up and translate so the ribbon bleeds

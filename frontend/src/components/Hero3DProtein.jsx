@@ -26,13 +26,31 @@ const HIGHLIGHT_PURPLE  = "#8139ED";     // pathway hover accent
 
 const SOLVENTS = ["HOH", "NA", "K", "CL", "MG", "ZN", "CA", "SO4", "PO4"];
 
-// Base cartoon colour along backbone — subtle shade modulation so helices
-// read as 3D. Called by 3Dmol per-atom.
+// Base cartoon colour — blends a cooler emerald at the N-term into the
+// brand purple at the C-term (echoes the "PhytoNet AI." headline gradient).
+// Cool emerald  #0EAF7A → lavender #c4b5fd → purple #8139ED → deep #5139ED
 function baseCartoonColor(atom) {
-  const t = ((atom.resi || 0) % 60) / 60;
-  const lerp = (a, b) => Math.round(a + (b - a) * t);
-  const r = lerp(43, 30), g = lerp(182, 138), b = lerp(115, 85);
-  return `rgb(${r},${g},${b})`;
+  // Rough normalisation over the AKT1 kinase domain (~480 residues).
+  const raw = (atom.resi || 0) / 480;
+  const t = Math.min(Math.max(raw, 0), 1);
+
+  // Three-stop gradient
+  const stops = [
+    [0.00, [14, 175, 122]],   // #0EAF7A cool emerald
+    [0.50, [122, 90, 200]],   // #7A5AC8 muted violet
+    [1.00, [129,  57, 237]],  // #8139ED brand purple
+  ];
+  // Find surrounding stops and lerp
+  let a = stops[0], b = stops[stops.length - 1];
+  for (let i = 0; i < stops.length - 1; i++) {
+    if (t >= stops[i][0] && t <= stops[i + 1][0]) { a = stops[i]; b = stops[i + 1]; break; }
+  }
+  const span = b[0] - a[0] || 1;
+  const k = (t - a[0]) / span;
+  const r = Math.round(a[1][0] + (b[1][0] - a[1][0]) * k);
+  const g = Math.round(a[1][1] + (b[1][1] - a[1][1]) * k);
+  const bl = Math.round(a[1][2] + (b[1][2] - a[1][2]) * k);
+  return `rgb(${r},${g},${bl})`;
 }
 
 const Hero3DProtein = forwardRef(function Hero3DProtein({
@@ -215,7 +233,7 @@ const Hero3DProtein = forwardRef(function Hero3DProtein({
         ref={hostRef}
         className={`absolute inset-0 h-full w-full ${interactive ? "cursor-grab active:cursor-grabbing" : ""}`}
         style={{
-          filter: `drop-shadow(0 24px 40px rgba(43,182,115,0.22)) drop-shadow(0 0 28px rgba(126,224,178,0.28))`,
+          filter: `drop-shadow(0 24px 40px rgba(14,175,122,0.18)) drop-shadow(0 0 28px rgba(129,57,237,0.22))`,
         }}
       />
     </div>
