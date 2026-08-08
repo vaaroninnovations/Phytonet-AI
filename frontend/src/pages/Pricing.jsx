@@ -11,8 +11,9 @@ import {
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { useNodes } from "@/context/NodeContext";
-import { getNodePricing, createPurchaseIntent, verifyPayment } from "@/lib/api";
-import { openRazorpayCheckout } from "@/lib/razorpay";
+import { getNodePricing, createPurchaseIntent, verifyPayment,
+         createSubscription, cancelSubscription } from "@/lib/api";
+import { openRazorpayCheckout, openRazorpaySubscription } from "@/lib/razorpay";
 import ContactSalesModal from "@/components/pricing/ContactSalesModal";
 import { GoldenLeaf } from "@/components/nodes/NodeBadge";
 
@@ -157,9 +158,9 @@ const FAQ_ITEMS = [
   { q: "How does the node system work?",
     a: "Every workflow costs a set number of nodes. Free tools like Plant Database and Disease Search cost 0 nodes. Premium modules and the AI Research Assistant charge nodes per successful step — cheap runs stay cheap, heavy runs pay proportionally." },
   { q: "Do nodes expire?",
-    a: "No — nodes purchased as one-time bundles never expire. PhytoNet Pro subscription nodes roll over up to a cap of 300, so you're never penalised for a light month." },
+    a: "No — nodes purchased as one-time bundles never expire. PhytoNet Pro subscription nodes roll over up to a cap of 450, so you're never penalised for a light month." },
   { q: "What's the difference between bundles and Pro?",
-    a: "Bundles are one-time top-ups. Pro is a monthly subscription — you get 100 fresh nodes each month, priority docking concurrency (8 parallel vs 4), and a Pro badge on shared reports. Best if you use the platform every week." },
+    a: "Bundles are one-time top-ups. Pro is a monthly subscription — you get 150 fresh nodes each month, priority docking concurrency (8 parallel vs 4), and a Pro badge on shared reports. Best if you use the platform every week." },
   { q: "Who qualifies for the Student plan?",
     a: "Anyone with a verified academic email (.edu, .edu.in, .ac.in, .ac.uk, .edu.au, etc.). The plan unlocks automatically once you sign in with your institution email." },
   { q: "Can I get an invoice for reimbursement?",
@@ -228,6 +229,31 @@ export default function Pricing() {
     if (!user) { openModal("login"); return; }
     setBusy(plan.id);
     try {
+      // ── Subscription flow: Razorpay Subscriptions API (auto-renewing) ──
+      if (plan.kind === "subscription") {
+        const intent = await createSubscription(plan.id);
+        await openRazorpaySubscription({
+          intent,
+          onSuccess: () => {
+            toast.success(`Welcome to ${plan.label}!`, {
+              description: "Your subscription is active — first month's nodes are being credited.",
+              duration: 6000,
+            });
+            // The webhook credits nodes when Razorpay confirms the charge —
+            // refresh a couple times so the balance shows up promptly.
+            setTimeout(() => refresh?.(), 1500);
+            setTimeout(() => refresh?.(), 4000);
+            setBusy(null);
+          },
+          onFailure: (err) => {
+            toast.error(err?.description || err?.message || "Subscription failed");
+            setBusy(null);
+          },
+          onDismiss: () => setBusy(null),
+        });
+        return;
+      }
+      // ── Bundle / Student flow: one-time Razorpay Order ──
       const intent = await createPurchaseIntent(plan.id);
       await openRazorpayCheckout({
         intent,
@@ -238,11 +264,9 @@ export default function Pricing() {
               razorpay_payment_id: resp.razorpay_payment_id,
               razorpay_signature:  resp.razorpay_signature,
             });
-            const isSubscription = plan.kind === "subscription";
             toast.success(
               r.already_verified ? "Payment already verified"
-                : isSubscription  ? `Welcome to ${plan.label}! Your Pro benefits are active.`
-                                   : `Purchase successful — ${r.credited} nodes added.`,
+                                 : `Purchase successful — ${r.credited} nodes added.`,
               { description: `New balance: ${r.balance_after} nodes`, duration: 6000 },
             );
             refresh?.();
@@ -298,9 +322,22 @@ export default function Pricing() {
               <strong className="text-[#0F172A]">You're a Pro member.</strong> Your subscription renews on{" "}
               {pro.expires_at ? new Date(pro.expires_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—"}.
             </div>
-            <Link to="/dashboard" className="text-[12px] font-semibold text-amber-700 hover:underline">
-              Manage subscription →
-            </Link>
+            <button
+              data-testid="pricing-cancel-sub"
+              onClick={async () => {
+                if (!window.confirm("Cancel PhytoNet Pro at the end of the current billing cycle? You'll keep Pro benefits until then.")) return;
+                try {
+                  const r = await cancelSubscription();
+                  toast.success(r.message || "Subscription cancelled");
+                  refresh?.();
+                } catch (e) {
+                  toast.error(e?.response?.data?.detail || "Cancel failed");
+                }
+              }}
+              className="text-[12px] font-semibold text-amber-700 hover:underline"
+            >
+              Cancel subscription →
+            </button>
           </div>
         </div>
       )}
@@ -360,9 +397,9 @@ export default function Pricing() {
               {[
                 ["Plant Database", "✓", "✓", "✓"],
                 ["Disease target search", "✓", "✓", "✓"],
-                ["AI Research Assistant", "Metered (per step)", "100 nodes/mo", "Shared 500/mo"],
+                ["AI Research Assistant", "Metered (per step)", "150 nodes/mo", "Shared 500/mo"],
                 ["Docking concurrency", "Up to 4 parallel", "Up to 8 parallel", "Up to 8 parallel"],
-                ["Node rollover", "Never expire", "Up to 300", "Shared pool"],
+                ["Node rollover", "Never expire", "Up to 450", "Shared pool"],
                 ["Priority support", "Community", "Email", "Dedicated + onboarding"],
                 ["Collaboration workspaces", "—", "—", "✓ (5 seats)"],
                 ["Institutional invoicing", "—", "—", "✓"],

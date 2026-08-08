@@ -114,6 +114,12 @@ export const verifyPayment = (payload) =>
   api.post("/nodes/verify-payment", payload).then((r) => r.data);
 export const contactSales = (payload) =>
   api.post("/nodes/contact-sales", payload).then((r) => r.data);
+export const createSubscription = (plan_id) =>
+  api.post("/nodes/subscription/create", { plan_id }).then((r) => r.data);
+export const cancelSubscription = () =>
+  api.post("/nodes/subscription/cancel").then((r) => r.data);
+export const getSubscriptionStatus = () =>
+  api.get("/nodes/subscription/status").then((r) => r.data);
 
 // ── Profile / preferences ─────────────────────────────────────────
 export const updateProfile = (payload) =>

@@ -4,9 +4,9 @@ import {
   Coins,
 } from "lucide-react";
 
-// Best per-node rate from the Research bundle (₹500 / 25 nodes = ₹20/node).
+// Best per-node rate (Research bundle: ₹500 / 60 nodes ≈ ₹8.33/node).
 // Kept as a display hint only — actual billing is per-node, not per-rupee.
-const NODE_TO_INR = 20;
+const NODE_TO_INR = 8.5;
 
 export function PlanCard({ plan, title, cost, onExecute, executing, executed,
                            onRetryStep, retryingStepId }) {

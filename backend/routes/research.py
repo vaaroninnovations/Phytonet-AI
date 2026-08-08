@@ -165,6 +165,20 @@ def build_router(db) -> APIRouter:
             cost_breakdown["insufficient"] = (free_runs_left <= 0
                                               and balance is not None
                                               and balance < cost_breakdown["total"])
+            # ── Analytics: preflight funnel event ──
+            try:
+                from routes import admin_business as _biz
+                await _biz.log_event(
+                    db, "research_preflight", str(user["_id"]),
+                    module="phytonet-ai-agent",
+                    nodes_charged=0,
+                    meta={"cost_total": cost_breakdown.get("total"),
+                          "docking_pairs": cost_breakdown.get("docking_pairs"),
+                          "billable": cost_breakdown.get("billable"),
+                          "insufficient": cost_breakdown.get("insufficient")},
+                )
+            except Exception:
+                pass
             run_doc = {
                 "id":     run_id,
                 "title":  planner.get("title") or "Workflow",
@@ -216,6 +230,19 @@ def build_router(db) -> APIRouter:
             raise HTTPException(409, "Run already in progress")
         if run.get("status") == "completed":
             return _serialize_run(run)
+        # ── Analytics: research_executed event ──
+        try:
+            from routes import admin_business as _biz
+            cb = run.get("cost") or {}
+            await _biz.log_event(
+                db, "research_executed", str(user["_id"]),
+                module="phytonet-ai-agent",
+                nodes_charged=int(cb.get("total") or 0) if cb.get("billable") else 0,
+                meta={"run_id": run_id, "billable": cb.get("billable"),
+                      "docking_pairs": cb.get("docking_pairs")},
+            )
+        except Exception:
+            pass
 
         # Mark running
         await col.update_one(

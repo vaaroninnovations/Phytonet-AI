@@ -67,3 +67,33 @@ export async function openRazorpayCheckout({ intent, onSuccess, onFailure, onDis
   rzp.on("payment.failed", (resp) => onFailure?.(resp?.error || resp));
   rzp.open();
 }
+
+/** Opens the Razorpay Standard Checkout modal in *subscription* mode.
+ *  Unlike one-time purchases this uses `subscription_id` (not `order_id`)
+ *  so Razorpay auto-charges the user every month until they cancel.
+ *
+ *  @param {object} intent — response from POST /api/nodes/subscription/create:
+ *                           { subscription_id, razorpay_key_id, plan, prefill }
+ */
+export async function openRazorpaySubscription({ intent, onSuccess, onFailure, onDismiss }) {
+  const Razorpay = await loadRazorpay();
+  const rzp = new Razorpay({
+    key: intent.razorpay_key_id,
+    name: "PhytoNet AI",
+    description: `${intent.plan?.label || "PhytoNet Pro"} — auto-renewing monthly`,
+    subscription_id: intent.subscription_id,
+    prefill: intent.prefill || {},
+    theme: { color: "#5139ED" },
+    handler: async (resp) => {
+      // resp = { razorpay_payment_id, razorpay_subscription_id, razorpay_signature }
+      // Verification happens server-side via the razorpay webhook — nothing to
+      // verify from the client. Just refresh the balance/pro state.
+      try { await onSuccess?.(resp); } catch (e) { onFailure?.(e); }
+    },
+    modal: {
+      ondismiss: () => onDismiss?.(),
+    },
+  });
+  rzp.on("payment.failed", (resp) => onFailure?.(resp?.error || resp));
+  rzp.open();
+}

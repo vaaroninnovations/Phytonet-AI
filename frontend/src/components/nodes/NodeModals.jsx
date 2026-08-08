@@ -208,7 +208,7 @@ export function PurchaseNodesModal() {
                 Save with PhytoNet Pro — ₹1,499/mo
               </div>
               <div className="text-[11.5px] text-[#4B5563]">
-                100 nodes/month with rollover · priority docking · Pro badge
+                150 nodes/month with rollover · priority docking · Pro badge
               </div>
             </div>
           </div>

@@ -1354,6 +1354,12 @@ api_router_contact.include_router(_contact_routes.build_public_router(db))
 api_router_contact.include_router(_contact_routes.build_admin_router(db))
 app.include_router(api_router_contact)
 
+# ─── Admin Business (sales inquiries + usage metrics) — /api/admin/sales/*, /api/admin/metrics/* ───
+from routes import admin_business as _admin_business_routes  # noqa: E402
+api_router_admin_business = APIRouter(prefix="/api")
+api_router_admin_business.include_router(_admin_business_routes.build_router(db))
+app.include_router(api_router_admin_business)
+
 # ─── AI Research Assistant — /api/research/* ───
 from routes import research as _research_routes  # noqa: E402
 api_router_research = APIRouter(prefix="/api")

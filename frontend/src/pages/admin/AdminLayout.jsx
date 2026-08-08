@@ -4,13 +4,15 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAdminAuth } from "@/context/AdminAuthContext";
 import {
   LayoutDashboard, Users, ShieldCheck, ScrollText, Settings2,
-  UserCog, LogOut, Loader2, MessageSquare, Mail,
+  UserCog, LogOut, Loader2, MessageSquare, Mail, Building2, BarChart3,
 } from "lucide-react";
 import { useEffect } from "react";
 
 const NAV = [
   { to: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard, testid: "admin-nav-dashboard" },
   { to: "/admin/users", label: "Users", icon: Users, testid: "admin-nav-users" },
+  { to: "/admin/metrics", label: "Usage Metrics", icon: BarChart3, testid: "admin-nav-metrics" },
+  { to: "/admin/sales", label: "Sales Inquiries", icon: Building2, testid: "admin-nav-sales" },
   { to: "/admin/feedback", label: "Feedback", icon: MessageSquare, testid: "admin-nav-feedback" },
   { to: "/admin/contact", label: "Contact Messages", icon: Mail, testid: "admin-nav-contact" },
   { to: "/admin/audit-log", label: "Audit Log", icon: ScrollText, testid: "admin-nav-audit" },

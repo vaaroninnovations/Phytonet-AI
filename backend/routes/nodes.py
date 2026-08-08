@@ -38,13 +38,14 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import logging
 import os
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 import razorpay
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from bson import ObjectId
 
@@ -88,48 +89,48 @@ PRICING_PLANS = [
         "id": "starter",
         "label": "Starter",
         "kind": "bundle",
-        "nodes": 10,
+        "nodes": 30,
         "price_inr": 250,
         "highlight": False,
-        "description": "Enough for two full docking runs.",
+        "description": "Enough for six full docking runs.",
     },
     {
         "id": "research",
         "label": "Research",
         "kind": "bundle",
-        "nodes": 25,
+        "nodes": 60,
         "price_inr": 500,
         "highlight": True,
         "badge": "Most Popular",
-        "description": "Best value for regular users — 5 docking runs or 2 full AI workflows.",
+        "description": "Best value for regular users — 12 docking runs or 6 full AI workflows.",
     },
     {
         "id": "professional",
         "label": "Professional",
         "kind": "bundle",
-        "nodes": 60,
+        "nodes": 100,
         "price_inr": 1000,
         "highlight": False,
-        "description": "For labs running the AI Agent daily — 12 docking runs or 6 workflows.",
+        "description": "For labs running the AI Agent daily — 20 docking runs or 10 workflows.",
     },
     {
         "id": "pro_monthly",
         "label": "PhytoNet Pro",
         "kind": "subscription",
-        "nodes": 100,
+        "nodes": 150,
         "price_inr": 1499,
         "highlight": False,
         "badge": "Best for Recurring Use",
-        "description": "100 nodes/month with rollover (cap 300), priority docking concurrency (8 parallel), Pro badge on shared reports.",
+        "description": "150 nodes/month with rollover (cap 450), priority docking concurrency (8 parallel), Pro badge on shared reports.",
         "features": [
-            "100 nodes credited every month",
-            "Node rollover — up to 300 unused nodes carry forward",
+            "150 nodes credited every month",
+            "Node rollover — up to 450 unused nodes carry forward",
             "Priority docking concurrency (8 parallel vs. 4)",
             "Unlimited plant & disease queries",
             "'Pro' badge on your shared reports",
         ],
         "billing_period_days": 30,
-        "rollover_cap": 300,
+        "rollover_cap": 450,
     },
     {
         "id": "lab_team",
@@ -185,7 +186,7 @@ def _pro_status_from_user(user_doc: dict) -> dict:
         "is_pro": is_pro,
         "plan_id": "pro_monthly" if is_pro else None,
         "expires_at": expires_at.isoformat() if isinstance(expires_at, datetime) else None,
-        "rollover_cap": 300 if is_pro else None,
+        "rollover_cap": 450 if is_pro else None,
         "concurrency_max": 8 if is_pro else 4,
     }
 
@@ -304,6 +305,20 @@ async def research_charge_step(user_id: str, run_id: str, step_id: str,
             reason=f"research tool: {tool}",
             meta={"research_run_id": run_id, "step_id": step_id, "tool": tool},
         )
+        # ── Analytics: per-step charge event (fire-and-forget) ──
+        try:
+            from routes import admin_business as _biz
+            # Use the users collection's database handle (motor exposes it as `.database`).
+            _db = _users_col.database
+            await _biz.log_event(
+                _db, "research_step_charge", user_id,
+                module="phytonet-ai-agent", tool=tool,
+                nodes_charged=int(amount),
+                meta={"run_id": run_id, "step_id": step_id,
+                      "idempotent": res.get("idempotent", False)},
+            )
+        except Exception:
+            pass
         return {"ok": True, "balance": res.get("balance"),
                 "charged": int(amount), "free_run": False,
                 "idempotent": res.get("idempotent", False)}
@@ -549,6 +564,285 @@ def build_router(db, get_current_user):
         })
         return {"ok": True, "message": "Thanks — our team will reach out within 1 business day."}
 
+    # ─────────────────── Razorpay Subscriptions (Auto-Renew Pro) ─────────
+    # Uses Razorpay's Subscriptions API — creates a Plan on-the-fly (cached
+    # in the `razorpay_plans` collection so we only hit Razorpay once per
+    # plan), then a Subscription per user. The user completes the first
+    # payment via the Razorpay checkout modal. Subsequent months are auto-
+    # charged by Razorpay; the `subscription.charged` webhook credits nodes
+    # and extends `pro_expires_at`.
+
+    async def _get_or_create_razorpay_plan(client, plan_cfg: dict) -> str:
+        """Idempotent — creates a Razorpay Plan the first time this SaaS plan
+        is subscribed to; reuses the razorpay_plan_id thereafter."""
+        cache = db["razorpay_plans"]
+        existing = await cache.find_one({"plan_id": plan_cfg["id"]})
+        if existing and existing.get("razorpay_plan_id"):
+            return existing["razorpay_plan_id"]
+        # Razorpay plans are billed in the smallest currency unit (paise).
+        rzp_plan = client.plan.create({
+            "period": "monthly",
+            "interval": 1,
+            "item": {
+                "name": f"PhytoNet AI — {plan_cfg['label']}",
+                "amount": int(plan_cfg["price_inr"]) * 100,
+                "currency": "INR",
+                "description": plan_cfg.get("description") or "",
+            },
+            "notes": {"phytonet_plan_id": plan_cfg["id"],
+                      "nodes_per_cycle":  str(plan_cfg["nodes"])},
+        })
+        await cache.update_one(
+            {"plan_id": plan_cfg["id"]},
+            {"$set": {"razorpay_plan_id": rzp_plan["id"], "at": datetime.now(timezone.utc),
+                      "amount_inr": plan_cfg["price_inr"], "nodes": plan_cfg["nodes"]}},
+            upsert=True,
+        )
+        return rzp_plan["id"]
+
+    @router.post("/subscription/create")
+    async def subscription_create(payload: PurchaseIntentPayload,
+                                  user=Depends(get_current_user)):
+        """Create a Razorpay subscription for the given monthly plan.
+
+        Response includes `subscription_id` + `razorpay_key_id` so the browser
+        can open the Razorpay checkout in `subscription` mode. On success the
+        user is billed for month #1 immediately; Razorpay auto-charges every
+        month afterwards and fires `subscription.charged` webhooks that this
+        server credits nodes on.
+        """
+        plan = next((p for p in PRICING_PLANS if p["id"] == payload.plan_id), None)
+        if not plan:
+            raise HTTPException(status_code=404, detail=f"Unknown plan '{payload.plan_id}'")
+        if plan.get("kind") != "subscription":
+            raise HTTPException(status_code=400, detail="This plan is not a recurring subscription.")
+        client = _razorpay_client()
+        if client is None:
+            raise HTTPException(status_code=503,
+                detail="Payment gateway not configured — set RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET.")
+        # 1. Ensure the underlying Razorpay Plan exists.
+        try:
+            rzp_plan_id = await _get_or_create_razorpay_plan(client, plan)
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Razorpay plan.create failed")
+            raise HTTPException(status_code=502, detail=f"Razorpay plan setup failed: {e}")
+        # 2. Create the per-user Subscription.
+        try:
+            sub = client.subscription.create({
+                "plan_id": rzp_plan_id,
+                # Charge indefinitely until the user cancels — Razorpay caps
+                # total_count at 120 (10 years); we set a large sentinel.
+                "total_count": 120,
+                # Bill the first month immediately so the user gets Pro right
+                # after payment (`customer_notify` still emails invoices).
+                "customer_notify": 1,
+                "notes": {"user_id": str(user["_id"]),
+                          "phytonet_plan_id": plan["id"]},
+            })
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Razorpay subscription.create failed")
+            raise HTTPException(status_code=502, detail=f"Razorpay subscription failed: {e}")
+        now = datetime.now(timezone.utc)
+        await db["subscriptions"].insert_one({
+            "user_id": str(user["_id"]),
+            "plan_id": plan["id"],
+            "razorpay_plan_id": rzp_plan_id,
+            "razorpay_subscription_id": sub["id"],
+            "status": sub.get("status") or "created",
+            "created_at": now,
+        })
+        return {
+            "subscription_id": sub["id"],
+            "razorpay_key_id": os.environ["RAZORPAY_KEY_ID"],
+            "plan": plan,
+            "amount":   int(plan["price_inr"]) * 100,
+            "currency": "INR",
+            "prefill": {
+                "name":  " ".join(x for x in [user.get("first_name"), user.get("last_name")] if x) or user.get("email", ""),
+                "email": user.get("email", ""),
+            },
+        }
+
+    @router.post("/subscription/cancel")
+    async def subscription_cancel(user=Depends(get_current_user)):
+        """Cancel the caller's active PhytoNet Pro subscription.
+
+        Uses Razorpay's `cancel_at_cycle_end` so the user keeps Pro features
+        until the current billing cycle expires — no partial refund needed.
+        """
+        # Find the most recent active subscription for this user.
+        sub = await db["subscriptions"].find_one(
+            {"user_id": str(user["_id"]),
+             "status": {"$in": ["active", "authenticated", "created"]}},
+            sort=[("created_at", -1)],
+        )
+        if not sub:
+            raise HTTPException(status_code=404, detail="No active subscription found.")
+        client = _razorpay_client()
+        if client is None:
+            raise HTTPException(status_code=503, detail="Payment gateway not configured.")
+        try:
+            client.subscription.cancel(
+                sub["razorpay_subscription_id"],
+                {"cancel_at_cycle_end": 1},
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Razorpay subscription.cancel failed")
+            raise HTTPException(status_code=502, detail=f"Razorpay cancel failed: {e}")
+        await db["subscriptions"].update_one(
+            {"_id": sub["_id"]},
+            {"$set": {"status": "cancel_at_cycle_end",
+                      "cancelled_at": datetime.now(timezone.utc)}},
+        )
+        return {"ok": True, "message": "Subscription will end at the current billing cycle."}
+
+    class RazorpayWebhookPayload(BaseModel):
+        """Loose validation — we accept whatever Razorpay sends and process
+        the ones we care about (subscription.charged, subscription.cancelled).
+        The signature is verified before this handler runs."""
+        model_config = {"extra": "allow"}
+        event: Optional[str] = None
+        payload: Optional[dict] = None
+
+    @router.post("/razorpay/webhook")
+    async def razorpay_webhook(request: Request):
+        """Razorpay pushes subscription.* + payment.* events here.
+
+        Signature verification uses the shared RAZORPAY_WEBHOOK_SECRET — MUST
+        be identical to the value set in Razorpay Dashboard → Webhooks.
+        """
+        secret = os.environ.get("RAZORPAY_WEBHOOK_SECRET")
+        if not secret:
+            # Refuse to process — we can't trust the request without a secret.
+            raise HTTPException(status_code=503, detail="Webhook not configured.")
+        raw_body = await request.body()
+        header_sig = request.headers.get("x-razorpay-signature", "")
+        expected = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(expected, header_sig):
+            raise HTTPException(status_code=400, detail="Invalid webhook signature.")
+
+        try:
+            body = json.loads(raw_body.decode("utf-8"))
+        except Exception:
+            raise HTTPException(status_code=400, detail="Malformed JSON.")
+
+        event = body.get("event") or ""
+        entities = (body.get("payload") or {})
+        sub_ent  = ((entities.get("subscription") or {}).get("entity")) or {}
+        pay_ent  = ((entities.get("payment") or {}).get("entity")) or {}
+        rzp_sub_id = sub_ent.get("id") or pay_ent.get("subscription_id")
+        # Idempotency: skip duplicates via razorpay event_id when present.
+        event_id = body.get("id") or (pay_ent.get("id") or sub_ent.get("id"))
+        if event_id and await db["razorpay_events"].find_one({"event_id": event_id}):
+            return {"ok": True, "duplicate": True}
+        if event_id:
+            await db["razorpay_events"].insert_one({
+                "event_id": event_id, "event": event,
+                "at": datetime.now(timezone.utc),
+            })
+
+        if not rzp_sub_id:
+            return {"ok": True, "ignored": True, "reason": "no subscription id"}
+        sub = await db["subscriptions"].find_one({"razorpay_subscription_id": rzp_sub_id})
+        if not sub:
+            return {"ok": True, "ignored": True, "reason": "unknown subscription"}
+        plan_cfg = next((p for p in PRICING_PLANS if p["id"] == sub.get("plan_id")), None)
+
+        if event in ("subscription.charged", "invoice.paid") and plan_cfg:
+            # Credit nodes for this billing cycle + extend pro_expires_at.
+            credit = int(plan_cfg.get("nodes") or 0)
+            days   = int(plan_cfg.get("billing_period_days") or 30)
+            now    = datetime.now(timezone.utc)
+            try:
+                uid_obj = ObjectId(sub["user_id"])
+            except Exception:
+                return {"ok": False, "error": "invalid user_id"}
+            existing = await users.find_one({"_id": uid_obj}) or {}
+            # Rollover cap — never let balance exceed rollover_cap + credit
+            # so users can't stockpile indefinitely.
+            cap = int(plan_cfg.get("rollover_cap") or 0)
+            current = int(existing.get("nodes_balance") or 0)
+            if cap and current + credit > cap:
+                credit = max(0, cap - current)
+            # Extend from max(existing_expiry, now) so a mid-cycle top-up
+            # doesn't shorten the paid period.
+            base = existing.get("pro_expires_at") or now
+            if isinstance(base, datetime):
+                base = base if base.tzinfo else base.replace(tzinfo=timezone.utc)
+                if base < now: base = now
+            else:
+                base = now
+            new_expiry = base + timedelta(days=days)
+            await users.update_one(
+                {"_id": uid_obj},
+                {"$inc": {"nodes_balance": credit,
+                          "nodes_lifetime_purchased": credit},
+                 "$set": {"pro_expires_at":   new_expiry,
+                          "pro_plan_id":      sub.get("plan_id"),
+                          "pro_last_charged_at": now}},
+            )
+            await ledger.insert_one({
+                "user_id": sub["user_id"],
+                "direction": "credit", "amount": credit,
+                "balance_after": current + credit,
+                "module": "system",
+                "workflow": "pro_renewal",
+                "reason": f"PhytoNet Pro auto-renewal ({credit} nodes)",
+                "job_id": None,
+                "meta": {"razorpay_subscription_id": rzp_sub_id,
+                         "razorpay_payment_id": pay_ent.get("id"),
+                         "plan_id": sub.get("plan_id"),
+                         "cycle_end": new_expiry.isoformat()},
+                "at": now,
+            })
+            await db["subscriptions"].update_one(
+                {"_id": sub["_id"]},
+                {"$set": {"status": "active",
+                          "last_payment_at": now,
+                          "last_payment_id": pay_ent.get("id")}},
+            )
+            try:
+                from routes import admin_business as _biz
+                await _biz.log_event(
+                    db, "pro_renewal", sub["user_id"],
+                    module="billing",
+                    plan_id=sub.get("plan_id"),
+                    meta={"credited": credit, "subscription_id": rzp_sub_id},
+                )
+            except Exception:
+                pass
+            return {"ok": True, "credited": credit}
+
+        if event in ("subscription.cancelled", "subscription.halted",
+                     "subscription.expired", "subscription.paused"):
+            await db["subscriptions"].update_one(
+                {"_id": sub["_id"]},
+                {"$set": {"status": event.split(".")[-1],
+                          "ended_at": datetime.now(timezone.utc)}},
+            )
+            return {"ok": True, "state": event}
+
+        return {"ok": True, "event": event, "handled": False}
+
+    @router.get("/subscription/status")
+    async def subscription_status(user=Depends(get_current_user)):
+        """Return the caller's most recent subscription record for UI display."""
+        sub = await db["subscriptions"].find_one(
+            {"user_id": str(user["_id"])},
+            sort=[("created_at", -1)],
+        )
+        if not sub:
+            return {"has_subscription": False}
+        return {
+            "has_subscription": True,
+            "id": str(sub["_id"]),
+            "plan_id": sub.get("plan_id"),
+            "razorpay_subscription_id": sub.get("razorpay_subscription_id"),
+            "status": sub.get("status"),
+            "created_at": (sub.get("created_at") or datetime.now(timezone.utc)).isoformat(),
+            "last_payment_at": sub.get("last_payment_at").isoformat() if sub.get("last_payment_at") else None,
+        }
+
     @router.post("/purchase-intent")
     async def purchase_intent(payload: PurchaseIntentPayload,
                               user=Depends(get_current_user)):
@@ -755,6 +1049,21 @@ def build_router(db, get_current_user):
 
         # Re-read the user so we can return their fresh Pro status.
         fresh = upd or await users.find_one({"_id": user["_id"]})
+        # ── Analytics: purchase / pro activation event ──
+        try:
+            from routes import admin_business as _biz
+            kind = ("pro_activated" if intent.get("plan_kind") == "subscription"
+                    else "purchase")
+            await _biz.log_event(
+                db, kind, str(user["_id"]),
+                module="billing",
+                nodes_charged=0,  # credits, not debits
+                plan_id=intent.get("plan_id"),
+                meta={"credited": credited, "amount_inr": amount_inr,
+                      "plan_kind": intent.get("plan_kind")},
+            )
+        except Exception:
+            pass
         return {
             "ok": True,
             "already_verified": False,
