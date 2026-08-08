@@ -587,20 +587,10 @@ async def _execute_in_background(db, oid_str: str, pid: str, run_id: str):
             "runs.$.completed_at":      now_iso,
         }},
     )
-    # Append the interpretation as an assistant message so it stays in chat
-    if interpretation:
-        await col.update_one(
-            {"_id": oid},
-            {"$push": {"messages": {
-                "role": "assistant",
-                "text": interpretation,
-                "mode": "interpretation",
-                "run_id": run_id,
-                "next_steps": next_steps,
-                "created_at": now_iso,
-            }},
-             "$set": {"updated_at": datetime.now(timezone.utc)}},
-        )
+    # NOTE: We intentionally do NOT append the interpretation as an assistant
+    # message in the chat pane — the results pane already renders it via
+    # `runs.$.interpretation`. Duplicating it in chat causes the same content
+    # to show up twice, which users found noisy.
 
 
 def _parse_upload(name: str, raw: bytes) -> tuple[str, str, list]:
