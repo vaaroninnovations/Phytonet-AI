@@ -62,7 +62,7 @@ function Hero() {
         <div className="absolute right-0 bottom-[-160px] h-[420px] w-[520px] rounded-full bg-[radial-gradient(closest-side,#2BB673,transparent_70%)] opacity-15 blur-3xl" />
       </div>
 
-      <div className="relative mx-auto max-w-7xl px-6 pt-24 pb-32 lg:pt-32 lg:pb-40">
+      <div className="relative mx-auto max-w-7xl px-6 pt-16 pb-16 lg:pt-20 lg:pb-24">
         <motion.div className="max-w-3xl"
                     initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.6 }}>
