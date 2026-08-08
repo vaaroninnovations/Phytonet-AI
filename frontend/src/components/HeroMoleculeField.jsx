@@ -135,7 +135,7 @@ function AnchorLabel({ Icon, label, className = "", accent = "#2BB673", testid, 
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6, delay }}
-      className={`absolute z-20 flex items-center gap-1.5 text-[12px] font-body font-semibold text-[#0B4635] ${className}`}
+      className={`absolute z-20 flex items-center gap-1.5 text-[12px] font-body font-semibold text-[#E7E7F3] ${className}`}
     >
       <span
         className="grid h-7 w-7 place-items-center rounded-full border shadow-sm"
@@ -152,6 +152,7 @@ function AnchorLabel({ Icon, label, className = "", accent = "#2BB673", testid, 
 function DetailCard({
   Icon, label, value, valueColor = "#1E8A55", sub, cta = "View",
   className = "", testid, delay = 0,
+  onHoverEnter, onHoverLeave,
 }) {
   return (
     <motion.div
@@ -159,7 +160,10 @@ function DetailCard({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6, delay }}
-      className={`absolute z-30 w-[176px] rounded-xl border border-[#E7E7F3] bg-white/95 backdrop-blur-sm p-3 shadow-[0_12px_30px_rgba(15,14,36,0.12)] ${className}`}
+      onMouseEnter={onHoverEnter}
+      onMouseLeave={onHoverLeave}
+      whileHover={{ y: -3, boxShadow: "0 18px 40px rgba(15,14,36,0.22)" }}
+      className={`absolute z-30 w-[176px] cursor-pointer rounded-xl border border-[#E7E7F3] bg-white/95 backdrop-blur-sm p-3 shadow-[0_12px_30px_rgba(15,14,36,0.12)] transition-shadow ${className}`}
     >
       <div className="flex items-center gap-1.5 text-[10.5px] font-body font-semibold uppercase tracking-[0.12em] text-[#64748B]">
         <Icon className="h-3.5 w-3.5" />
@@ -184,16 +188,14 @@ function DetailCard({
 
 /* ─────────── Public component ─────────── */
 export default function HeroMoleculeField() {
+  const proteinRef = useRef(null);
+  const hover = (mode) => () => proteinRef.current?.highlight?.(mode);
+  const clear = () => proteinRef.current?.highlight?.(null);
+
   return (
     <div
-      className="relative h-full w-full min-h-[440px] overflow-hidden rounded-3xl border border-[#E7E7F3] shadow-[0_30px_80px_rgba(15,14,36,0.35)]"
+      className="relative h-full w-full min-h-[440px]"
       data-testid="hero-molecule-field"
-      style={{
-        // Soft light gradient panel — the "spotlight" that makes the green
-        // protein pop against the dark hero page around it.
-        background:
-          "radial-gradient(120% 90% at 50% 45%, #FFFFFF 0%, #F1FBF6 55%, #E8F5EE 100%)",
-      }}
     >
       {/* Layer 1 — orbital particle field */}
       <ParticleField />
@@ -209,11 +211,17 @@ export default function HeroMoleculeField() {
                  strokeWidth="0.12" strokeDasharray="0.5 0.8" />
       </svg>
 
-      {/* Layer 2 — real 3D protein */}
+      {/* Layer 2 — real 3D protein (drag-rotate; auto-spin pauses on hover) */}
       <div className="absolute inset-0 z-10 flex items-center justify-center px-6 py-6">
         <div className="relative h-full w-full max-w-[540px]">
-          <Hero3DProtein />
+          <Hero3DProtein ref={proteinRef} />
         </div>
+      </div>
+
+      {/* Interaction hint */}
+      <div data-testid="hero-drag-hint"
+           className="pointer-events-none absolute left-1/2 bottom-1 z-20 -translate-x-1/2 rounded-full border border-white/15 bg-black/30 px-2.5 py-1 text-[10px] font-body font-semibold uppercase tracking-[0.14em] text-white/70 backdrop-blur-sm">
+        Drag to rotate · Hover cards to spotlight
       </div>
 
       {/* Layer 3 — small anchor labels around the protein */}
@@ -244,6 +252,7 @@ export default function HeroMoleculeField() {
         valueColor="#1E8A55"
         className="right-6 top-6"
         delay={0.25}
+        onHoverEnter={hover("target")} onHoverLeave={clear}
       />
       <DetailCard
         testid="hero-card-binding"
@@ -255,6 +264,7 @@ export default function HeroMoleculeField() {
         valueColor="#0B4635"
         className="right-2 top-[35%]"
         delay={0.35}
+        onHoverEnter={hover("binding")} onHoverLeave={clear}
       />
       <DetailCard
         testid="hero-card-pathway"
@@ -266,6 +276,7 @@ export default function HeroMoleculeField() {
         valueColor="#5139ED"
         className="right-2 top-[62%]"
         delay={0.45}
+        onHoverEnter={hover("pathway")} onHoverLeave={clear}
       />
       <DetailCard
         testid="hero-card-compound"
@@ -277,6 +288,7 @@ export default function HeroMoleculeField() {
         valueColor="#1E8A55"
         className="left-1/2 bottom-6 -translate-x-1/2"
         delay={0.30}
+        onHoverEnter={hover("compound")} onHoverLeave={clear}
       />
       <DetailCard
         testid="hero-card-evidence"
@@ -288,6 +300,7 @@ export default function HeroMoleculeField() {
         valueColor="#1E8A55"
         className="left-4 bottom-4"
         delay={0.40}
+        onHoverEnter={hover("evidence")} onHoverLeave={clear}
       />
     </div>
   );
