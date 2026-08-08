@@ -1,6 +1,7 @@
 import "@/App.css";
 import { BrowserRouter, Routes, Route, useLocation, Navigate } from "react-router-dom";
 import Home from "@/pages/Home";
+import HeroPreview from "@/pages/HeroPreview";
 import PhytoNetAI from "@/pages/PhytoNetAI";
 import ResearchWorkspace from "@/pages/ResearchWorkspace";
 import SharedResearch from "@/pages/SharedResearch";
@@ -91,6 +92,7 @@ function App() {
                     <SiteChrome>
                     <Routes>
                       <Route path="/" element={<Home />} />
+                      <Route path="/hero-preview" element={<HeroPreview />} />
                       <Route path="/phytonet-ai" element={<PhytoNetAI />} />
                       <Route path="/research" element={<ResearchWorkspace />} />
                       <Route path="/research/shared/:slug" element={<SharedResearch />} />
