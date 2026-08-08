@@ -161,7 +161,7 @@ const Hero3DProtein = forwardRef(function Hero3DProtein(_props, ref) {
         viewer.addModel(pdbText, "pdb");
         applyBaseStyle(viewer);
         viewer.zoomTo();
-        viewer.zoom(1.55);
+        viewer.zoom(1.35);
         viewer.render();
 
         const spin = () => {
