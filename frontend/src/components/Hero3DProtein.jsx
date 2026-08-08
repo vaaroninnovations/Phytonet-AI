@@ -35,7 +35,7 @@ function baseCartoonColor(atom) {
   return `rgb(${r},${g},${b})`;
 }
 
-const Hero3DProtein = forwardRef(function Hero3DProtein(_props, ref) {
+const Hero3DProtein = forwardRef(function Hero3DProtein({ autoRotate = true, interactive = true } = {}, ref) {
   const hostRef   = useRef(null);
   const viewerRef = useRef(null);
   const rafRef    = useRef(null);
@@ -166,13 +166,13 @@ const Hero3DProtein = forwardRef(function Hero3DProtein(_props, ref) {
 
         const spin = () => {
           if (!viewerRef.current) return;
-          if (!pausedRef.current) {
+          if (autoRotate && !pausedRef.current) {
             viewerRef.current.rotate(0.20, "y");
             viewerRef.current.render();
           }
           rafRef.current = requestAnimationFrame(spin);
         };
-        rafRef.current = requestAnimationFrame(spin);
+        if (autoRotate) rafRef.current = requestAnimationFrame(spin);
 
         setReady(true);
       } catch (err) {
@@ -197,15 +197,15 @@ const Hero3DProtein = forwardRef(function Hero3DProtein(_props, ref) {
 
   return (
     <div
-      className="relative h-full w-full"
+      className={`relative h-full w-full ${interactive ? "" : "pointer-events-none"}`}
       data-testid="hero-3d-protein"
       data-ready={ready ? "1" : "0"}
-      onPointerEnter={onEnter}
-      onPointerLeave={onLeave}
+      onPointerEnter={interactive ? onEnter : undefined}
+      onPointerLeave={interactive ? onLeave : undefined}
     >
       <div
         ref={hostRef}
-        className="absolute inset-0 h-full w-full cursor-grab active:cursor-grabbing"
+        className={`absolute inset-0 h-full w-full ${interactive ? "cursor-grab active:cursor-grabbing" : ""}`}
         style={{
           filter: `drop-shadow(0 24px 40px rgba(43,182,115,0.22)) drop-shadow(0 0 28px rgba(126,224,178,0.28))`,
         }}
