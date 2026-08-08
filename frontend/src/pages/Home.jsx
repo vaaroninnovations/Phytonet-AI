@@ -13,7 +13,6 @@ import {
   ShieldCheck, Database, Cpu, Radio,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import HeroMoleculeField from "@/components/HeroMoleculeField";
 
 /* ──────────────── SHARED ATOMS ─────────────── */
 function Kicker({ children, className = "" }) {
@@ -63,9 +62,8 @@ function Hero() {
         <div className="absolute right-0 bottom-[-160px] h-[420px] w-[520px] rounded-full bg-[radial-gradient(closest-side,#2BB673,transparent_70%)] opacity-15 blur-3xl" />
       </div>
 
-      <div className="relative mx-auto grid max-w-7xl grid-cols-12 items-center gap-8 px-6 pt-16 pb-16 lg:pt-20 lg:pb-24">
-        {/* Left content — 6 cols */}
-        <motion.div className="col-span-12 lg:col-span-6"
+      <div className="relative mx-auto max-w-7xl px-6 pt-16 pb-16 lg:pt-20 lg:pb-24">
+        <motion.div className="max-w-3xl"
                     initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.6 }}>
           <div className="inline-flex items-center gap-2 rounded-full border border-[#FAFAFF]/10 bg-[#FAFAFF]/[0.03] px-3 py-1.5 text-[11px] font-body font-semibold uppercase tracking-[0.16em] text-[#E7E7F3]/80">
@@ -114,15 +112,6 @@ function Hero() {
                 {count.toLocaleString()}
               </span>
             </div>
-          </div>
-        </motion.div>
-
-        {/* Right — dark hero molecular scene */}
-        <motion.div className="col-span-12 lg:col-span-6 relative"
-                    initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.9, delay: 0.15 }}>
-          <div className="relative aspect-square w-full lg:aspect-auto lg:h-[640px]">
-            <HeroMoleculeField />
           </div>
         </motion.div>
       </div>
