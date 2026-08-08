@@ -162,8 +162,10 @@ def build_router(db, get_current_user):
                 "message": f"Referral applied — you'll both earn {REFERRAL_REWARD_NODES} nodes when you make your first purchase!"}
 
     @router.get("/leaderboard")
-    async def leaderboard(user=Depends(get_current_user)):
-        """Top 10 referrers (informational only — surfaces community energy)."""
+    async def leaderboard():
+        """Top 10 referrers — public endpoint (no auth required).
+        Surfaces community energy on marketing pages. User display names are
+        first-name-only or anonymised email prefixes to protect privacy."""
         pipe = [
             {"$match": {"status": "paid"}},
             {"$group": {
@@ -175,15 +177,27 @@ def build_router(db, get_current_user):
             {"$limit": 10},
         ]
         rows = []
+        rank = 0
         async for r in rewards.aggregate(pipe):
+            rank += 1
             uid = r["_id"]
             u = None
             try:
                 u = await users.find_one({"_id": ObjectId(uid)})
             except Exception:
                 pass
+            # Prefer first_name; fall back to a masked email prefix
+            # ("alice@..." → "alice") so we never expose full emails.
+            display = None
+            if u:
+                display = u.get("first_name")
+                if not display and u.get("email"):
+                    prefix = u["email"].split("@", 1)[0]
+                    # Truncate long prefixes so it looks like a handle.
+                    display = prefix[:12]
             rows.append({
-                "user_display": (u or {}).get("first_name") or (u or {}).get("email", "").split("@")[0] or "anon",
+                "rank": rank,
+                "user_display": display or "anonymous",
                 "converted": r["converted"],
                 "nodes":     r["nodes"],
             })

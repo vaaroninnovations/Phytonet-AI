@@ -32,6 +32,7 @@ import AdminContact from "@/pages/admin/AdminContact";
 import AdminSales from "@/pages/admin/AdminSales";
 import AdminMetrics from "@/pages/admin/AdminMetrics";
 import AdminPromos from "@/pages/admin/AdminPromos";
+import ReferralLeaderboard from "@/pages/ReferralLeaderboard";
 import ReferralPickup from "@/components/ReferralPickup";
 import AdminSettings from "@/pages/admin/AdminSettings";
 import AdminProfile from "@/pages/admin/AdminProfile";
@@ -110,6 +111,7 @@ function App() {
                       />
                       <Route path="/resources" element={<Resources />} />
                       <Route path="/pricing" element={<Pricing />} />
+                      <Route path="/referrals/leaderboard" element={<ReferralLeaderboard />} />
                       <Route path="/databases" element={<Navigate to="/resources" replace />} />
                       <Route path="/dashboard" element={<Dashboard />} />
                       <Route path="/profile" element={<Profile />} />

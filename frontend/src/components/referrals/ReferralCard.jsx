@@ -1,7 +1,8 @@
 // ReferralCard — dashboard tile showing the user's referral code, share URL,
 // invited count, and earned nodes. Copy button + share-via-native/copy.
 import { useEffect, useState } from "react";
-import { Copy, Users, Zap, Loader2, Share2, Check } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Copy, Users, Zap, Loader2, Share2, Check, Trophy } from "lucide-react";
 import { toast } from "sonner";
 import { getReferralInfo } from "@/lib/api";
 
@@ -119,6 +120,12 @@ export default function ReferralCard() {
             <div className="mt-1 font-headline text-2xl font-bold text-amber-600">{info.earned_nodes}</div>
           </div>
         </div>
+
+        <Link to="/referrals/leaderboard"
+              data-testid="referral-leaderboard-link"
+              className="mt-3 inline-flex items-center gap-1 text-[12px] font-semibold text-fuchsia-700 hover:underline">
+          <Trophy size={12} /> See the top referrers leaderboard →
+        </Link>
       </div>
     </div>
   );

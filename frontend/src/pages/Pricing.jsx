@@ -7,6 +7,7 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   Check, Sparkles, Wallet, GraduationCap, Zap, Building2, Loader2,
   ArrowRight, HelpCircle, Star, TrendingUp, Users, Tag, Check as CheckIcon, X as XIcon,
+  Clock, Trophy,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
@@ -220,6 +221,39 @@ function FAQ() {
   );
 }
 
+const PROMO_URGENCY_HOURS = 48;
+
+function useSignupCountdown(createdAt) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  if (!createdAt) return null;
+  const started = new Date(createdAt).getTime();
+  if (Number.isNaN(started)) return null;
+  const expires = started + PROMO_URGENCY_HOURS * 3600_000;
+  const msLeft = expires - now;
+  if (msLeft <= 0) return { expired: true, h: 0, m: 0, s: 0 };
+  const h = Math.floor(msLeft / 3600_000);
+  const m = Math.floor((msLeft % 3600_000) / 60_000);
+  const s = Math.floor((msLeft % 60_000) / 1000);
+  return { expired: false, h, m, s, msLeft };
+}
+
+function CountdownPip({ label, value }) {
+  return (
+    <div className="flex flex-col items-center rounded-lg bg-white/80 px-2 py-1 min-w-[38px]">
+      <span className="font-headline text-[15px] font-bold text-fuchsia-700 tabular-nums leading-none">
+        {String(value).padStart(2, "0")}
+      </span>
+      <span className="text-[8px] font-bold uppercase tracking-wider text-fuchsia-500 leading-none mt-0.5">
+        {label}
+      </span>
+    </div>
+  );
+}
+
 export default function Pricing() {
   const { user, openModal } = useAuth();
   const { pro, academicEmailEligible, refresh, isPro, lifetimePurchased } = useNodes();
@@ -232,8 +266,11 @@ export default function Pricing() {
   const [promoErr, setPromoErr] = useState(null);
   const [promoBusy, setPromoBusy] = useState(false);
   const navigate = useNavigate();
-  // First-time buyer gets the RESEARCH20 offer — hide the banner once they buy.
-  const isFirstTime = user && (lifetimePurchased ?? 0) === 0;
+  // First-time buyer gets the RESEARCH20 offer — hide the banner once they buy
+  // OR once 48 h have elapsed since signup.
+  const countdown = useSignupCountdown(user?.created_at);
+  const withinUrgencyWindow = countdown && !countdown.expired;
+  const isFirstTime = user && (lifetimePurchased ?? 0) === 0 && withinUrgencyWindow;
 
   useEffect(() => {
     getNodePricing()
@@ -363,10 +400,9 @@ export default function Pricing() {
       </section>
 
       {/* First-time buyer banner — surfaces the RESEARCH20 promo prominently.
-          Hidden once the user has any purchase history, or after they've
-          successfully applied the code. Guests see it too — they get prompted
-          to sign in when they click Apply. */}
-      {isFirstTime !== false && !promo && (
+          Only visible for logged-in users within 48 h of signup who haven't
+          bought yet. Time-boxed offers convert 2-3× better than open-ended ones. */}
+      {isFirstTime !== false && !promo && user && withinUrgencyWindow && (
         <div className="mx-auto max-w-6xl px-6 pb-2">
           <div data-testid="pricing-promo-banner"
                className="relative flex flex-col md:flex-row items-start md:items-center gap-4 rounded-2xl border border-dashed border-fuchsia-300 bg-gradient-to-r from-fuchsia-50 via-white to-white p-4">
@@ -374,7 +410,7 @@ export default function Pricing() {
               <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-fuchsia-500 to-[#5139ED] text-white">
                 <Tag className="h-4 w-4" />
               </span>
-              <div>
+              <div className="flex-1">
                 <div className="text-[13px] font-bold text-[#0F172A]">
                   First-time buyer? Save 20% with code{" "}
                   <button
@@ -384,8 +420,18 @@ export default function Pricing() {
                     className="mx-0.5 rounded-md bg-fuchsia-100 px-1.5 py-0.5 font-mono text-[12px] font-bold text-fuchsia-700 hover:bg-fuchsia-200"
                   >RESEARCH20</button>
                 </div>
-                <div className="text-[11.5px] text-[#4B5563]">
-                  Valid once per account on any one-time bundle. Applied automatically at checkout.
+                <div className="mt-1 flex items-center gap-2 flex-wrap">
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-fuchsia-700">
+                    <Clock className="h-3 w-3" /> Offer ends in
+                  </span>
+                  <div data-testid="pricing-promo-countdown"
+                       className="inline-flex items-center gap-1">
+                    <CountdownPip label="hrs" value={countdown.h} />
+                    <span className="font-headline text-fuchsia-400 font-bold">:</span>
+                    <CountdownPip label="min" value={countdown.m} />
+                    <span className="font-headline text-fuchsia-400 font-bold">:</span>
+                    <CountdownPip label="sec" value={countdown.s} />
+                  </div>
                 </div>
               </div>
             </div>

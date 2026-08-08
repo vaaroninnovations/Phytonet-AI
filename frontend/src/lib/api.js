@@ -116,6 +116,8 @@ export const getReferralInfo = () =>
   api.get("/referrals/me").then((r) => r.data);
 export const applyReferral = (code) =>
   api.post("/referrals/apply", { code }).then((r) => r.data);
+export const getReferralLeaderboard = () =>
+  api.get("/referrals/leaderboard").then((r) => r.data);
 export const verifyPayment = (payload) =>
   api.post("/nodes/verify-payment", payload).then((r) => r.data);
 export const contactSales = (payload) =>
