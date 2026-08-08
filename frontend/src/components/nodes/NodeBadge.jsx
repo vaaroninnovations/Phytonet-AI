@@ -3,7 +3,7 @@
 // popover exposing balance / recharge / dashboard shortcuts.
 import { useState, useId } from "react";
 import { Link } from "react-router-dom";
-import { Wallet, History, LayoutDashboard, AlertTriangle } from "lucide-react";
+import { Wallet, History, LayoutDashboard, AlertTriangle, Zap } from "lucide-react";
 import { useNodes } from "@/context/NodeContext";
 import { useAuth } from "@/context/AuthContext";
 
@@ -118,6 +118,14 @@ export default function NodeBadge() {
               >
                 <Wallet className="h-4 w-4 text-[#B45309]" /> Recharge nodes
               </button>
+              <Link
+                to="/pricing"
+                onClick={() => setOpen(false)}
+                data-testid="badge-pricing"
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-[12.5px] text-[#0F172A] transition hover:bg-[#F8FAFC]"
+              >
+                <Zap className="h-4 w-4 fill-amber-400 text-amber-600" /> View all plans
+              </Link>
               <Link
                 to="/my-projects?tab=nodes"
                 onClick={() => setOpen(false)}

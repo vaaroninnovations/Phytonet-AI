@@ -8,8 +8,10 @@ import {
   Home as HomeIcon, X, Sparkles, LayoutGrid, Beaker, FlaskConical,
   Dna, Atom, Microscope, FileText, Database, Waves,
   Search, User, LogOut, LayoutDashboard, FolderOpen, Download, Settings,
+  Zap,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { useNodes } from "@/context/NodeContext";
 import NodeBadge from "@/components/nodes/NodeBadge";
 import SaveProjectMenu from "@/components/SaveProjectMenu";
 import BrandLogo from "@/components/BrandLogo";
@@ -35,6 +37,7 @@ const MODULE_ICONS = {
 
 function AvatarMenu({ user, navigate, logout }) {
   const [open, setOpen] = useState(false);
+  const { isPro } = useNodes();
   useEffect(() => {
     const onDoc = (e) => {
       if (!e.target.closest("[data-testid='header-avatar']") &&
@@ -53,7 +56,7 @@ function AvatarMenu({ user, navigate, logout }) {
       <button
         data-testid="header-avatar"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-2 py-1.5 text-xs font-bold text-white hover:bg-white/10"
+        className="relative inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-2 py-1.5 text-xs font-bold text-white hover:bg-white/10"
       >
         <span className="grid h-7 w-7 place-items-center rounded-full bg-gradient-to-br from-[#5139ED] to-[#8139ED] text-white text-[11px]">
           {initials || <User className="h-3.5 w-3.5" />}
@@ -61,6 +64,12 @@ function AvatarMenu({ user, navigate, logout }) {
         <span className="hidden max-w-[110px] truncate text-slate-200 lg:inline">
           {user.first_name || user.email}
         </span>
+        {isPro && (
+          <span data-testid="pro-badge"
+                className="ml-0.5 inline-flex items-center gap-0.5 rounded-full bg-gradient-to-r from-amber-400 to-amber-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white shadow-[0_2px_6px_rgba(245,158,11,0.5)]">
+            <Zap className="h-2.5 w-2.5" />PRO
+          </span>
+        )}
       </button>
       {open && (
         <div data-testid="header-menu"
@@ -68,8 +77,20 @@ function AvatarMenu({ user, navigate, logout }) {
           <div className="border-b border-white/10 px-4 py-3">
             <p className="text-xs font-bold text-slate-100">{user.first_name} {user.last_name}</p>
             <p className="text-[10px] text-slate-400">{user.email}</p>
+            {isPro && (
+              <p className="mt-1 inline-flex items-center gap-1 text-[10px] font-bold text-amber-300">
+                <Zap className="h-3 w-3 fill-amber-400" /> PhytoNet Pro
+              </p>
+            )}
             {!user.email_verified && <p className="mt-1 text-[10px] text-amber-300">Email not yet verified</p>}
           </div>
+          {!isPro && (
+            <button data-testid="menu-upgrade"
+                    onClick={() => { setOpen(false); navigate("/pricing"); }}
+                    className="flex w-full items-center gap-2 border-b border-white/10 bg-gradient-to-r from-amber-500/10 to-amber-500/5 px-4 py-2.5 text-[12.5px] font-semibold text-amber-300 hover:from-amber-500/20 hover:to-amber-500/10">
+              <Zap className="h-4 w-4 fill-amber-400 text-amber-400" /> Upgrade to Pro
+            </button>
+          )}
           {[
             { icon: LayoutDashboard, label: "Dashboard",   testid: "menu-dashboard", to: "/dashboard" },
             { icon: FolderOpen,      label: "My Projects", testid: "menu-projects",  to: "/my-projects" },

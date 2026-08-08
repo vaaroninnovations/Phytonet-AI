@@ -35,6 +35,9 @@ export function NodeProvider({ children }) {
   const [ready, setReady] = useState(false);
   const [purchaseOpen, setPurchaseOpen] = useState(false);
   const [insufficient, setInsufficient] = useState(null); // { required, module }
+  const [pro, setPro] = useState({ is_pro: false, plan_id: null, expires_at: null,
+                                    rollover_cap: null, concurrency_max: 4 });
+  const [academicEmailEligible, setAcademicEmailEligible] = useState(false);
   const lastBalanceRef = useRef(null);
 
   const refresh = useCallback(async () => {
@@ -48,6 +51,8 @@ export function NodeProvider({ children }) {
       if (d.module_costs && typeof d.module_costs === "object") {
         setModuleCosts({ ...DEFAULT_COSTS, ...d.module_costs });
       }
+      if (d.pro) setPro(d.pro);
+      setAcademicEmailEligible(!!d.academic_email_eligible);
     } catch (e) {
       // Silent for guests / expired sessions — the badge just hides.
       setBalance(0);
@@ -127,12 +132,15 @@ export function NodeProvider({ children }) {
     balance, lifetimeUsed, lifetimePurchased,
     moduleCosts, costFor,
     refresh, charge, preflight,
+    // Pro subscription state
+    pro, isPro: pro.is_pro, academicEmailEligible,
     // Purchase modal
     purchaseOpen, openPurchase: () => setPurchaseOpen(true), closePurchase: () => setPurchaseOpen(false),
     // Insufficient modal
     insufficient, clearInsufficient: () => setInsufficient(null),
   }), [ready, loading, user, balance, lifetimeUsed, lifetimePurchased,
       moduleCosts, costFor, refresh, charge, preflight,
+      pro, academicEmailEligible,
       purchaseOpen, insufficient]);
 
   return <NodeContext.Provider value={value}>{children}</NodeContext.Provider>;

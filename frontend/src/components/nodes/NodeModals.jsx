@@ -8,7 +8,9 @@
 //                                    `onConfirm`, `onCancel`. Used inside module pages
 //                                    right before firing a paid workflow.
 import { useState, useEffect } from "react";
-import { X, Check, Loader2, Sparkles, ShieldAlert, Wallet, Info } from "lucide-react";
+import { Link } from "react-router-dom";
+import { X, Check, Loader2, Sparkles, ShieldAlert, Wallet, Info,
+         GraduationCap, Zap, Building2, ArrowUpRight } from "lucide-react";
 import { useNodes } from "@/context/NodeContext";
 import { getNodePricing, createPurchaseIntent, verifyPayment } from "@/lib/api";
 import { openRazorpayCheckout } from "@/lib/razorpay";
@@ -46,7 +48,7 @@ function ModalShell({ open, onClose, children, testid, size = "md" }) {
 
 /* ─────────────────────── PurchaseNodesModal ─────────────────────── */
 export function PurchaseNodesModal() {
-  const { purchaseOpen, closePurchase, balance, refresh } = useNodes();
+  const { purchaseOpen, closePurchase, balance, refresh, academicEmailEligible, isPro } = useNodes();
   const [plans, setPlans] = useState([]);
   const [busy, setBusy] = useState(null);
 
@@ -100,7 +102,10 @@ export function PurchaseNodesModal() {
         },
       });
     } catch (e) {
-      toast.error(e?.response?.data?.detail || e?.message || "Could not start checkout.");
+      // 403 / 400 for gated plans (student without academic email, enterprise) —
+      // surface the backend detail string verbatim so users know what to do.
+      const detail = e?.response?.data?.detail;
+      toast.error(typeof detail === "string" ? detail : (e?.message || "Could not start checkout."));
       setBusy(null);
     }
   };
@@ -120,24 +125,37 @@ export function PurchaseNodesModal() {
         </div>
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-        {plans.map((p) => {
-          const perNode = (p.price_inr / p.nodes).toFixed(1);
+      <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {plans
+          .filter((p) => (p.kind || "bundle") === "bundle" || p.kind === "student")
+          .map((p) => {
+          const perNode = p.nodes > 0 ? (p.price_inr / p.nodes).toFixed(1) : null;
           const highlighted = !!p.highlight;
+          const isStudent = p.kind === "student";
+          const studentBlocked = p.requires_academic_email && !academicEmailEligible;
           return (
             <div
               key={p.id}
               data-testid={`plan-${p.id}`}
               className={`relative flex flex-col rounded-2xl border p-5 transition ${highlighted
                 ? "border-[#F59E0B]/50 bg-gradient-to-b from-[#FFFBEB] to-white shadow-[0_20px_44px_-24px_rgba(245,158,11,0.5)]"
+                : isStudent
+                ? "border-emerald-200 bg-gradient-to-b from-emerald-50/50 to-white"
                 : "border-[#E7E7F3] bg-white hover:border-[#5139ED]/30"}`}
             >
-              {highlighted && (
-                <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 rounded-full bg-gradient-to-r from-[#F59E0B] to-[#B45309] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-white">
-                  {p.badge || "Most Popular"}
-                </span>
+              {(highlighted || p.badge) && (
+                <span className={`absolute -top-2.5 left-1/2 -translate-x-1/2 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-white ${
+                  highlighted
+                    ? "bg-gradient-to-r from-[#F59E0B] to-[#B45309]"
+                    : isStudent
+                    ? "bg-emerald-600"
+                    : "bg-slate-700"
+                }`}>{p.badge || (highlighted ? "Most Popular" : "")}</span>
               )}
-              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#94A3B8]">{p.label}</div>
+              <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#94A3B8]">
+                {isStudent && <GraduationCap className="h-3.5 w-3.5 text-emerald-600" />}
+                {p.label}
+              </div>
               <div className="mt-3 flex items-baseline gap-1.5">
                 <GoldenLeaf size={20} />
                 <span className="font-headline text-3xl font-bold text-[#0F172A]">{p.nodes}</span>
@@ -145,25 +163,58 @@ export function PurchaseNodesModal() {
               </div>
               <div className="mt-1 text-[22px] font-bold text-[#0F172A]">
                 ₹{p.price_inr}
-                <span className="ml-1 text-[11px] font-normal text-[#94A3B8]">₹{perNode}/node</span>
+                {perNode && <span className="ml-1 text-[11px] font-normal text-[#94A3B8]">₹{perNode}/node</span>}
               </div>
               <p className="mt-3 text-[12px] leading-relaxed text-[#4B5563]">{p.description}</p>
               <button
                 type="button"
                 data-testid={`buy-${p.id}`}
                 onClick={() => buy(p.id)}
-                disabled={!!busy}
+                disabled={!!busy || studentBlocked}
+                title={studentBlocked ? "Requires an academic email address" : ""}
                 className={`mt-auto pt-4 inline-flex items-center justify-center gap-1.5 rounded-full px-4 py-2.5 text-[12.5px] font-bold transition ${highlighted
                   ? "bg-gradient-to-r from-[#F59E0B] to-[#B45309] text-white hover:-translate-y-0.5"
+                  : isStudent
+                  ? "bg-emerald-600 text-white hover:bg-emerald-700"
                   : "border border-[#E7E7F3] bg-white text-[#111827] hover:border-[#5139ED]/40 hover:text-[#5139ED]"} disabled:pointer-events-none disabled:opacity-50`}
               >
                 {busy === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wallet className="h-3.5 w-3.5" />}
                 Buy plan
               </button>
+              {studentBlocked && (
+                <div className="mt-2 text-center text-[10.5px] text-emerald-700">
+                  Sign in with an .edu / .ac.in email to unlock
+                </div>
+              )}
             </div>
           );
         })}
       </div>
+
+      {/* Cross-sell subscription + enterprise */}
+      {!isPro && (
+        <Link
+          to="/pricing"
+          onClick={closePurchase}
+          data-testid="recharge-see-full-pricing"
+          className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 to-white p-4 hover:border-amber-300 hover:shadow-md transition"
+        >
+          <div className="flex items-center gap-3">
+            <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+              <Zap className="h-4 w-4" />
+            </span>
+            <div>
+              <div className="text-[13px] font-bold text-[#0F172A]">
+                Save with PhytoNet Pro — ₹1,499/mo
+              </div>
+              <div className="text-[11.5px] text-[#4B5563]">
+                100 nodes/month with rollover · priority docking · Pro badge
+              </div>
+            </div>
+          </div>
+          <ArrowUpRight className="h-4 w-4 text-amber-600" />
+        </Link>
+      )}
 
       <div className="mt-6 rounded-2xl border border-[#E7E7F3] bg-[#F8FAFC] p-3 text-[12px] text-[#475569]">
         <div className="flex items-start gap-2">

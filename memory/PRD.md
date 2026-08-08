@@ -1,5 +1,47 @@
 # Dr. / — Network Pharmacology SaaS
 
+## 2026-02-10 — Full Pricing Strategy Rollout (all 5 upgrades)
+- **Public /pricing landing page** (`frontend/src/pages/Pricing.jsx`) — hero,
+  4-tier bundle grid, subscription + enterprise section, feature comparison
+  table, FAQ (6 items), CTA. Route wired in `App.js`; nav link updated in
+  `SiteHeader.jsx`.
+- **Student plan (₹99 / 15 nodes)** — gated to academic emails (.edu, .edu.in,
+  .ac.in, .ac.uk, .ac.jp, .ac.kr, .edu.au, .edu.sg, .edu.pk, .edu.my, .edu.ph,
+  .edu.cn). Backend enforces via `_is_academic_email()` in
+  `routes/nodes.py`. Frontend disables the Buy button on ineligible users
+  with a "Sign in with .edu / .ac.in email to unlock" hint.
+- **Cost estimator card** (`components/research/cards/PlanCard.jsx`) —
+  enhanced with explicit breakdown ("Planner 1 + Tools 4 + Docking 45 (15
+  pairs × 3)"), INR equivalent (~₹1000 at ₹20/node), and per-step cost
+  pills (`3n·1p` on docking, `free` on discovery tools).
+- **PhytoNet Pro subscription (₹1,499/mo)** — 100 nodes with 300 rollover
+  cap, priority docking concurrency raised from 4 to 8 (docking_service.py
+  sem cap = 8), Pro badge on avatar (`TabBar.jsx`), "Upgrade to Pro" CTA in
+  avatar menu. Verify-payment endpoint sets `pro_expires_at = now + 30 days`
+  when `plan_kind == "subscription"`. Balance endpoint returns
+  `pro: { is_pro, plan_id, expires_at, rollover_cap, concurrency_max }`.
+- **Lab / Team plan (₹9,999/mo)** — `contact_sales: true` routes to a
+  dedicated inquiry modal (`components/pricing/ContactSalesModal.jsx`)
+  rather than Razorpay checkout. Inquiries persist in
+  `sales_inquiries` collection with organisation, role, team size, message.
+- **Backend endpoints added/modified**:
+    - `POST /api/nodes/contact-sales` (new) — validates plan is enterprise,
+      logs inquiry.
+    - `POST /api/nodes/purchase-intent` — now rejects enterprise plans with
+      400 and student plans without academic email with 403.
+    - `POST /api/nodes/verify-payment` — now activates Pro on subscription
+      purchases, returns fresh `pro` state.
+    - `GET  /api/nodes/balance` — now returns `pro` + `academic_email_eligible`.
+- **Frontend context** (`NodeContext.jsx`) — exposes `pro`, `isPro`, and
+  `academicEmailEligible` for gating throughout the app.
+- **Cross-sell** — Recharge modal now shows all 4 bundles + a prominent
+  "Save with PhytoNet Pro — ₹1,499/mo" cross-sell banner linking to /pricing.
+- **NodeBadge popover** — added "View all plans" quick link.
+- Verified end-to-end: student gate → 403, enterprise checkout → 400,
+  contact-sales → ok, balance returns pro state.
+
+
+
 ## 2026-02-10 — Portable LLM provider (Hostinger-ready)
 - Added `backend/llm_provider.py`: dual-provider wrapper that auto-selects
   direct Anthropic SDK when `ANTHROPIC_API_KEY` is set, else falls back to

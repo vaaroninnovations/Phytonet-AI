@@ -880,9 +880,9 @@ async def run_docking_batch(compounds: List[Dict[str, str]],
 
     # ── Batch dock: bounded concurrency via asyncio.Semaphore ──────
     #    AutoDock Vina is single-threaded so 2-3 concurrent processes on a
-    #    typical VPS cut wall-time roughly by `concurrency`. Cap at 4 to
-    #    stay memory-safe.
-    sem = asyncio.Semaphore(max(1, min(4, int(concurrency))))
+    #    typical VPS cut wall-time roughly by `concurrency`. Hard cap of 8
+    #    to stay memory-safe (Free tier UI caps at 4; Pro tier at 8).
+    sem = asyncio.Semaphore(max(1, min(8, int(concurrency))))
     pairs: List[DockResult] = []
     completed = [0]                                    # mutable counter
 

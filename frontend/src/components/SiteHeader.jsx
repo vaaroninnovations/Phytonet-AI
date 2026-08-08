@@ -9,7 +9,7 @@ import BrandLogo from "@/components/BrandLogo";
 const NAV = [
   { label: "Home", to: "/" },
   { label: "Resources", to: "/resources" },
-  { label: "Pricing", to: "/#pricing" },
+  { label: "Pricing", to: "/pricing" },
   { label: "Docs", to: "/#docs" },
 ];
 

@@ -18,6 +18,7 @@ import MyProjects from "@/pages/MyProjects";
 import VerifyEmail from "@/pages/VerifyEmail";
 import GoogleCallback from "@/pages/GoogleCallback";
 import Resources from "@/pages/Resources";
+import Pricing from "@/pages/Pricing";
 import Dashboard from "@/pages/Dashboard";
 import Profile from "@/pages/Profile";
 import Settings from "@/pages/Settings";
@@ -103,6 +104,7 @@ function App() {
                         element={<DiseaseTargets />}
                       />
                       <Route path="/resources" element={<Resources />} />
+                      <Route path="/pricing" element={<Pricing />} />
                       <Route path="/databases" element={<Navigate to="/resources" replace />} />
                       <Route path="/dashboard" element={<Dashboard />} />
                       <Route path="/profile" element={<Profile />} />

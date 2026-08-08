@@ -40,7 +40,7 @@ import hashlib
 import hmac
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 import razorpay
@@ -63,10 +63,31 @@ def _razorpay_client() -> Optional[razorpay.Client]:
 
 # ── Static pricing plans (INR) — kept here so the frontend can pull from
 #    /api/nodes/pricing and the checkout server can consume the same list.
+#
+# `kind` distinguishes:
+#   - "bundle":       one-time purchase, permanent nodes (default legacy behaviour).
+#   - "student":      same as bundle but gated to .edu / .ac.* email domains.
+#   - "subscription": monthly recurring — credits `nodes` on activation +
+#                     unlocks Pro features (rollover cap, priority concurrency,
+#                     Pro badge). Expires after 30 days unless renewed.
+#   - "enterprise":   Team / Lab plan — routes to "Contact Sales" form
+#                     instead of Razorpay checkout.
 PRICING_PLANS = [
+    {
+        "id": "student",
+        "label": "Student",
+        "kind": "student",
+        "nodes": 15,
+        "price_inr": 99,
+        "highlight": False,
+        "badge": "Academic",
+        "description": "Verified academic email required (.edu / .ac.in / .ac.uk). One-time purchase.",
+        "requires_academic_email": True,
+    },
     {
         "id": "starter",
         "label": "Starter",
+        "kind": "bundle",
         "nodes": 10,
         "price_inr": 250,
         "highlight": False,
@@ -75,6 +96,7 @@ PRICING_PLANS = [
     {
         "id": "research",
         "label": "Research",
+        "kind": "bundle",
         "nodes": 25,
         "price_inr": 500,
         "highlight": True,
@@ -84,12 +106,88 @@ PRICING_PLANS = [
     {
         "id": "professional",
         "label": "Professional",
+        "kind": "bundle",
         "nodes": 60,
         "price_inr": 1000,
         "highlight": False,
         "description": "For labs running the AI Agent daily — 12 docking runs or 6 workflows.",
     },
+    {
+        "id": "pro_monthly",
+        "label": "PhytoNet Pro",
+        "kind": "subscription",
+        "nodes": 100,
+        "price_inr": 1499,
+        "highlight": False,
+        "badge": "Best for Recurring Use",
+        "description": "100 nodes/month with rollover (cap 300), priority docking concurrency (8 parallel), Pro badge on shared reports.",
+        "features": [
+            "100 nodes credited every month",
+            "Node rollover — up to 300 unused nodes carry forward",
+            "Priority docking concurrency (8 parallel vs. 4)",
+            "Unlimited plant & disease queries",
+            "'Pro' badge on your shared reports",
+        ],
+        "billing_period_days": 30,
+        "rollover_cap": 300,
+    },
+    {
+        "id": "lab_team",
+        "label": "Lab / Team",
+        "kind": "enterprise",
+        "nodes": 0,
+        "price_inr": 9999,
+        "highlight": False,
+        "badge": "Enterprise",
+        "description": "5 seats + shared node pool + collaboration workspaces. Ideal for universities and pharma labs.",
+        "features": [
+            "5 seats with a shared node pool (500 nodes/month)",
+            "Collaboration workspaces — share projects across seats",
+            "Priority support + onboarding call",
+            "Invoiced billing available",
+        ],
+        "contact_sales": True,
+        "billing_period_days": 30,
+    },
 ]
+
+# ── Academic email domain check for the Student plan ───────────────
+ACADEMIC_EMAIL_SUFFIXES = (
+    ".edu", ".edu.in", ".ac.in", ".ac.uk", ".ac.jp", ".ac.kr", ".ac.nz",
+    ".edu.au", ".edu.sg", ".edu.pk", ".edu.my", ".edu.ph", ".edu.cn",
+)
+
+def _is_academic_email(email: Optional[str]) -> bool:
+    if not email or "@" not in email:
+        return False
+    domain = email.rsplit("@", 1)[-1].lower().strip()
+    return any(domain.endswith(sfx) for sfx in ACADEMIC_EMAIL_SUFFIXES)
+
+
+def _pro_status_from_user(user_doc: dict) -> dict:
+    """Return the user's Pro subscription state for the frontend badge / gating.
+
+    Fields:
+      - is_pro:  True if pro_expires_at is in the future.
+      - plan_id: "pro_monthly" if active, else None.
+      - expires_at: ISO date string or None.
+      - rollover_cap: soft cap on how many nodes carry forward at renewal.
+      - concurrency_max: docking concurrency ceiling (Pro → 8, free → 4).
+    """
+    expires_at = user_doc.get("pro_expires_at")
+    now = datetime.now(timezone.utc)
+    is_pro = False
+    if isinstance(expires_at, datetime):
+        # MongoDB may return naive datetimes — treat those as UTC.
+        exp = expires_at if expires_at.tzinfo else expires_at.replace(tzinfo=timezone.utc)
+        is_pro = exp > now
+    return {
+        "is_pro": is_pro,
+        "plan_id": "pro_monthly" if is_pro else None,
+        "expires_at": expires_at.isoformat() if isinstance(expires_at, datetime) else None,
+        "rollover_cap": 300 if is_pro else None,
+        "concurrency_max": 8 if is_pro else 4,
+    }
 
 # ── Node costs for premium modules — the frontend reads this map so both
 #    sides agree on prices and the UI can preflight without a round-trip.
@@ -234,6 +332,14 @@ class VerifyPaymentPayload(BaseModel):
     razorpay_signature: str = Field(..., min_length=6, max_length=256)
 
 
+class ContactSalesPayload(BaseModel):
+    plan_id: str = Field(min_length=1, max_length=64)
+    organization: str = Field(min_length=1, max_length=200)
+    role: Optional[str] = Field(default=None, max_length=100)
+    team_size: Optional[str] = Field(default=None, max_length=50)
+    message: Optional[str] = Field(default=None, max_length=2000)
+
+
 def build_router(db, get_current_user):
     """Factory: constructs the router bound to the passed Mongo db + auth dep."""
     router = APIRouter(prefix="/nodes", tags=["nodes"])
@@ -362,12 +468,15 @@ def build_router(db, get_current_user):
     @router.get("/balance")
     async def balance(user=Depends(get_current_user)):
         user = await _ensure_node_fields(user)
+        pro = _pro_status_from_user(user)
         return {
             "balance": user.get("nodes_balance", 0),
             "lifetime_used": user.get("nodes_lifetime_used", 0),
             "lifetime_purchased": user.get("nodes_lifetime_purchased", 0),
             "welcome_bonus_granted": bool(user.get("welcome_bonus_granted", False)),
             "module_costs": MODULE_COSTS,
+            "pro": pro,
+            "academic_email_eligible": _is_academic_email(user.get("email")),
         }
 
     @router.post("/charge")
@@ -413,6 +522,33 @@ def build_router(db, get_current_user):
     async def pricing():
         return {"plans": PRICING_PLANS, "currency": "INR"}
 
+    @router.post("/contact-sales")
+    async def contact_sales(payload: ContactSalesPayload,
+                            user=Depends(get_current_user)):
+        """Log a sales inquiry for Enterprise / Lab plans.
+
+        Stores the inquiry in `sales_inquiries` — the admin dashboard can
+        surface it later. No Razorpay flow — pricing is quoted manually.
+        """
+        plan = next((p for p in PRICING_PLANS if p["id"] == payload.plan_id), None)
+        if not plan or not (plan.get("kind") == "enterprise" or plan.get("contact_sales")):
+            raise HTTPException(status_code=400,
+                                detail="Contact-sales is only available on enterprise plans.")
+        now = datetime.now(timezone.utc)
+        await db["sales_inquiries"].insert_one({
+            "user_id": str(user["_id"]),
+            "email": user.get("email"),
+            "user_name": " ".join(x for x in [user.get("first_name"), user.get("last_name")] if x) or None,
+            "plan_id": payload.plan_id,
+            "organization": payload.organization,
+            "role": payload.role,
+            "team_size": payload.team_size,
+            "message": payload.message,
+            "status": "new",
+            "at": now,
+        })
+        return {"ok": True, "message": "Thanks — our team will reach out within 1 business day."}
+
     @router.post("/purchase-intent")
     async def purchase_intent(payload: PurchaseIntentPayload,
                               user=Depends(get_current_user)):
@@ -425,6 +561,20 @@ def build_router(db, get_current_user):
         plan = next((p for p in PRICING_PLANS if p["id"] == payload.plan_id), None)
         if not plan:
             raise HTTPException(status_code=404, detail=f"Unknown plan '{payload.plan_id}'")
+
+        # Enterprise plans are contact-sales — reject checkout attempts.
+        if plan.get("kind") == "enterprise" or plan.get("contact_sales"):
+            raise HTTPException(
+                status_code=400,
+                detail="Enterprise plans require a sales consultation — use /api/nodes/contact-sales.",
+            )
+
+        # Student plan is gated to academic emails.
+        if plan.get("requires_academic_email") and not _is_academic_email(user.get("email")):
+            raise HTTPException(
+                status_code=403,
+                detail="Student plan requires a verified academic email address (.edu / .ac.in / .ac.uk).",
+            )
 
         client = _razorpay_client()
         if client is None:
@@ -443,6 +593,9 @@ def build_router(db, get_current_user):
         intent = await db["purchase_intents"].insert_one({
             "user_id": str(user["_id"]),
             "plan_id": plan["id"],
+            "plan_kind": plan.get("kind", "bundle"),
+            "billing_period_days": plan.get("billing_period_days"),
+            "rollover_cap": plan.get("rollover_cap"),
             "nodes": plan["nodes"],
             "amount_inr": plan["price_inr"],
             "amount_paise": amount_paise,
@@ -547,12 +700,24 @@ def build_router(db, get_current_user):
             raise HTTPException(status_code=500, detail="Purchase intent has no node quantity.")
 
         now = datetime.now(timezone.utc)
-        upd = await users.find_one_and_update(
-            {"_id": user["_id"]},
-            {"$inc": {
+        # Extra fields set when this is a subscription (Pro) purchase.
+        pro_update = {}
+        if intent.get("plan_kind") == "subscription":
+            days = int(intent.get("billing_period_days") or 30)
+            pro_update["pro_expires_at"] = now + timedelta(days=days)
+            pro_update["pro_plan_id"] = intent.get("plan_id")
+            pro_update["pro_activated_at"] = now
+        upd_op = {
+            "$inc": {
                 "nodes_balance": credited,
                 "nodes_lifetime_purchased": credited,
-            }},
+            }
+        }
+        if pro_update:
+            upd_op["$set"] = pro_update
+        upd = await users.find_one_and_update(
+            {"_id": user["_id"]},
+            upd_op,
             return_document=True,
         )
         balance_after = upd.get("nodes_balance", credited) if upd else credited
@@ -563,13 +728,17 @@ def build_router(db, get_current_user):
             "amount": credited,
             "balance_after": balance_after,
             "module": "system",
-            "workflow": "razorpay_purchase",
-            "reason": f"Purchased plan {intent.get('plan_id')} (₹{amount_inr})",
+            "workflow": ("pro_subscription" if intent.get("plan_kind") == "subscription"
+                         else "razorpay_purchase"),
+            "reason": (f"Activated {intent.get('plan_id')} subscription (₹{amount_inr})"
+                       if intent.get("plan_kind") == "subscription"
+                       else f"Purchased plan {intent.get('plan_id')} (₹{amount_inr})"),
             "job_id": None,
             "meta": {
                 "razorpay_order_id": payload.razorpay_order_id,
                 "razorpay_payment_id": payload.razorpay_payment_id,
                 "plan_id": intent.get("plan_id"),
+                "plan_kind": intent.get("plan_kind"),
                 "amount_inr": amount_inr,
             },
             "at": now,
@@ -584,11 +753,14 @@ def build_router(db, get_current_user):
             }},
         )
 
+        # Re-read the user so we can return their fresh Pro status.
+        fresh = upd or await users.find_one({"_id": user["_id"]})
         return {
             "ok": True,
             "already_verified": False,
             "credited": credited,
             "balance_after": balance_after,
+            "pro": _pro_status_from_user(fresh or {}),
         }
 
     return router
