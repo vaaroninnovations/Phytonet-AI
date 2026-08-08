@@ -191,7 +191,7 @@ function FAQ() {
   const [open, setOpen] = useState(0);
   return (
     <section data-testid="pricing-faq" className="mx-auto max-w-3xl px-6 pb-24">
-      <h2 className="font-headline text-3xl font-bold tracking-tight text-[#0F172A] text-center">
+      <h2 className="font-headline text-3xl font-bold tracking-tight text-[#FAFAFF] text-center">
         Frequently Asked Questions
       </h2>
       <div className="mt-8 space-y-3">
@@ -199,17 +199,17 @@ function FAQ() {
           const isOpen = open === i;
           return (
             <div key={i} data-testid={`faq-${i}`}
-                 className={`rounded-2xl border transition ${isOpen ? "border-[#5139ED]/30 bg-white shadow-md" : "border-[#E7E7F3] bg-white"}`}>
+                 className={`rounded-2xl border transition ${isOpen ? "border-[#5139ED]/40 bg-[#12102E]" : "border-[#FAFAFF]/10 bg-[#0F0E24]/80"}`}>
               <button
                 type="button"
                 onClick={() => setOpen(isOpen ? -1 : i)}
                 className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
               >
-                <span className="font-semibold text-[14.5px] text-[#0F172A]">{item.q}</span>
-                <HelpCircle className={`h-4 w-4 flex-shrink-0 transition ${isOpen ? "text-[#5139ED] rotate-180" : "text-[#94A3B8]"}`} />
+                <span className="font-semibold text-[14.5px] text-[#FAFAFF]">{item.q}</span>
+                <HelpCircle className={`h-4 w-4 flex-shrink-0 transition ${isOpen ? "text-[#c4b5fd] rotate-180" : "text-[#E7E7F3]/50"}`} />
               </button>
               {isOpen && (
-                <div className="border-t border-[#F1F5F9] px-5 py-4 text-[13.5px] leading-relaxed text-[#4B5563]">
+                <div className="border-t border-[#FAFAFF]/8 px-5 py-4 text-[13.5px] leading-relaxed text-[#E7E7F3]/80">
                   {item.a}
                 </div>
               )}
@@ -374,26 +374,32 @@ export default function Pricing() {
   };
 
   return (
-    <div data-testid="pricing-page" className="min-h-screen bg-gradient-to-b from-[#F8FAFC] to-white">
+    <div data-testid="pricing-page" className="min-h-screen bg-[#0F0E24] relative overflow-hidden">
+      {/* Ambient brand glow so the dark canvas feels alive without noise */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 opacity-30">
+        <div className="absolute left-1/2 top-0 h-[480px] w-[900px] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,#5139ED,transparent_75%)] blur-3xl opacity-40" />
+        <div className="absolute right-0 top-[40%] h-[380px] w-[520px] rounded-full bg-[radial-gradient(closest-side,#2BB673,transparent_70%)] opacity-15 blur-3xl" />
+      </div>
+      <div className="relative">
       {/* Hero */}
       <section className="relative overflow-hidden px-6 pt-20 pb-14 text-center">
         <div aria-hidden className="pointer-events-none absolute inset-0 opacity-40">
           <div className="absolute left-1/2 top-0 -translate-x-1/2 h-[500px] w-[900px] rounded-full bg-[radial-gradient(closest-side,#8139ED,transparent_70%)] blur-3xl opacity-30" />
         </div>
         <div className="relative mx-auto max-w-4xl">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-[#5139ED]/20 bg-[#5139ED]/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#5139ED]">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-[#c4b5fd]/30 bg-[#c4b5fd]/[0.06] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#c4b5fd]">
             <Sparkles className="h-3.5 w-3.5" /> Pay only for what you use
           </span>
-          <h1 className="mt-6 font-headline text-4xl font-bold tracking-tight text-[#0F172A] sm:text-5xl lg:text-6xl">
+          <h1 className="mt-6 font-headline text-4xl font-bold tracking-tight text-[#FAFAFF] sm:text-5xl lg:text-6xl">
             Simple, fair pricing<br/>
-            <span className="bg-gradient-to-r from-[#5139ED] to-[#8139ED] bg-clip-text text-transparent">that scales with your research.</span>
+            <span className="bg-gradient-to-r from-[#c4b5fd] to-[#8139ED] bg-clip-text text-transparent">that scales with your research.</span>
           </h1>
-          <p className="mx-auto mt-6 max-w-2xl text-[15px] leading-relaxed text-[#475569]">
+          <p className="mx-auto mt-6 max-w-2xl text-[15px] leading-relaxed text-[#E7E7F3]/80">
             Buy nodes as you need them or subscribe to PhytoNet Pro for the best value.
             Free tools like Plant Search and Disease Targets never charge — you only spend nodes on premium analysis.
           </p>
-          <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[12px] text-emerald-700">
-            <Star className="h-3.5 w-3.5 fill-emerald-500 text-emerald-500" />
+          <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-[12px] text-emerald-300">
+            <Star className="h-3.5 w-3.5 fill-emerald-400 text-emerald-400" />
             New users get <strong>10 free nodes</strong> — enough to try the AI Research Assistant risk-free.
           </div>
         </div>
@@ -525,8 +531,8 @@ export default function Pricing() {
       {/* Plans grid — Student + Bundles */}
       <section className="mx-auto max-w-6xl px-6 pb-6">
         <div className="mb-4 flex items-center gap-2">
-          <TrendingUp className="h-5 w-5 text-[#5139ED]" />
-          <h2 className="font-headline text-xl font-bold text-[#0F172A]">One-time bundles</h2>
+          <TrendingUp className="h-5 w-5 text-[#c4b5fd]" />
+          <h2 className="font-headline text-xl font-bold text-[#FAFAFF]">One-time bundles</h2>
         </div>
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -546,8 +552,8 @@ export default function Pricing() {
       {/* Subscription + Enterprise */}
       <section className="mx-auto max-w-6xl px-6 pt-10 pb-16">
         <div className="mb-4 flex items-center gap-2">
-          <Zap className="h-5 w-5 text-amber-600" />
-          <h2 className="font-headline text-xl font-bold text-[#0F172A]">Subscribe & save</h2>
+          <Zap className="h-5 w-5 text-amber-400" />
+          <h2 className="font-headline text-xl font-bold text-[#FAFAFF]">Subscribe & save</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {[...grouped.subscription, ...grouped.enterprise].map((p) => (
@@ -560,12 +566,12 @@ export default function Pricing() {
 
       {/* Comparison table */}
       <section className="mx-auto max-w-5xl px-6 pb-16">
-        <h2 className="font-headline text-2xl font-bold tracking-tight text-[#0F172A] text-center mb-6">
+        <h2 className="font-headline text-2xl font-bold tracking-tight text-[#FAFAFF] text-center mb-6">
           What you can do with your nodes
         </h2>
-        <div className="overflow-x-auto rounded-2xl border border-[#E7E7F3] bg-white">
+        <div className="overflow-x-auto rounded-2xl border border-[#FAFAFF]/10 bg-[#12102E]/60 backdrop-blur-sm">
           <table className="w-full text-[13.5px]">
-            <thead className="bg-[#F8FAFC] text-[11px] font-semibold uppercase tracking-[0.14em] text-[#64748B]">
+            <thead className="bg-[#FAFAFF]/[0.03] text-[11px] font-semibold uppercase tracking-[0.14em] text-[#E7E7F3]/60">
               <tr>
                 <th className="px-5 py-3 text-left">Feature</th>
                 <th className="px-5 py-3 text-center">Free / Bundle</th>
@@ -573,7 +579,7 @@ export default function Pricing() {
                 <th className="px-5 py-3 text-center">Lab / Team</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#F1F5F9]">
+            <tbody className="divide-y divide-[#FAFAFF]/5">
               {[
                 ["Plant Database", "✓", "✓", "✓"],
                 ["Disease target search", "✓", "✓", "✓"],
@@ -584,11 +590,11 @@ export default function Pricing() {
                 ["Collaboration workspaces", "—", "—", "✓ (5 seats)"],
                 ["Institutional invoicing", "—", "—", "✓"],
               ].map((row, i) => (
-                <tr key={i} className="hover:bg-[#FAFBFF]">
-                  <td className="px-5 py-3.5 font-medium text-[#0F172A]">{row[0]}</td>
-                  <td className="px-5 py-3.5 text-center text-[#475569]">{row[1]}</td>
-                  <td className="px-5 py-3.5 text-center text-[#475569]">{row[2]}</td>
-                  <td className="px-5 py-3.5 text-center text-[#475569]">{row[3]}</td>
+                <tr key={i} className="hover:bg-[#FAFAFF]/[0.03]">
+                  <td className="px-5 py-3.5 font-medium text-[#FAFAFF]">{row[0]}</td>
+                  <td className="px-5 py-3.5 text-center text-[#E7E7F3]/70">{row[1]}</td>
+                  <td className="px-5 py-3.5 text-center text-[#E7E7F3]/70">{row[2]}</td>
+                  <td className="px-5 py-3.5 text-center text-[#E7E7F3]/70">{row[3]}</td>
                 </tr>
               ))}
             </tbody>
@@ -630,6 +636,7 @@ export default function Pricing() {
         plan={salesModal}
         onClose={() => setSalesModal(null)}
       />
+      </div>
     </div>
   );
 }

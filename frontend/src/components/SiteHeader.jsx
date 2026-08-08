@@ -21,9 +21,11 @@ export default function SiteHeader() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const navigate = useNavigate();
-  // Home page uses the redesigned dark hero — switch header to a dark-glass
-  // variant so the transition into the hero feels seamless.
-  const dark = pathname === "/";
+  // These marketing routes use the dark canvas — switch header to dark-glass
+  // so the transition into each hero feels seamless.
+  const dark = pathname === "/"
+            || pathname === "/pricing"
+            || pathname === "/referrals/leaderboard";
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
