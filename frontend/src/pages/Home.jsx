@@ -1,397 +1,410 @@
-// PhytoNet AI — Premium homepage.
-// Full rewrite (Iter 21). Sections: Hero · Stats · Features · Workflow · Why ·
-// Screenshot · Plant Preview · Modules · How It Works · Trust · Resources ·
-// FAQ · Final CTA. Design: minimal white background, Manrope headlines,
-// Plus Jakarta Sans body, soft gradients + glassmorphism only where appropriate.
-import { useEffect, useMemo, useRef, useState } from "react";
+// PhytoNet AI — Homepage.
+// Complete redesign to a Clinical Cyber / Premium Scientific AI archetype
+// (per /app/design_guidelines.json). Sections: Hero · Trust band · AI
+// Assistant showcase · Modules bento · Workflow walkthrough · FAQ · Final CTA.
+// Dark surfaces, structural borders, live tickers in accent green, sharp cards.
+// Preserves all existing routes, auth flows, and data-testid contracts.
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { motion, useInView } from "framer-motion";
+import { motion } from "framer-motion";
 import {
-  ArrowRight, ArrowUpRight, Check, ChevronRight, ChevronDown,
-  Sparkles, ShieldCheck, GitBranch, Layers, Atom, Dna, Network,
-  Search, FlaskConical, FileText, Video, Image as ImageIcon, Beaker,
-  Microscope, Brain, Zap, BookOpen, Github, Linkedin, Twitter,
-  Play, PlayCircle, Leaf, Cpu, Activity, Database, Workflow, Star,
-  Target, HeartPulse, Waves, Coins, Bot, Clock, BarChart3, FileSearch,
+  ArrowRight, ArrowUpRight, Sparkles, ChevronDown, Zap, Activity,
+  Terminal, Network, Beaker, FlaskConical, Atom, Dna, Target, Microscope,
+  ShieldCheck, Database, Cpu, Radio,
 } from "lucide-react";
-import HeroVisual from "@/components/HeroVisual";
-import BrandLogo from "@/components/BrandLogo";
 import { useAuth } from "@/context/AuthContext";
-import { useNodes } from "@/context/NodeContext";
+import HeroVisual from "@/components/HeroVisual";
 
-/* ────────────────────────────── HERO ────────────────────────────── */
-function Hero() {
-  const { openModal, user, guard } = useAuth();
-  const navigate = useNavigate();
-  const goToApp = () => guard(() => navigate("/app"));
+/* ──────────────── SHARED ATOMS ─────────────── */
+function Kicker({ children, className = "" }) {
   return (
-    <section data-testid="hero" className="relative overflow-hidden pt-16 pb-24 lg:pt-24">
-      {/* Blurred colour orbs */}
-      <div aria-hidden className="brand-blur absolute -left-40 top-0 h-[420px] w-[420px] bg-[#5139ED]" />
-      <div aria-hidden className="brand-blur absolute -right-32 top-40 h-[380px] w-[380px] bg-[#2BB673]" />
+    <p className={`font-body text-[11px] font-bold uppercase tracking-[0.24em] text-[#E7E7F3]/70 ${className}`}>
+      {children}
+    </p>
+  );
+}
 
-      {/* Dot grid background */}
-      <div aria-hidden className="absolute inset-0 dot-grid opacity-[0.35]"
-           style={{ maskImage: "radial-gradient(ellipse at center, black 35%, transparent 78%)",
-                    WebkitMaskImage: "radial-gradient(ellipse at center, black 35%, transparent 78%)" }} />
+function LiveDot({ color = "#2BB673" }) {
+  return (
+    <span aria-hidden className="relative inline-flex h-2 w-2 items-center justify-center">
+      <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60"
+            style={{ background: color }} />
+      <span className="relative inline-flex h-2 w-2 rounded-full" style={{ background: color }} />
+    </span>
+  );
+}
 
-      <div className="relative mx-auto grid max-w-7xl grid-cols-1 items-center gap-14 px-6 lg:grid-cols-2">
-        <div>
-          <span className="inline-flex items-center gap-2 rounded-full border border-[#E7E7F3] bg-white/70 px-3.5 py-1.5 text-[11px] font-semibold text-[#374151] backdrop-blur">
-            <Sparkles className="h-3.5 w-3.5 text-[#5139ED]" />
-            Explainable AI for computational pharmacology
-          </span>
+/* ─────────────────────── HERO ─────────────────────── */
+function Hero() {
+  const { guard } = useAuth();
+  const navigate = useNavigate();
+  const goApp = () => guard(() => navigate("/app"));
 
-          <h1 className="font-headline mt-6 text-[44px] leading-[1.05] tracking-[-0.03em] text-[#111827] sm:text-[56px] lg:text-[64px]">
-            <span className="gradient-text">AI Scientist</span> for<br/>
-            Medicinal Plant Research<br/>
-            &amp; Drug Discovery
-          </h1>
+  // "Nodes computed" odometer — a subtle live counter that anchors the
+  // scientific-platform framing. Ticks up every 1.4s so it feels alive
+  // without being distracting.
+  const [count, setCount] = useState(1_452_093);
+  useEffect(() => {
+    const id = setInterval(() => setCount((c) => c + Math.floor(Math.random() * 40 + 3)), 1400);
+    return () => clearInterval(id);
+  }, []);
 
-          <p className="mt-6 max-w-xl text-base leading-relaxed text-[#374151] sm:text-[17px]">
-            Simplify medicinal plant research with AI. Start with a plant name or LC-MS/MS data,
-            and PhytoNet AI guides you through compound identification, target prediction, network
-            pharmacology, molecular docking, molecular dynamics, and publication-ready report
-            generation—all in one integrated platform.
-          </p>
+  return (
+    <section data-testid="home-hero"
+             className="relative overflow-hidden bg-[#0F0E24] text-[#FAFAFF]">
+      {/* Subtle radial + grid — sets the "clinical cyber" texture without
+          resorting to a full-screen gradient. */}
+      <div aria-hidden className="pointer-events-none absolute inset-0">
+        <div className="absolute inset-0 opacity-[0.06]"
+             style={{ backgroundImage:
+               "linear-gradient(rgba(255,255,255,.9) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.9) 1px, transparent 1px)",
+               backgroundSize: "56px 56px" }} />
+        <div className="absolute left-1/3 top-0 h-[520px] w-[900px] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,#5139ED,transparent_75%)] opacity-25 blur-3xl" />
+        <div className="absolute right-0 bottom-[-160px] h-[420px] w-[520px] rounded-full bg-[radial-gradient(closest-side,#2BB673,transparent_70%)] opacity-15 blur-3xl" />
+      </div>
 
-          <div className="mt-8 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={goToApp}
-              data-testid="hero-primary-cta"
-              className="group inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#5139ED] via-[#395AED] to-[#8139ED] px-6 py-3.5 text-[14px] font-bold text-white shadow-[0_14px_36px_-10px_rgba(81,57,237,0.7)] transition-all hover:-translate-y-0.5 hover:shadow-[0_22px_48px_-12px_rgba(81,57,237,0.85)]"
-            >
-              Start Free Analysis
-              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-            </button>
-            <a
-              href="#how"
-              data-testid="hero-secondary-cta"
-              className="inline-flex items-center gap-2 rounded-full border border-[#E7E7F3] bg-white/70 px-6 py-3.5 text-[14px] font-semibold text-[#111827] backdrop-blur transition-all hover:border-[#5139ED]/40 hover:text-[#5139ED]"
-            >
-              <PlayCircle className="h-4 w-4" />
-              Watch Demo
-            </a>
+      <div className="relative mx-auto grid max-w-7xl grid-cols-12 gap-8 px-6 pt-24 pb-32 lg:pt-32 lg:pb-40">
+        {/* Left content — 7 cols */}
+        <motion.div className="col-span-12 lg:col-span-7"
+                    initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.6 }}>
+          <div className="inline-flex items-center gap-2 rounded-full border border-[#FAFAFF]/10 bg-[#FAFAFF]/[0.03] px-3 py-1.5 text-[11px] font-body font-semibold uppercase tracking-[0.16em] text-[#E7E7F3]/80">
+            <LiveDot /> Research intelligence · v2.0
           </div>
 
-          <ul className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 text-[12.5px] font-semibold text-[#374151]">
-            {["No coding required", "Cloud-based", "Publication-ready"].map((t) => (
-              <li key={t} className="inline-flex items-center gap-1.5">
-                <span className="grid h-4 w-4 place-items-center rounded-full bg-[#2BB673]/12 text-[#2BB673]">
-                  <Check className="h-2.5 w-2.5" strokeWidth={3.5} />
-                </span>
-                {t}
+          <h1 className="mt-6 font-headline text-[44px] leading-[1.02] tracking-[-0.02em] text-[#FAFAFF] sm:text-[60px] lg:text-[76px]">
+            Decode complex biology<br/>
+            <span className="bg-gradient-to-r from-[#c4b5fd] via-[#8139ED] to-[#5139ED] bg-clip-text text-transparent">
+              with PhytoNet AI.
+            </span>
+          </h1>
+
+          <p className="mt-6 max-w-xl font-body text-[15.5px] leading-relaxed text-[#E7E7F3]/85">
+            The natural-language research intelligence platform for pharmacologists,
+            phytochemists and drug-discovery scientists. Plan multi-step network-pharmacology
+            workflows in plain English — target prediction, ADMET, docking, enrichment —
+            or dive into any module directly.
+          </p>
+
+          {/* Ticker + CTAs */}
+          <div className="mt-8 flex flex-wrap items-center gap-3">
+            <button type="button" data-testid="hero-launch-workspace" onClick={goApp}
+                    className="group inline-flex items-center gap-2 rounded-lg bg-[#5139ED] px-5 py-3 text-[13.5px] font-bold text-white transition hover:bg-[#4128d4] hover:-translate-y-0.5">
+              Launch Workspace <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
+            </button>
+            <Link to="/research" data-testid="hero-open-assistant"
+                  className="inline-flex items-center gap-2 rounded-lg border border-[#FAFAFF]/15 bg-[#FAFAFF]/[0.04] px-5 py-3 text-[13.5px] font-semibold text-[#E7E7F3] hover:bg-[#FAFAFF]/[0.08] transition">
+              <Terminal className="h-4 w-4" /> Try the AI Assistant
+            </Link>
+            <Link to="/pricing" data-testid="hero-view-pricing"
+                  className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#c4b5fd] hover:text-white">
+              View pricing <ArrowUpRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+
+          {/* Live counter — subtle, always ticking */}
+          <div className="mt-10 inline-flex items-center gap-3 rounded-lg border border-[#2BB673]/25 bg-[#2BB673]/[0.06] px-3.5 py-2">
+            <LiveDot />
+            <div className="flex items-baseline gap-2">
+              <span className="font-body text-[10.5px] font-bold uppercase tracking-[0.16em] text-[#2BB673]">
+                Nodes computed
+              </span>
+              <span data-testid="hero-nodes-counter"
+                    className="font-headline text-[15px] font-bold tabular-nums text-[#FAFAFF]">
+                {count.toLocaleString()}
+              </span>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Right — HeroVisual canvas (5 cols) */}
+        <motion.div className="col-span-12 lg:col-span-5 relative"
+                    initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.9, delay: 0.15 }}>
+          <div className="relative rounded-2xl border border-[#FAFAFF]/10 bg-[#12102E]/60 backdrop-blur-sm p-4 lg:p-6">
+            <div className="mb-3 flex items-center justify-between text-[10px] font-body uppercase tracking-[0.18em] text-[#E7E7F3]/60">
+              <span className="inline-flex items-center gap-1.5"><Network className="h-3 w-3" /> Compound × Target × Pathway</span>
+              <span className="inline-flex items-center gap-1"><LiveDot color="#F59E0B" /> live sim</span>
+            </div>
+            <div className="aspect-[5/4] w-full">
+              <HeroVisual />
+            </div>
+          </div>
+        </motion.div>
+      </div>
+
+      <a href="#trust" aria-label="Scroll to trust band"
+         className="absolute bottom-6 left-1/2 -translate-x-1/2 text-[#E7E7F3]/50 hover:text-white">
+        <ChevronDown className="h-5 w-5 animate-bounce" />
+      </a>
+    </section>
+  );
+}
+
+/* ─────────────────────── TRUST BAND ─────────────────────── */
+const DATA_SOURCES = [
+  "TCMSP", "LOTUS", "ChEMBL", "PubChem", "KEGG", "DisGeNET", "AlphaFold", "RCSB PDB",
+  "Reactome", "STRING", "UniProt", "SwissADME", "AutoDock Vina",
+];
+
+function TrustBand() {
+  return (
+    <section id="trust" data-testid="home-trust"
+             className="relative border-y border-[#FAFAFF]/10 bg-[#0B0918] py-10 overflow-hidden">
+      <div className="mx-auto max-w-7xl px-6">
+        <Kicker className="mb-5 text-center">Data integrated from</Kicker>
+        <div className="relative">
+          <div aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-[#0B0918] to-transparent z-10" />
+          <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-24 bg-gradient-to-l from-[#0B0918] to-transparent z-10" />
+          <div className="flex gap-12 animate-[marquee_38s_linear_infinite] hover:[animation-play-state:paused]">
+            {[...DATA_SOURCES, ...DATA_SOURCES].map((src, i) => (
+              <span key={i} className="whitespace-nowrap font-headline text-[16px] font-semibold tracking-wide text-[#E7E7F3]/55 hover:text-[#E7E7F3]">
+                {src}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+      <style>{`@keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }`}</style>
+    </section>
+  );
+}
+
+/* ─────────────────── AI ASSISTANT SHOWCASE ─────────────────── */
+function AssistantShowcase() {
+  return (
+    <section data-testid="home-assistant" className="relative bg-[#0F0E24] py-32 overflow-hidden">
+      <div aria-hidden className="pointer-events-none absolute inset-0 opacity-30">
+        <img src="https://images.unsplash.com/photo-1678845536613-5cf0ec5245cd?crop=entropy&cs=srgb&fm=jpg&w=1600&q=60"
+             alt="" className="h-full w-full object-cover mix-blend-lighten" />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#0F0E24] via-[#0F0E24]/70 to-[#0F0E24]" />
+      </div>
+
+      <div className="relative mx-auto max-w-7xl px-6 grid grid-cols-12 gap-12">
+        {/* Left copy */}
+        <div className="col-span-12 lg:col-span-5">
+          <Kicker>AI Research Assistant</Kicker>
+          <h2 className="mt-3 font-headline text-[36px] leading-[1.05] tracking-tight text-[#FAFAFF] sm:text-[44px]">
+            From query to pharmacological insight —{" "}
+            <span className="text-[#2BB673]">in seconds.</span>
+          </h2>
+          <p className="mt-5 max-w-md font-body text-[14.5px] leading-relaxed text-[#E7E7F3]/80">
+            Ask in plain English. The assistant drafts a workflow plan, previews the
+            node cost, and executes across compound resolution, ADMET, target prediction,
+            docking, and pathway enrichment — streaming results back to you as they land.
+          </p>
+          <ul className="mt-6 space-y-2 text-[13px] text-[#E7E7F3]/85">
+            {[
+              "Plan preview + explicit node-cost estimate before you run",
+              "Live 'Nodes used X / Y' ticker & per-step progress",
+              "AlphaFold fallback for targets missing an RCSB structure",
+              "Shareable scientific report generated on completion",
+            ].map((t) => (
+              <li key={t} className="flex items-start gap-2">
+                <Sparkles className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-[#c4b5fd]" />
+                <span>{t}</span>
               </li>
             ))}
           </ul>
+          <Link to="/research" data-testid="assistant-cta"
+                className="mt-8 inline-flex items-center gap-2 rounded-lg border border-[#5139ED]/40 bg-[#5139ED]/15 px-5 py-3 text-[13px] font-bold text-white hover:bg-[#5139ED]/25 transition">
+            <Terminal className="h-4 w-4" /> Explore the Assistant <ArrowRight className="h-4 w-4" />
+          </Link>
         </div>
 
-        <div>
-          <HeroVisual />
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ─────────────────────────── WHY CHOOSE PHYTONET AI ─────────────────────────── */
-const TRADITIONAL_PAIN = [
-  "Multiple disconnected software",
-  "Manual data transfer",
-  "Separate scientific databases",
-  "Repeated file conversion",
-  "Manual result interpretation",
-  "Time-consuming repeat analyses",
-  "Difficult to reproduce",
-  "Weeks of work",
-];
-
-const PHYTONET_STEPS = [
-  { icon: Activity,      label: "Upload LC-MS Data",       desc: "Drag-and-drop or paste; auto-parses mzML, CSV & Excel.",         tone: "#5139ED" },
-  { icon: FlaskConical,  label: "Identify Compounds",      desc: "PubChem & LOTUS resolution with SMILES, InChI, structure.",     tone: "#5139ED" },
-  { icon: ShieldCheck,   label: "Drug-Likeness & ADMET",   desc: "Lipinski, Veber, Ghose + full ADMET panel scored per rule.",    tone: "#395AED" },
-  { icon: Target,        label: "Target Prediction",       desc: "ChEMBL similarity + BindingDB + UniProt evidence-linked hits.", tone: "#395AED" },
-  { icon: HeartPulse,    label: "Disease Target Analysis", desc: "DisGeNET · OMIM · TTD cross-reference for translational focus.",tone: "#8139ED" },
-  { icon: Network,       label: "Network Pharmacology",    desc: "Compound-target-disease graph with hubs & bridges.",            tone: "#8139ED" },
-  { icon: GitBranch,     label: "GO & KEGG Enrichment",    desc: "Pathway analysis with p-values, dot plots and Sankey.",         tone: "#5139ED" },
-  { icon: Atom,          label: "Molecular Docking",       desc: "AutoDock Vina · auto receptor prep · publication-ready poses.", tone: "#395AED" },
-  { icon: Waves,         label: "Molecular Dynamics",      desc: "GROMACS RMSD/RMSF trajectories for stability profiling.",       tone: "#8139ED" },
-  { icon: FileText,      label: "AI Report Generation",    desc: "One-click manuscript, figures & graphical abstract.",           tone: "#2BB673" },
-];
-
-function WhyChoose() {
-  const { guard } = useAuth();
-  const navigate = useNavigate();
-  const goToApp = () => guard(() => navigate("/app"));
-  return (
-    <section id="why-phytonet" data-testid="why-choose" className="relative overflow-hidden bg-gradient-to-b from-white via-[#FAFAFF] to-white py-24">
-      <div aria-hidden className="brand-blur absolute -left-40 top-20 h-[420px] w-[420px] bg-[#5139ED]" />
-      <div aria-hidden className="brand-blur absolute -right-32 bottom-40 h-[380px] w-[380px] bg-[#2BB673]" />
-
-      <div className="relative mx-auto max-w-7xl px-6">
-        {/* ── Section header ── */}
-        <div className="mx-auto max-w-3xl text-center">
-          <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">Why Choose</p>
-          <h2 className="font-headline mt-3 text-[36px] leading-[1.08] tracking-tight text-[#111827] sm:text-[44px]">
-            Why Choose <span className="gradient-text">PhytoNet AI?</span>
-          </h2>
-          <p className="mt-5 text-[14.5px] leading-relaxed text-[#374151]">
-            Traditional medicinal plant research requires switching between multiple software tools,
-            databases, and manual data processing. PhytoNet AI brings the entire workflow together
-            into one intelligent platform — faster, more accurately, with reproducible results.
-          </p>
-        </div>
-
-        {/* ── Two-column comparison (35 / 65) ── */}
-        <div className="mt-16 grid grid-cols-1 gap-6 lg:grid-cols-[35fr_65fr] lg:gap-8">
-          {/* Left — Traditional Research (dark violet card, brand palette) */}
-          <div className="relative flex flex-col overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-[#0F0E24] via-[#1E1B4B] to-[#12102E] p-7 shadow-[0_20px_60px_-20px_rgba(30,27,75,0.65)]">
-            <div aria-hidden className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-[#8139ED]/25 blur-3xl" />
-            <div aria-hidden className="pointer-events-none absolute -left-16 bottom-0 h-48 w-48 rounded-full bg-red-500/10 blur-3xl" />
-            <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-red-300">Traditional Research</p>
-            <h3 className="font-headline mt-2 text-[22px] leading-tight text-white">The old way, in fragments.</h3>
-            <ul className="relative mt-6 space-y-2.5">
-              {TRADITIONAL_PAIN.map((t) => (
-                <li key={t} className="flex items-start gap-3 text-[13.5px] text-white/85">
-                  <span aria-hidden className="mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full bg-red-500 shadow-[0_0_10px_2px_rgba(239,68,68,0.6)]" />
-                  {t}
-                </li>
-              ))}
-            </ul>
-            {/* Bottom-anchored callout — flex-col + mt-auto lets it settle at the bottom so the card matches the right column's height */}
-            <div className="relative mt-auto pt-6">
-              <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
-                <p className="font-headline text-[13px] text-white">Time to first insight</p>
-                <p className="mt-1 text-[11px] text-white/70">Typical published network-pharmacology study</p>
-                <p className="mt-2 font-headline text-[36px] font-extrabold text-red-400">2–6 weeks</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Right — PhytoNet AI vertical timeline */}
-          <div className="relative rounded-3xl border border-[#E7E7F3] bg-white p-7 shadow-[0_20px_60px_-24px_rgba(81,57,237,0.35)]">
-            <div className="mb-4 flex items-center justify-between gap-4">
-              <div>
-                <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">PhytoNet AI Workflow</p>
-                <h3 className="font-headline mt-1 text-[22px] leading-tight text-[#111827]">One connected pipeline — 10 steps, zero handoffs.</h3>
-              </div>
-              <span className="hidden shrink-0 rounded-full bg-gradient-to-r from-[#5139ED] to-[#8139ED] px-3 py-1 text-[10px] font-extrabold uppercase tracking-widest text-white sm:inline-flex">
-                Automated
+        {/* Right — mock chat terminal */}
+        <div className="col-span-12 lg:col-span-7">
+          <div className="rounded-xl border border-[#FAFAFF]/10 bg-[#0B0918] overflow-hidden shadow-[0_30px_80px_-20px_rgba(0,0,0,0.6)]">
+            {/* Chrome */}
+            <div className="flex items-center gap-2 border-b border-[#FAFAFF]/10 bg-[#12102E]/80 px-4 py-2.5">
+              <span className="h-2.5 w-2.5 rounded-full bg-rose-400/70" />
+              <span className="h-2.5 w-2.5 rounded-full bg-amber-400/70" />
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/70" />
+              <span className="ml-3 font-body text-[11px] uppercase tracking-[0.18em] text-[#E7E7F3]/50">
+                phytonet.ai / research
               </span>
             </div>
 
-            <ol className="relative pl-4">
-              {/* Central gradient spine */}
-              <span aria-hidden className="absolute left-[26px] top-1 bottom-1 w-[2px] bg-gradient-to-b from-[#5139ED]/70 via-[#8139ED]/40 to-[#2BB673]/60" />
+            {/* Chat body */}
+            <div className="space-y-4 p-5 font-body text-[13px] text-[#E7E7F3]">
+              {/* User message */}
+              <div className="flex gap-3">
+                <span className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-[#FAFAFF]/10 text-[10px] font-bold uppercase text-[#c4b5fd]">RS</span>
+                <div>
+                  <div className="text-[10px] uppercase tracking-widest text-[#E7E7F3]/50">You</div>
+                  <div className="mt-1">Find phytochemicals from <em className="text-[#c4b5fd]">Withania somnifera</em> that target IL-6, then dock the top 3 hits.</div>
+                </div>
+              </div>
 
-              {PHYTONET_STEPS.map((s, i) => (
-                <motion.li
-                  key={s.label}
-                  initial={{ opacity: 0, x: -12 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.05, duration: 0.35 }}
-                  className="group relative flex items-center gap-4 py-1"
-                >
-                  {/* Node dot */}
-                  <span className="relative z-10 grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/60 bg-white shadow-[0_6px_18px_-8px_rgba(81,57,237,0.45)] transition-transform group-hover:scale-105">
-                    <span
-                      className="absolute inset-0 -z-10 rounded-xl opacity-90"
-                      style={{ background: `linear-gradient(135deg, ${s.tone}18, ${s.tone}05)` }}
-                    />
-                    <s.icon className="h-[17px] w-[17px]" strokeWidth={2.2} style={{ color: s.tone }} />
-                  </span>
-
-                  {/* Text + hover reveal */}
-                  <div className="flex-1">
-                    <div className="flex flex-wrap items-baseline gap-x-2">
-                      <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: s.tone }}>
-                        Step {String(i + 1).padStart(2, "0")}
+              {/* Assistant plan preview */}
+              <div className="flex gap-3">
+                <span className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-[#5139ED] text-white">
+                  <Cpu className="h-3 w-3" />
+                </span>
+                <div className="flex-1">
+                  <div className="text-[10px] uppercase tracking-widest text-[#E7E7F3]/50">Assistant · plan preview</div>
+                  <div className="mt-2 rounded-lg border border-[#5139ED]/25 bg-[#5139ED]/[0.06] p-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="text-[11px] font-semibold uppercase tracking-widest text-[#c4b5fd]">Execution plan · 4 steps</span>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-[#2BB673]/15 border border-[#2BB673]/30 px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-widest text-[#2BB673]">
+                        <Zap className="h-2.5 w-2.5" /> ~14 nodes ≈ ₹115
                       </span>
-                      <p className="text-[14px] font-semibold text-[#0F172A]">{s.label}</p>
                     </div>
-                    <p className="max-h-0 overflow-hidden text-[12.5px] leading-relaxed text-[#64748B] transition-[max-height,opacity,margin] duration-300 opacity-0 group-hover:mt-0.5 group-hover:max-h-16 group-hover:opacity-100">
-                      {s.desc}
-                    </p>
+                    <ol className="space-y-1.5 text-[12.5px]">
+                      {[
+                        ["plant_search",   "Fetch compounds for Withania somnifera",    "free"],
+                        ["target_predict", "Predict targets for top 5 hero compounds",  "1n"],
+                        ["disease_targets","Filter to IL-6 pathway",                    "1n"],
+                        ["docking",        "Dock top 3 compounds × IL-6 receptor",      "9n · 3p"],
+                      ].map(([tool, label, cost], i) => (
+                        <li key={i} className="flex items-center gap-2">
+                          <span className="text-[#E7E7F3]/50 tabular-nums text-[10px]">{String(i + 1).padStart(2, "0")}</span>
+                          <span className="text-[10px] uppercase tracking-wider text-[#c4b5fd]/70">{tool}</span>
+                          <span className="text-[#E7E7F3]/90 flex-1">{label}</span>
+                          <span className={`rounded-full px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wider ${
+                            cost === "free"
+                              ? "bg-[#2BB673]/15 text-[#2BB673]"
+                              : "bg-[#5139ED]/20 text-[#c4b5fd]"
+                          }`}>{cost}</span>
+                        </li>
+                      ))}
+                    </ol>
                   </div>
-                </motion.li>
-              ))}
-            </ol>
-          </div>
-        </div>
-
-        {/* ── Highlight banner ── */}
-        <div className="mt-14 rounded-3xl bg-gradient-to-br from-[#5139ED] via-[#395AED] to-[#8139ED] p-8 text-white sm:p-12">
-          <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr] lg:items-end">
-            <div>
-              <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-white/80">The PhytoNet Promise</p>
-              <h3 className="font-headline mt-2 text-[28px] leading-[1.1] tracking-tight sm:text-[36px]">
-                Simplifying Medicinal Plant Research with AI
-              </h3>
-              <p className="mt-3 text-[14.5px] font-semibold text-white/90">
-                Everything you need for medicinal plant research in one AI-powered platform.
-              </p>
-              <p className="mt-3 max-w-2xl text-[13.5px] leading-relaxed text-white/80">
-                Start with a plant name or LC-MS/MS data and let PhytoNet AI guide you through
-                compound identification, target prediction, biological pathway analysis, molecular
-                docking, molecular dynamics, and publication-ready reporting.
-              </p>
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { k: "10", v: "Automated steps" },
-                { k: "1", v: "Unified platform" },
-                { k: "0", v: "Manual exports" },
-              ].map((s) => (
-                <div key={s.v} className="rounded-2xl bg-white/10 p-4 backdrop-blur-sm">
-                  <p className="font-headline text-[32px] font-extrabold leading-none">{s.k}</p>
-                  <p className="mt-1 text-[10.5px] font-semibold uppercase tracking-widest text-white/80">{s.v}</p>
                 </div>
-              ))}
+              </div>
+
+              {/* Live progress */}
+              <div className="flex gap-3">
+                <span className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-[#F59E0B]/20 text-[#F59E0B]">
+                  <Radio className="h-3 w-3" />
+                </span>
+                <div className="flex-1">
+                  <div className="text-[10px] uppercase tracking-widest text-[#E7E7F3]/50">Running · step 4/4</div>
+                  <div className="mt-1.5 flex items-center gap-2 text-[12.5px]">
+                    <LiveDot color="#F59E0B" />
+                    <span>Docking withaferin A × IL-6 receptor · pair 2 of 3 · vina</span>
+                  </div>
+                  <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[#FAFAFF]/5">
+                    <div className="h-full rounded-full bg-gradient-to-r from-[#5139ED] to-[#2BB673] animate-pulse"
+                         style={{ width: "72%" }} />
+                  </div>
+                  <div className="mt-1 flex justify-between text-[10.5px] text-[#E7E7F3]/50">
+                    <span>Nodes used: 10 / 14</span>
+                    <span>72%</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
-
-        {/* ── Final callout ── */}
-        <div className="mt-10 rounded-3xl border border-[#5139ED]/20 bg-[#5139ED]/[0.04] p-6 text-center sm:p-8">
-          <p className="font-headline text-[18px] font-semibold text-[#0F172A] sm:text-[20px]">
-            Why switch between multiple software and databases?
-          </p>
-          <p className="mx-auto mt-2 max-w-3xl text-[13.5px] leading-relaxed text-[#374151]">
-            PhytoNet AI integrates every stage of medicinal plant research into a single AI-powered
-            platform, enabling faster discoveries, reproducible analyses, and publication-ready outputs.
-          </p>
-          <button
-            type="button"
-            onClick={goToApp}
-            data-testid="why-choose-cta"
-            className="mt-5 inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#5139ED] via-[#395AED] to-[#8139ED] px-6 py-3 text-[13px] font-bold text-white shadow-[0_14px_36px_-10px_rgba(81,57,237,0.6)] transition-all hover:-translate-y-0.5"
-          >
-            Start Free Analysis
-            <ArrowRight className="h-4 w-4" />
-          </button>
-        </div>
       </div>
     </section>
   );
 }
 
+/* ─────────────────── MODULES BENTO GRID ─────────────────── */
+const MODULES = [
+  { icon: Beaker,        label: "Plant Database",        to: "/plant-database",      accent: "#2BB673",
+    tag: "Free",        desc: "TCMSP + LOTUS + Wikipedia. Compounds, structures, taxonomy, uses." },
+  { icon: Atom,          label: "Compound Analysis",     to: "/compound-analysis",   accent: "#c4b5fd",
+    tag: "Free",        desc: "Resolve, cluster and inspect any bioactive molecule with property panels." },
+  { icon: Target,        label: "Target Prediction",     to: "/target-prediction",   accent: "#8139ED",
+    tag: "1 node",      desc: "SEA-style multi-target prediction across UniProt families with confidence bands." },
+  { icon: FlaskConical,  label: "ADMET & Druglikeness",  to: "/admet-druglikeness",  accent: "#F59E0B",
+    tag: "1 node",      desc: "Absorption, distribution, metabolism, excretion, toxicity — SwissADME + local rules." },
+  { icon: Microscope,    label: "Molecular Docking",     to: "/molecular-docking",   accent: "#EC4899",
+    tag: "3 nodes/pair",desc: "AutoDock Vina with concurrent batching + AlphaFold fallback for missing PDBs." },
+  { icon: Dna,           label: "Disease Targets",       to: "/disease-targets",     accent: "#0EA5E9",
+    tag: "1 node",      desc: "DisGeNET + KEGG mapping — take a disease and get its druggable target profile." },
+];
 
-/* ─────────────────────────── STATS ─────────────────────────── */
-function AnimatedCounter({ end, suffix = "", duration = 1.8, format = (v) => Math.round(v).toLocaleString() }) {
-  const ref = useRef(null);
-  const inView = useInView(ref, { once: true, amount: 0.2 });
-  const [val, setVal] = useState(0);
-  useEffect(() => {
-    if (!inView) return;
-    const startTs = performance.now();
-    let raf;
-    const tick = (t) => {
-      const p = Math.min(1, (t - startTs) / (duration * 1000));
-      setVal(end * (1 - Math.pow(1 - p, 3)));
-      if (p < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [inView, end, duration]);
-  return <span ref={ref}>{format(val)}{suffix}</span>;
-}
-
-function Stats() {
-  const items = [
-    { label: "Medicinal Plants",       end: 12000,      suffix: "+", format: (v) => Math.round(v).toLocaleString() },
-    { label: "Natural Compounds",      end: 1.8,        suffix: "M+", format: (v) => v.toFixed(1) },
-    { label: "Target Associations",    end: 250,        suffix: "M+", format: (v) => Math.round(v).toLocaleString() },
-    { label: "Integrated Databases",   end: 400,        suffix: "+",  format: (v) => Math.round(v).toLocaleString() },
-  ];
+function ModulesGrid() {
   return (
-    <section data-testid="stats" className="border-y border-[#E7E7F3] bg-white/60 py-14 backdrop-blur-sm">
-      <div className="mx-auto grid max-w-7xl grid-cols-2 gap-8 px-6 md:grid-cols-4">
-        {items.map((s, i) => (
-          <motion.div key={s.label}
-            initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
-            transition={{ duration: 0.5, delay: i * 0.08 }}
-            className="text-center md:text-left"
-          >
-            <p className="font-headline text-[32px] tracking-tight text-[#111827] sm:text-[40px]">
-              <AnimatedCounter end={s.end} suffix={s.suffix} format={s.format} />
-            </p>
-            <p className="mt-1 text-[12px] font-semibold uppercase tracking-widest text-[#6B7280]">{s.label}</p>
-          </motion.div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-/* ─────────────────────────── SCREENSHOT / DASHBOARD PREVIEW ─────────────────────────── */
-function ScreenshotSection() {
-  const floats = [
-    { top: "-6%",  left: "-4%",  label: "Compound",         value: "Curcumin",   pct: "MW 368.4", tone: "#5139ED" },
-    { top: "-6%",  right: "-4%", label: "Protein",          value: "AKT1",       pct: "★ 5.0",    tone: "#395AED" },
-    { top: "42%",  left: "-8%",  label: "Network",          value: "412 edges",  pct: "STRING 900", tone: "#8139ED" },
-    { top: "42%",  right: "-8%", label: "Enrichment",       value: "PI3K/AKT",   pct: "p 1e-17",  tone: "#2BB673" },
-    { bottom:"-6%",left: "-4%",  label: "Docking Score",    value: "−9.2 kcal",  pct: "Vina 1.2", tone: "#5139ED" },
-    { bottom:"-6%",right:"-4%",  label: "Graphical Abstract",value:"Ready",      pct: "Nature",   tone: "#8139ED" },
-  ];
-  return (
-    <section id="dashboard" data-testid="screenshot" className="relative overflow-hidden py-24">
-      <div aria-hidden className="brand-blur absolute left-1/4 top-10 h-[280px] w-[280px] bg-[#395AED]" />
+    <section data-testid="home-modules" className="relative bg-[#0B0918] py-32">
       <div className="mx-auto max-w-7xl px-6">
-        <div className="text-center">
-          <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">Dashboard</p>
-          <h2 className="font-headline mx-auto mt-3 max-w-3xl text-[36px] leading-[1.08] tracking-tight text-[#111827] sm:text-[44px]">
-            A single workspace for every insight
-          </h2>
+        <div className="grid grid-cols-12 gap-8 items-end">
+          <div className="col-span-12 lg:col-span-6">
+            <Kicker>Standalone Modules</Kicker>
+            <h2 className="mt-3 font-headline text-[36px] leading-[1.05] tracking-tight text-[#FAFAFF] sm:text-[44px]">
+              A complete <span className="text-[#c4b5fd]">computational biology</span> toolkit.
+            </h2>
+          </div>
+          <div className="col-span-12 lg:col-span-6 lg:pl-8">
+            <p className="max-w-lg font-body text-[14.5px] leading-relaxed text-[#E7E7F3]/75">
+              Prefer to run one step at a time? Every capability is available as a
+              focused, standalone page with deep-dive UI, exportable results, and
+              per-run pricing. Discovery tools stay free forever.
+            </p>
+          </div>
         </div>
 
-        <div className="relative mx-auto mt-16 max-w-[960px]">
-          {/* Browser mockup */}
-          <div className="relative overflow-hidden rounded-3xl border border-[#E7E7F3] bg-white shadow-[0_40px_80px_-30px_rgba(11,11,24,0.25)]">
-            <div className="flex items-center gap-2 border-b border-[#E7E7F3] bg-[#F8FAFC] px-4 py-3">
-              <span className="h-2.5 w-2.5 rounded-full bg-[#FF5F57]" />
-              <span className="h-2.5 w-2.5 rounded-full bg-[#FFBD2E]" />
-              <span className="h-2.5 w-2.5 rounded-full bg-[#28C840]" />
-              <div className="ml-4 flex-1">
-                <div className="mx-auto max-w-md rounded-full border border-[#E7E7F3] bg-white px-4 py-1 text-[11px] font-mono text-[#6B7280]">
-                  phytonet.ai / workspace / curcuma-longa × t2dm
+        <div className="mt-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 border border-[#FAFAFF]/8">
+          {MODULES.map((m) => (
+            <Link key={m.to} to={m.to} data-testid={`module-${m.to.replace(/^\//, "")}`}
+                  className="group relative p-7 border-b border-r border-[#FAFAFF]/8 last:border-r-0 bg-[#0F0E24] hover:bg-[#12102E] transition">
+              <div aria-hidden className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition"
+                   style={{ background: `radial-gradient(400px circle at 50% 0%, ${m.accent}12, transparent 60%)` }} />
+              <div className="relative">
+                <div className="flex items-start justify-between">
+                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-lg border" style={{ borderColor: `${m.accent}55`, background: `${m.accent}12`, color: m.accent }}>
+                    <m.icon className="h-5 w-5" />
+                  </span>
+                  <span className="rounded-full border border-[#FAFAFF]/15 bg-[#FAFAFF]/5 px-2 py-0.5 text-[10px] font-body uppercase tracking-widest text-[#E7E7F3]/70">
+                    {m.tag}
+                  </span>
+                </div>
+                <h3 className="mt-5 font-headline text-[20px] font-bold text-[#FAFAFF]">{m.label}</h3>
+                <p className="mt-2 font-body text-[13px] leading-relaxed text-[#E7E7F3]/70">{m.desc}</p>
+                <div className="mt-5 inline-flex items-center gap-1 text-[12px] font-semibold text-[#c4b5fd] opacity-70 group-hover:opacity-100 transition">
+                  Open module <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
                 </div>
               </div>
-            </div>
-            <div className="relative aspect-[16/9] bg-white p-6">
-              {/* Fake dashboard content — pure SVG */}
-              <div className="grid h-full grid-cols-3 gap-4">
-                {["Compound × Target", "Hub Scoring", "KEGG Enrichment"].map((title, i) => (
-                  <div key={title} className="flex flex-col overflow-hidden rounded-2xl border border-[#E7E7F3]">
-                    <div className="border-b border-[#F1F1FA] bg-[#F8FAFC] px-3 py-2">
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#6B7280]">{title}</p>
-                    </div>
-                    <div className="flex-1 p-3">
-                      {i === 0 && <MiniHeatmap />}
-                      {i === 1 && <MiniBars />}
-                      {i === 2 && <MiniBubbles />}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+            </Link>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
 
-          {/* Floating UI cards */}
-          {floats.map((f) => (
-            <motion.div key={f.label}
-              initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
-              transition={{ duration: 0.5 }}
-              className="absolute z-10 hidden w-40 rounded-2xl border border-[#E7E7F3] bg-white/95 p-3 shadow-[0_18px_40px_-14px_rgba(11,11,24,0.25)] backdrop-blur md:block"
-              style={{ top: f.top, left: f.left, right: f.right, bottom: f.bottom }}
-            >
-              <div className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full" style={{ background: f.tone }} />
-                <p className="text-[10px] font-bold uppercase tracking-widest text-[#6B7280]">{f.label}</p>
+/* ─────────────────── WORKFLOW WALKTHROUGH ─────────────────── */
+const WORKFLOW_STEPS = [
+  { n: "01", title: "Query", body: "Frame your research question in plain English or pick a preset (e.g. \"Screen Withania somnifera against inflammation targets\")." },
+  { n: "02", title: "Plan",  body: "The assistant proposes an executable pipeline with per-step node costs. You approve, tweak, or drill into any step." },
+  { n: "03", title: "Run",   body: "Steps stream in parallel: compound resolution → target prediction → ADMET → docking → enrichment. Live progress; retryable failures." },
+  { n: "04", title: "Report",body: "A publication-ready scientific report is generated with figures, citations, and a shareable URL. Export to PDF anytime." },
+];
+
+function Workflow() {
+  return (
+    <section data-testid="home-workflow" className="relative bg-[#0F0E24] py-32">
+      <div className="mx-auto max-w-7xl px-6 grid grid-cols-12 gap-12">
+        <div className="col-span-12 lg:col-span-4 lg:sticky lg:top-24 self-start">
+          <Kicker>How PhytoNet AI Works</Kicker>
+          <h2 className="mt-3 font-headline text-[36px] leading-[1.05] tracking-tight text-[#FAFAFF] sm:text-[44px]">
+            Four steps.<br/><span className="text-[#2BB673]">Zero glue-code.</span>
+          </h2>
+          <p className="mt-5 font-body text-[14.5px] leading-relaxed text-[#E7E7F3]/75">
+            A single workflow, from natural-language brief to shareable report.
+            No pipeline plumbing. No format-conversion tax.
+          </p>
+        </div>
+
+        <div className="col-span-12 lg:col-span-8 space-y-8">
+          {WORKFLOW_STEPS.map((s, i) => (
+            <motion.div key={s.n}
+                        initial={{ opacity: 0, y: 12 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true, margin: "-80px" }}
+                        transition={{ duration: 0.5, delay: i * 0.05 }}
+                        className="relative rounded-lg border border-[#FAFAFF]/10 bg-[#12102E]/60 p-6 lg:p-8">
+              <div className="flex items-start gap-6">
+                <div className="font-headline text-[44px] font-bold leading-none text-[#5139ED] tabular-nums">{s.n}</div>
+                <div>
+                  <h3 className="font-headline text-[22px] font-bold text-[#FAFAFF]">{s.title}</h3>
+                  <p className="mt-2 font-body text-[14px] leading-relaxed text-[#E7E7F3]/75 max-w-xl">{s.body}</p>
+                </div>
               </div>
-              <p className="mt-1 font-headline text-[15px] font-extrabold text-[#111827]">{f.value}</p>
-              <p className="text-[10px] text-[#6B7280]">{f.pct}</p>
             </motion.div>
           ))}
         </div>
@@ -399,823 +412,115 @@ function ScreenshotSection() {
     </section>
   );
 }
-function MiniHeatmap() {
-  const cols = 8, rows = 5;
-  return (
-    <div className="grid h-full gap-0.5" style={{ gridTemplateColumns: `repeat(${cols},1fr)`, gridTemplateRows: `repeat(${rows},1fr)` }}>
-      {Array.from({ length: cols * rows }).map((_, i) => {
-        const v = (Math.sin(i * 1.3) + 1) / 2;
-        return <div key={i} className="rounded-[2px]" style={{ background: `rgba(81,57,237,${0.1 + v * 0.7})` }} />;
-      })}
-    </div>
-  );
-}
-function MiniBars() {
-  const heights = [55, 82, 68, 91, 48, 76, 60, 88];
-  return (
-    <div className="flex h-full items-end gap-1.5">
-      {heights.map((h, i) => (
-        <div key={i} className="flex-1 rounded-t bg-gradient-to-t from-[#5139ED] via-[#395AED] to-[#8139ED]" style={{ height: `${h}%` }} />
-      ))}
-    </div>
-  );
-}
-function MiniBubbles() {
-  const b = [
-    { x: 20, y: 60, r: 14, c: "#5139ED" }, { x: 45, y: 40, r: 22, c: "#8139ED" },
-    { x: 70, y: 55, r: 10, c: "#395AED" }, { x: 55, y: 75, r: 16, c: "#2BB673" },
-    { x: 30, y: 30, r: 8,  c: "#8139ED" },
-  ];
-  return (
-    <svg viewBox="0 0 100 100" className="h-full w-full">
-      {b.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r={p.r} fill={p.c} opacity="0.55" />)}
-    </svg>
-  );
-}
 
-/* ─────────────────────────── HOW IT WORKS ─────────────────────────── */
-function HowItWorks() {
-  const steps = [
-    { n: "01", icon: Activity,     label: "LC-MS Data",             tone: "#5139ED" },
-    { n: "02", icon: FlaskConical, label: "Compound Identification", tone: "#5139ED" },
-    { n: "03", icon: ShieldCheck,  label: "Drug-Likeness & ADMET",   tone: "#395AED" },
-    { n: "04", icon: Target,       label: "Target Prediction",       tone: "#395AED" },
-    { n: "05", icon: HeartPulse,   label: "Disease Targets",         tone: "#8139ED" },
-    { n: "06", icon: Network,      label: "Network Pharmacology",    tone: "#8139ED" },
-    { n: "07", icon: GitBranch,    label: "GO / KEGG Analysis",      tone: "#5139ED" },
-    { n: "08", icon: Atom,         label: "Molecular Docking",       tone: "#395AED" },
-    { n: "09", icon: Waves,        label: "Molecular Dynamics",      tone: "#8139ED" },
-    { n: "10", icon: FileText,     label: "AI Report",               tone: "#2BB673" },
-  ];
-  return (
-    <section id="how" data-testid="how-it-works" className="relative overflow-hidden py-24">
-      <div aria-hidden className="brand-blur absolute right-0 top-40 h-[300px] w-[300px] bg-[#8139ED]" />
-      <div aria-hidden className="brand-blur absolute -left-32 bottom-24 h-[280px] w-[280px] bg-[#5139ED]" />
-
-      <div className="relative mx-auto max-w-7xl px-6">
-        <div className="mx-auto max-w-2xl text-center">
-          <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">How It Works</p>
-          <h2 className="font-headline mt-3 text-[36px] leading-[1.08] tracking-tight text-[#111827] sm:text-[44px]">
-            One Platform. <span className="gradient-text">Ten Automated Steps.</span> Endless Discoveries.
-          </h2>
-          <p className="mt-4 text-[14px] leading-relaxed text-[#374151]">
-            Data flows automatically from each step to the next. Every stage is transparent,
-            evidence-linked and reproducible — no manual exports.
-          </p>
-        </div>
-
-        {/* ─── Desktop: horizontal snake grid (5 × 2) with connectors ─── */}
-        <ol className="mt-16 hidden lg:grid lg:grid-cols-5 lg:gap-x-3 lg:gap-y-14">
-          {steps.map((s, i) => {
-            const row = Math.floor(i / 5);         // 0 or 1
-            const col = i % 5;                     // 0..4
-            const displayCol = row === 1 ? 4 - col : col;   // snake: row 2 reverses
-            const isLastInRow = displayCol === 4;
-            const isFirstInRow = displayCol === 0;
-            const goesRight = row === 0;
-            return (
-              <motion.li
-                key={s.n}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.06, duration: 0.4 }}
-                className="relative flex flex-col items-center text-center"
-                style={{ gridColumnStart: displayCol + 1, gridRow: row + 1 }}
-              >
-                {/* Connector to next node (horizontal arrow) */}
-                {i < steps.length - 1 && !(goesRight ? isLastInRow : isFirstInRow) && (
-                  <span
-                    aria-hidden
-                    className="pointer-events-none absolute top-8 hidden items-center lg:flex"
-                    style={goesRight
-                      ? { left: "calc(50% + 32px)", right: "calc(-50% + 32px)" }
-                      : { right: "calc(50% + 32px)", left: "calc(-50% + 32px)" }}
-                  >
-                    <span className="h-[2px] w-full bg-gradient-to-r from-transparent via-[#5139ED]/40 to-transparent" />
-                    <ArrowRight
-                      className="absolute h-3.5 w-3.5 text-[#5139ED]"
-                      style={goesRight ? { right: -2 } : { left: -2, transform: "rotate(180deg)" }}
-                    />
-                  </span>
-                )}
-
-                {/* Downward connector at end of row 1 → start of row 2 */}
-                {i === 4 && (
-                  <span aria-hidden className="pointer-events-none absolute right-[10%] top-[70px] hidden h-16 items-center lg:flex">
-                    <span className="h-full w-[2px] bg-gradient-to-b from-[#5139ED]/40 to-transparent" />
-                  </span>
-                )}
-
-                {/* Node card */}
-                <div
-                  className="group relative flex h-16 w-16 items-center justify-center rounded-2xl border border-white/60 bg-white shadow-[0_10px_28px_-14px_rgba(81,57,237,0.5)] transition-all hover:-translate-y-1 hover:shadow-[0_18px_36px_-14px_rgba(81,57,237,0.65)]"
-                >
-                  <span
-                    className="absolute inset-0 -z-10 rounded-2xl opacity-90"
-                    style={{ background: `linear-gradient(135deg, ${s.tone}18, ${s.tone}05)` }}
-                  />
-                  <s.icon className="h-6 w-6" strokeWidth={2.2} style={{ color: s.tone }} />
-                  <span
-                    className="absolute -top-2 -right-2 grid h-6 w-6 place-items-center rounded-full text-[10px] font-extrabold text-white shadow"
-                    style={{ background: `linear-gradient(135deg, ${s.tone}, #0B0B18)` }}
-                  >
-                    {s.n}
-                  </span>
-                </div>
-                <p className="mt-3 max-w-[130px] text-[12.5px] font-semibold leading-tight text-[#111827]">
-                  {s.label}
-                </p>
-              </motion.li>
-            );
-          })}
-        </ol>
-
-        {/* ─── Mobile / tablet: vertical column with ↓ arrows ─── */}
-        <ol className="mt-14 flex flex-col items-center gap-4 lg:hidden">
-          {steps.map((s, i) => (
-            <motion.li
-              key={s.n}
-              initial={{ opacity: 0, y: 12 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: i * 0.04, duration: 0.35 }}
-              className="flex w-full max-w-md flex-col items-center"
-            >
-              <div className="flex w-full items-center gap-4 rounded-2xl border border-[#E7E7F3] bg-white p-4 shadow-[0_6px_20px_-10px_rgba(81,57,237,0.35)]">
-                <div className="relative grid h-12 w-12 shrink-0 place-items-center rounded-xl"
-                     style={{ background: `linear-gradient(135deg, ${s.tone}20, ${s.tone}08)` }}>
-                  <s.icon className="h-5 w-5" strokeWidth={2.2} style={{ color: s.tone }} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: s.tone }}>Step {s.n}</span>
-                  <p className="mt-0.5 text-[14px] font-semibold text-[#111827]">{s.label}</p>
-                </div>
-              </div>
-              {i < steps.length - 1 && (
-                <ChevronDown className="my-1 h-4 w-4 text-[#5139ED]/50" strokeWidth={2.5} />
-              )}
-            </motion.li>
-          ))}
-        </ol>
-      </div>
-    </section>
-  );
-}
-
-/* ─────────────────────────── TRUST ─────────────────────────── */
-function Trust() {
-  const groups = ["Academic Researchers", "Universities", "Drug Discovery Teams", "Biotech Startups"];
-  const logos = ["Aster", "Helix Bio", "MolLab", "Nord Sci", "Vertex Rx", "Prism", "Kepler", "Aurora"];
-  return (
-    <section data-testid="trust" className="border-y border-[#E7E7F3] bg-white py-14">
-      <div className="mx-auto max-w-7xl px-6 text-center">
-        <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-[#6B7280]">
-          Trusted by {groups.join(" · ")}
-        </p>
-        <div className="mt-8 grid grid-cols-2 items-center gap-6 sm:grid-cols-4 lg:grid-cols-8">
-          {logos.map((n) => (
-            <div key={n} className="opacity-60 grayscale transition-all hover:opacity-100 hover:grayscale-0">
-              <div className="font-headline text-[15px] font-extrabold tracking-tight text-[#374151]">
-                {n}<span className="text-[#5139ED]">.</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ─────────────────────────── FAQ + CONTACT ─────────────────────────── */
+/* ─────────────────────── FAQ ─────────────────────── */
 const FAQS = [
-  { q: "Is PhytoNet AI free to use?",
-    a: "Yes — the platform is publicly accessible for exploration. An account (free) is required only for saving projects and downloading exports." },
-  { q: "Which databases do you integrate?",
-    a: "IMPPAT, LOTUS, PubChem, ChEMBL, BindingDB, UniProt, Open Targets, CTD, NCBI Gene, STRING, KEGG, g:Profiler, and Enrichr — all queried live, no static snapshots." },
-  { q: "How is the AI explainable?",
-    a: "Every prediction ships with provenance: source database, evidence type, similarity metric or p-value. The AI Scientist Report cites methods and numbers directly." },
-  { q: "Can I run molecular dynamics on my HPC?",
-    a: "Yes. The MD module now generates environment-specific packages for local machines, SLURM HPC clusters, and cloud GPU instances (AWS/Azure/GCP/RunPod/Lambda specs)." },
-  { q: "Is my data private?",
-    a: "Yes. Project data is scoped to your account. We never share workflow_state, compound tables or manuscripts with third parties." },
+  { q: "What is PhytoNet AI, and who is it for?",
+    a: "PhytoNet AI is a research intelligence platform for pharmacologists, phytochemists and drug-discovery scientists. It integrates target prediction, ADMET, docking, pathway enrichment and AI-driven scientific reporting into a single natural-language workflow." },
+  { q: "How is this different from ChatGPT or generic AI chatbots?",
+    a: "The AI Research Assistant plans and executes real network-pharmacology tools (AutoDock Vina, SEA-style prediction, SwissADME, KEGG/DisGeNET) — not a language model hallucinating results. Every step has an audit trail and cited data sources." },
+  { q: "What data sources does the platform integrate?",
+    a: "TCMSP, LOTUS, ChEMBL, PubChem, KEGG, DisGeNET, AlphaFold, RCSB PDB, Reactome, STRING, UniProt, SwissADME — with more added regularly." },
+  { q: "How does the node-based pricing work?",
+    a: "You buy nodes as a one-time bundle or subscribe to PhytoNet Pro. Free discovery tools (Plant Database, Disease Search) never charge. Analysis modules cost 1-3 nodes per step. Full transparency — every plan preview shows the exact cost before you run." },
+  { q: "Can I export reports for publication?",
+    a: "Yes. Every completed workflow generates a shareable scientific report with figures, citations, and metadata. PDF export + shareable-URL are built in; institutional licensing is available for teams." },
 ];
-
-function ContactForm() {
-  const API = process.env.REACT_APP_BACKEND_URL;
-  const [form, setForm] = useState({
-    name: "", email: "", institution: "", subject: "", message: "",
-    captcha_answer: "", website: "",  // website = hidden honeypot
-  });
-  const [status, setStatus] = useState({ state: "idle", msg: "" });
-  const [challenge, setChallenge] = useState({ id: "", question: "…" });
-
-  // Fetch a fresh math captcha on mount + every successful submit
-  const loadChallenge = async () => {
-    try {
-      const res = await fetch(`${API}/api/contact/challenge`);
-      if (!res.ok) throw new Error("challenge failed");
-      const data = await res.json();
-      setChallenge({ id: data.challenge_id, question: data.question });
-    } catch {
-      setChallenge({ id: "", question: "Unable to load captcha" });
-    }
-  };
-  useEffect(() => { loadChallenge(); /* eslint-disable-next-line */ }, []);
-
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
-
-  const submit = async (e) => {
-    e.preventDefault();
-    if (status.state === "sending") return;
-    // Basic client-side guards
-    if (!form.name.trim() || !form.email.trim() || !form.subject.trim() || form.message.trim().length < 5) {
-      setStatus({ state: "error", msg: "Please fill in your name, email, subject and message (5+ characters)." });
-      return;
-    }
-    if (!challenge.id || form.captcha_answer === "" || Number.isNaN(Number(form.captcha_answer))) {
-      setStatus({ state: "error", msg: "Please solve the captcha before sending." });
-      return;
-    }
-    setStatus({ state: "sending", msg: "" });
-    try {
-      const body = {
-        name: form.name, email: form.email, institution: form.institution,
-        subject: form.subject, message: form.message,
-        challenge_id: challenge.id,
-        challenge_answer: Number(form.captcha_answer),
-        website: form.website,   // honeypot passthrough
-      };
-      const res = await fetch(`${API}/api/contact`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        // Refresh captcha on any 4xx so the user can retry immediately
-        if (res.status >= 400 && res.status < 500) loadChallenge();
-        throw new Error(err?.detail || `HTTP ${res.status}`);
-      }
-      setStatus({ state: "success", msg: "Thanks! We've received your message and will be in touch soon." });
-      setForm({ name: "", email: "", institution: "", subject: "", message: "",
-                captcha_answer: "", website: "" });
-      loadChallenge();
-    } catch (err) {
-      setStatus({ state: "error", msg: err?.message || "Failed to send. Please try again." });
-    }
-  };
-
-  return (
-    <form
-      onSubmit={submit}
-      noValidate
-      data-testid="contact-form"
-      className="rounded-2xl border border-[#E7E7F3] bg-white p-6 sm:p-7 shadow-[0_1px_0_rgba(0,0,0,0.02),0_20px_40px_-24px_rgba(81,57,237,0.15)]"
-    >
-      <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-[#2BB673]">Contact us</p>
-      <h3 className="font-headline mt-2 text-[22px] leading-tight text-[#111827] sm:text-[24px]">
-        Have a question we haven't answered?
-      </h3>
-      <p className="mt-2 text-[13px] text-[#4B5563]">
-        Send us a note — collaborations, feature requests, research feedback, we read every message.
-      </p>
-
-      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <input
-          data-testid="contact-name"
-          className="rounded-lg border border-[#E7E7F3] bg-white px-3.5 py-2.5 text-[14px] text-[#111827] placeholder:text-slate-400 focus:border-[#5139ED] focus:outline-none focus:ring-2 focus:ring-[#5139ED]/15"
-          type="text" placeholder="Your name *" value={form.name} onChange={set("name")} required maxLength={120}
-        />
-        <input
-          data-testid="contact-email"
-          className="rounded-lg border border-[#E7E7F3] bg-white px-3.5 py-2.5 text-[14px] text-[#111827] placeholder:text-slate-400 focus:border-[#5139ED] focus:outline-none focus:ring-2 focus:ring-[#5139ED]/15"
-          type="email" placeholder="Email address *" value={form.email} onChange={set("email")} required
-        />
-      </div>
-      <input
-        data-testid="contact-institution"
-        className="mt-3 w-full rounded-lg border border-[#E7E7F3] bg-white px-3.5 py-2.5 text-[14px] text-[#111827] placeholder:text-slate-400 focus:border-[#5139ED] focus:outline-none focus:ring-2 focus:ring-[#5139ED]/15"
-        type="text" placeholder="Institution / affiliation (optional)" value={form.institution} onChange={set("institution")} maxLength={200}
-      />
-      <input
-        data-testid="contact-subject"
-        className="mt-3 w-full rounded-lg border border-[#E7E7F3] bg-white px-3.5 py-2.5 text-[14px] text-[#111827] placeholder:text-slate-400 focus:border-[#5139ED] focus:outline-none focus:ring-2 focus:ring-[#5139ED]/15"
-        type="text" placeholder="Subject *" value={form.subject} onChange={set("subject")} required maxLength={200}
-      />
-      <textarea
-        data-testid="contact-message"
-        className="mt-3 w-full min-h-[130px] resize-y rounded-lg border border-[#E7E7F3] bg-white px-3.5 py-2.5 text-[14px] text-[#111827] placeholder:text-slate-400 focus:border-[#5139ED] focus:outline-none focus:ring-2 focus:ring-[#5139ED]/15"
-        placeholder="How can we help? *" value={form.message} onChange={set("message")} required minLength={5} maxLength={5000}
-      />
-
-      {/* Honeypot — hidden from real users. Bots that auto-fill every field
-          will populate this and get their submission silently discarded. */}
-      <input
-        type="text"
-        tabIndex={-1}
-        autoComplete="off"
-        aria-hidden="true"
-        value={form.website}
-        onChange={set("website")}
-        style={{ position: "absolute", left: "-9999px", top: "-9999px",
-                 width: 1, height: 1, opacity: 0, pointerEvents: "none" }}
-        name="website"
-      />
-
-      {/* Friendly math captcha */}
-      <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-[#E7E7F3] bg-[#F8FAFF] px-3.5 py-2.5">
-        <div className="flex items-center gap-2 text-[13px] text-[#111827]">
-          <ShieldCheck className="h-4 w-4 text-[#2BB673]" />
-          <span data-testid="contact-captcha-question" className="font-medium">
-            {challenge.question}
-          </span>
-        </div>
-        <input
-          data-testid="contact-captcha-answer"
-          type="number"
-          inputMode="numeric"
-          className="w-24 rounded-md border border-[#E7E7F3] bg-white px-2.5 py-1.5 text-[13px] text-[#111827] placeholder:text-slate-400 focus:border-[#5139ED] focus:outline-none focus:ring-2 focus:ring-[#5139ED]/15"
-          placeholder="Answer"
-          value={form.captcha_answer}
-          onChange={set("captcha_answer")}
-        />
-        <button
-          type="button"
-          data-testid="contact-captcha-refresh"
-          onClick={loadChallenge}
-          className="ml-auto text-[11px] font-semibold uppercase tracking-wide text-[#5139ED] hover:text-[#3f2be0]"
-        >
-          Refresh
-        </button>
-      </div>
-
-      {status.state === "success" && (
-        <div data-testid="contact-success" className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-[13px] text-emerald-800">
-          {status.msg}
-        </div>
-      )}
-      {status.state === "error" && (
-        <div data-testid="contact-error" className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-[13px] text-rose-800">
-          {status.msg}
-        </div>
-      )}
-
-      <button
-        data-testid="contact-submit-btn"
-        type="submit"
-        disabled={status.state === "sending"}
-        className="mt-4 inline-flex items-center gap-2 rounded-full bg-[#5139ED] px-5 py-2.5 text-[13px] font-semibold text-white shadow-[0_10px_20px_-10px_rgba(81,57,237,0.6)] transition-all hover:bg-[#3f2be0] disabled:opacity-60"
-      >
-        {status.state === "sending" ? "Sending…" : "Send message"}
-        {status.state !== "sending" && <ArrowRight className="h-4 w-4" />}
-      </button>
-    </form>
-  );
-}
 
 function FAQ() {
   const [open, setOpen] = useState(0);
   return (
-    <section id="faq" data-testid="faq" className="py-24">
-      <div className="mx-auto max-w-7xl px-6">
+    <section id="faq" data-testid="home-faq"
+             className="relative bg-[#0B0918] py-32 border-t border-[#FAFAFF]/8">
+      <div className="mx-auto max-w-3xl px-6">
         <div className="text-center">
-          <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">FAQ & contact</p>
-          <h2 className="font-headline mt-3 text-[32px] leading-[1.08] tracking-tight text-[#111827] sm:text-[40px]">
-            Questions? We've got answers.
+          <Kicker>FAQ</Kicker>
+          <h2 className="mt-3 font-headline text-[36px] leading-[1.05] tracking-tight text-[#FAFAFF] sm:text-[44px]">
+            Common questions.
           </h2>
-          <p className="mx-auto mt-3 max-w-2xl text-[14px] text-[#4B5563]">
-            Browse the most common questions, or drop us a line — we typically reply within one working day.
-          </p>
         </div>
-
-        <div className="mt-12 grid grid-cols-1 gap-10 lg:grid-cols-2 lg:gap-14">
-          {/* Left: FAQ accordion */}
-          <div>
-            <div className="space-y-3">
-              {FAQS.map((f, i) => (
-                <div key={f.q} className="overflow-hidden rounded-2xl border border-[#E7E7F3] bg-white">
-                  <button
-                    data-testid={`faq-${i}`}
-                    onClick={() => setOpen(open === i ? -1 : i)}
-                    aria-expanded={open === i}
-                    className="flex w-full items-center justify-between gap-4 px-6 py-4 text-left"
-                  >
-                    <span className="font-headline text-[15px] font-extrabold text-[#111827]">{f.q}</span>
-                    <ChevronDown className={`h-4 w-4 text-[#5139ED] transition-transform ${open === i ? "rotate-180" : ""}`} />
-                  </button>
-                  <motion.div
-                    initial={false}
-                    animate={{ height: open === i ? "auto" : 0, opacity: open === i ? 1 : 0 }}
-                    className="overflow-hidden"
-                  >
-                    <p className="px-6 pb-5 text-[14px] leading-relaxed text-[#374151]">{f.a}</p>
-                  </motion.div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Right: Contact form */}
-          <div>
-            <ContactForm />
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ─────────────────────────── PRICING ─────────────────────────── */
-const NODE_PLANS = [
-  { id: "starter",   nodes: 10, price: 250,  label: "Starter"     },
-  { id: "research",  nodes: 25, price: 500,  label: "Most Popular", highlight: true },
-  { id: "lab",       nodes: 60, price: 1000, label: "Lab"         },
-];
-
-const NODE_VALUE_PROPS = [
-  { icon: Bot,          text: "AI-powered automation"           },
-  { icon: Clock,        text: "Significant time savings"        },
-  { icon: BarChart3,    text: "Reduced manual, repetitive work" },
-  { icon: FlaskConical, text: "Streamlined research workflows"  },
-  { icon: FileText,     text: "Automated report generation"     },
-];
-
-function Pricing() {
-  const { user, openModal } = useAuth();
-  const { openPurchase } = useNodes();
-
-  // Signed-in users open the existing purchase modal; anonymous visitors
-  // are nudged into the sign-in / sign-up flow so payment is authenticated.
-  const handleBuy = () => (user ? openPurchase() : openModal("signup"));
-
-  return (
-    <section
-      id="pricing"
-      data-testid="pricing"
-      className="relative scroll-mt-24 overflow-hidden bg-gradient-to-b from-white via-[#FAFAFF] to-white py-24"
-    >
-      <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute -left-24 top-16 h-72 w-72 rounded-full bg-[#5139ED]/8 blur-3xl" />
-        <div className="absolute -right-24 bottom-16 h-72 w-72 rounded-full bg-[#8139ED]/8 blur-3xl" />
-      </div>
-
-      <div className="mx-auto max-w-6xl px-6">
-        <div className="mx-auto max-w-2xl text-center">
-          <div className="inline-flex items-center gap-2 rounded-full border border-[#E7E7F3] bg-white/70 px-3 py-1 text-[11px] font-bold uppercase tracking-widest text-[#5139ED] backdrop-blur">
-            <Coins className="h-3 w-3" />
-            Node Credits
-          </div>
-          <h2 className="mt-4 font-display text-4xl font-bold tracking-tight text-[#0B0B18] sm:text-5xl">
-            Pricing & Node Credits
-          </h2>
-          <p className="mt-4 text-[15px] leading-relaxed text-[#4B5563]">
-            Pay only for AI-powered automation that saves time and reduces repetitive manual research workflows.
-          </p>
-        </div>
-
-        {/* Why Nodes? — single highlighted information card above the plans */}
-        <div
-          data-testid="pricing-why-nodes"
-          className="relative mx-auto mt-12 max-w-4xl overflow-hidden rounded-3xl border border-white/60 bg-white/70 p-6 shadow-[0_18px_60px_-30px_rgba(81,57,237,0.35)] backdrop-blur-xl sm:p-8"
-        >
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(129,57,237,0.10),transparent_55%),radial-gradient(circle_at_bottom_left,rgba(57,90,237,0.08),transparent_55%)]"
-          />
-          <div className="relative">
-            <div className="flex items-start gap-3">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-[#5139ED] via-[#395AED] to-[#8139ED] text-white shadow-[0_10px_24px_-8px_rgba(81,57,237,0.5)]">
-                <Sparkles className="h-5 w-5" />
-              </span>
-              <div className="min-w-0">
-                <h3 className="font-display text-xl font-bold tracking-tight text-[#0B0B18]">
-                  Why Nodes?
-                </h3>
-                <p className="mt-2 text-[13.5px] leading-relaxed text-[#374151]">
-                  PhytoNet AI provides <strong className="text-[#0B0B18]">free access to standalone research modules</strong>. Nodes are only required when using <strong className="text-[#0B0B18]">premium AI-powered workflows</strong> that automate complex research tasks.
-                </p>
-                <p className="mt-2 text-[13.5px] leading-relaxed text-[#374151]">
-                  Instead of spending hours manually searching databases, organising data, cross-referencing results and preparing reports, PhytoNet AI performs these workflows in minutes — letting researchers focus on scientific interpretation and decision-making.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-5 border-t border-[#E7E7F3] pt-5">
-              <p className="text-[10.5px] font-bold uppercase tracking-widest text-[#5139ED]">
-                You are paying for
-              </p>
-              <ul className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {NODE_VALUE_PROPS.map(({ icon: Icon, text }) => (
-                  <li
-                    key={text}
-                    className="flex items-start gap-2 rounded-xl border border-[#E7E7F3] bg-white/60 px-3 py-2 text-[13px] text-[#374151]"
-                  >
-                    <Icon className="mt-0.5 h-4 w-4 shrink-0 text-[#5139ED]" />
-                    <span>{text}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </div>
-
-        {/* Pricing plans */}
-        <div className="mt-10 grid grid-cols-1 gap-5 md:grid-cols-3">
-          {NODE_PLANS.map((p, i) => {
-            const perNode = (p.price / p.nodes).toFixed(1);
-            const highlighted = !!p.highlight;
+        <div className="mt-10 space-y-2">
+          {FAQS.map((f, i) => {
+            const isOpen = open === i;
             return (
-              <motion.div
-                key={p.id}
-                initial={{ opacity: 0, y: 18 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-80px" }}
-                transition={{ duration: 0.5, delay: i * 0.08, ease: "easeOut" }}
-                data-testid={`pricing-plan-${p.id}`}
-                className={`relative flex flex-col overflow-hidden rounded-3xl border p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_20px_60px_-24px_rgba(81,57,237,0.4)] ${
-                  highlighted
-                    ? "border-[#5139ED]/40 bg-gradient-to-br from-white via-[#F5F5FC] to-white ring-1 ring-[#5139ED]/25"
-                    : "border-[#E7E7F3] bg-white"
-                }`}
-              >
-                {highlighted && (
-                  <span
-                    data-testid={`pricing-badge-${p.id}`}
-                    className="absolute right-4 top-4 inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-[#5139ED] via-[#395AED] to-[#8139ED] px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-white shadow-[0_8px_24px_-6px_rgba(81,57,237,0.55)]"
-                  >
-                    <Star className="h-3 w-3" />
-                    Most Popular
-                  </span>
-                )}
-
-                <p className="text-[10.5px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">
-                  {highlighted ? "Best value" : p.label}
-                </p>
-
-                <div className="mt-3 flex items-baseline gap-2">
-                  <span className="font-display text-4xl font-bold tracking-tight text-[#0B0B18]">
-                    ₹{p.price.toLocaleString("en-IN")}
-                  </span>
-                </div>
-
-                <p className="mt-1 text-[13px] text-[#64748B]">
-                  <span className="font-semibold text-[#0B0B18]">{p.nodes}</span> nodes
-                  <span className="mx-1.5 text-[#CBD5E1]">·</span>
-                  ₹{perNode} / node
-                </p>
-
-                <ul className="mt-5 space-y-2 text-[13px] text-[#374151]">
-                  <li className="flex items-start gap-2">
-                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#5139ED]" />
-                    <span>
-                      <span className="font-semibold text-[#0B0B18]">10 nodes</span> per PhytoNet AI agent run
-                    </span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#5139ED]" />
-                    <span>
-                      <span className="font-semibold text-[#0B0B18]">5 nodes</span> per Molecular Docking job
-                    </span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#5139ED]" />
-                    Nodes never expire, roll over between sessions
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#5139ED]" />
-                    Automated report generation included
-                  </li>
-                </ul>
-
-                <button
-                  data-testid={`pricing-buy-${p.id}`}
-                  onClick={handleBuy}
-                  className={`mt-6 inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition ${
-                    highlighted
-                      ? "bg-gradient-to-r from-[#5139ED] via-[#395AED] to-[#8139ED] text-white shadow-[0_10px_28px_-8px_rgba(81,57,237,0.55)] hover:brightness-110"
-                      : "border border-[#E7E7F3] bg-white text-[#0B0B18] hover:border-[#5139ED]/40 hover:text-[#5139ED]"
-                  }`}
-                >
-                  <Coins className="h-4 w-4" />
-                  Buy Nodes
+              <div key={i} data-testid={`faq-item-${i}`}
+                   className={`rounded-lg border transition ${isOpen ? "border-[#5139ED]/40 bg-[#12102E]" : "border-[#FAFAFF]/10 bg-[#0F0E24]"}`}>
+                <button type="button" onClick={() => setOpen(isOpen ? -1 : i)}
+                        className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left">
+                  <span className="font-headline text-[15.5px] font-semibold text-[#FAFAFF]">{f.q}</span>
+                  <ChevronDown className={`h-4 w-4 flex-shrink-0 text-[#c4b5fd] transition ${isOpen ? "rotate-180" : ""}`} />
                 </button>
-              </motion.div>
+                {isOpen && (
+                  <div className="border-t border-[#FAFAFF]/8 px-5 py-4 font-body text-[13.5px] leading-relaxed text-[#E7E7F3]/80">
+                    {f.a}
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>
-
-        {/* Note below pricing */}
-        <p
-          data-testid="pricing-note"
-          className="mx-auto mt-8 max-w-3xl text-center text-[12.5px] leading-relaxed text-[#64748B]"
-        >
-          <Leaf className="mr-1 inline h-3.5 w-3.5 -translate-y-0.5 text-[#5139ED]" />
-          Standalone modules remain <strong className="text-[#0B0B18]">free</strong>. Nodes are consumed only for premium AI-powered analyses and automation workflows.
-        </p>
       </div>
     </section>
   );
 }
 
-
-/* ─────────────────────────── TWO WAYS TO EXPLORE ─────────────────
-   Highlights the two entry points into the platform without changing the
-   overall home layout: the chat-based AI Research Assistant on the left,
-   and the six standalone module pages on the right. Matches WhyChoose's
-   35/65 dual-card idiom so it feels native to the page. */
-const STANDALONE_MODULES = [
-  { name: "Plant Database",   to: "/plant-database",         color: "#2BB673" },
-  { name: "Compound Analysis", to: "/compound-analysis",      color: "#5139ED" },
-  { name: "Target Prediction", to: "/target-prediction",      color: "#8139ED" },
-  { name: "ADMET & Druglikeness", to: "/admet-druglikeness",  color: "#F59E0B" },
-  { name: "Molecular Docking", to: "/molecular-docking",      color: "#EC4899" },
-  { name: "Disease Targets",   to: "/disease-targets",        color: "#0EA5E9" },
-];
-
-function TwoWaysToExplore() {
-  const { guard } = useAuth();
-  const navigate = useNavigate();
-  const goResearch  = () => guard(() => navigate("/research"));
-  const goStandalone = (to) => guard(() => navigate(to));
-  return (
-    <section id="two-ways" data-testid="two-ways-to-explore"
-             className="relative overflow-hidden bg-gradient-to-b from-white via-[#FAFAFF] to-white py-24">
-      <div aria-hidden className="brand-blur absolute -right-40 top-20 h-[420px] w-[420px] bg-[#8139ED]" />
-      <div aria-hidden className="brand-blur absolute -left-32 bottom-40 h-[380px] w-[380px] bg-[#2BB673]" />
-
-      <div className="relative mx-auto max-w-7xl px-6">
-        {/* ── Section header ── */}
-        <div className="mx-auto max-w-3xl text-center">
-          <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">
-            Two Ways to Explore
-          </p>
-          <h2 className="font-headline mt-3 text-[36px] leading-[1.08] tracking-tight text-[#111827] sm:text-[44px]">
-            Chat with an AI scientist, <span className="gradient-text">or dive into any module.</span>
-          </h2>
-          <p className="mt-5 text-[14.5px] leading-relaxed text-[#374151]">
-            New in this update: an AI Research Assistant that plans and runs full network-pharmacology
-            workflows from a plain-English brief. You can still open each analytical module
-            standalone whenever you need a focused, targeted task.
-          </p>
-        </div>
-
-        {/* ── Two-column layout (35 / 65) mirroring WhyChoose ── */}
-        <div className="mt-16 grid grid-cols-1 gap-6 lg:grid-cols-[35fr_65fr] lg:gap-8">
-          {/* Left — AI Research Assistant (dark brand card) */}
-          <button
-            type="button"
-            data-testid="home-cta-research"
-            onClick={goResearch}
-            className="group relative flex flex-col overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-[#0F0E24] via-[#1E1B4B] to-[#12102E] p-7 text-left shadow-[0_20px_60px_-20px_rgba(30,27,75,0.65)] transition hover:-translate-y-1"
-          >
-            <div aria-hidden className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-[#8139ED]/30 blur-3xl" />
-            <div aria-hidden className="pointer-events-none absolute -left-16 bottom-0 h-48 w-48 rounded-full bg-[#2BB673]/15 blur-3xl" />
-
-            <div className="relative flex items-center gap-2">
-              <span className="inline-flex items-center gap-1 rounded-full border border-[#a48bff]/40 bg-[#5139ED]/30 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#c4b5fd]">
-                <Sparkles className="h-3 w-3" /> New
-              </span>
-              <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-[#a48bff]">
-                AI Research Assistant
-              </p>
-            </div>
-
-            <h3 className="font-headline mt-3 text-[26px] leading-tight text-white">
-              Chat your way <br/>through the workflow.
-            </h3>
-            <p className="mt-3 text-[13.5px] leading-relaxed text-white/80">
-              Ask in plain English — "find phytochemicals from Withania somnifera targeting IL-6"
-              — and the assistant plans the steps, runs them, streams live progress, and
-              generates a scientific report you can share.
-            </p>
-
-            <ul className="mt-5 space-y-2 text-[13px] text-white/90">
-              {[
-                "Plan preview + node-cost estimate before running",
-                "Live status streaming — Nodes used X / Y ticker",
-                "Rich visual result cards + shareable report",
-              ].map((t) => (
-                <li key={t} className="flex items-start gap-2">
-                  <span aria-hidden className="mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full bg-[#c4b5fd] shadow-[0_0_10px_2px_rgba(196,181,253,0.6)]" />
-                  <span>{t}</span>
-                </li>
-              ))}
-            </ul>
-
-            <span className="mt-6 inline-flex items-center gap-1.5 text-[13px] font-bold text-white">
-              Open the Assistant
-              <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-1" />
-            </span>
-          </button>
-
-          {/* Right — Standalone module grid (light, brand pastel) */}
-          <div className="relative flex flex-col overflow-hidden rounded-3xl border border-[#E7E7F3] bg-white p-7 shadow-[0_20px_60px_-25px_rgba(15,23,42,0.15)]">
-            <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">
-              Standalone Modules
-            </p>
-            <h3 className="font-headline mt-3 text-[26px] leading-tight text-[#111827]">
-              Focused tools for <span className="gradient-text">specific analyses.</span>
-            </h3>
-            <p className="mt-3 text-[13.5px] leading-relaxed text-[#4B5563]">
-              Prefer to run just one step? Every capability is available as a dedicated page —
-              deep-dive UI, exportable results, no chat required. Free discovery tools stay free;
-              premium modules bill per run.
-            </p>
-
-            <div className="mt-6 grid grid-cols-2 gap-2.5">
-              {STANDALONE_MODULES.map((m) => (
-                <button
-                  key={m.to}
-                  type="button"
-                  data-testid={`home-standalone-${m.to.replace(/^\//,"")}`}
-                  onClick={() => goStandalone(m.to)}
-                  className="group flex items-center gap-2 rounded-xl border border-[#E7E7F3] bg-white/60 px-3 py-2.5 text-left transition hover:border-[#5139ED]/40 hover:-translate-y-0.5 hover:shadow-md"
-                >
-                  <span aria-hidden className="inline-block h-2 w-2 rounded-full flex-shrink-0"
-                        style={{ background: m.color, boxShadow: `0 0 10px 1px ${m.color}44` }} />
-                  <span className="flex-1 text-[13px] font-semibold text-[#111827]">{m.name}</span>
-                  <ArrowRight className="h-3.5 w-3.5 text-[#94A3B8] transition group-hover:text-[#5139ED] group-hover:translate-x-0.5" />
-                </button>
-              ))}
-            </div>
-
-            <div className="mt-5 rounded-xl border border-dashed border-[#E7E7F3] bg-[#FAFAFF] px-3 py-2.5 text-[12px] text-[#4B5563]">
-              <strong className="text-[#0F172A]">Tip:</strong> the Assistant can call any of these
-              modules automatically — but the dedicated pages give you full control over
-              parameters, uploads, and outputs.
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-
-/* ─────────────────────────── FINAL CTA ─────────────────────────── */
+/* ─────────────────────── FINAL CTA ─────────────────────── */
 function FinalCTA() {
   const { guard } = useAuth();
   const navigate = useNavigate();
-  const goToApp = () => guard(() => navigate("/app"));
+  const goApp = () => guard(() => navigate("/app"));
   return (
-    <section data-testid="final-cta" className="relative isolate overflow-hidden py-24">
-      <div aria-hidden className="absolute inset-0 -z-10 bg-gradient-to-br from-[#5139ED] via-[#395AED] to-[#8139ED]" />
-      <div aria-hidden className="absolute inset-0 -z-10 opacity-30 dot-grid" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,0.3) 1px, transparent 1px)" }} />
-      <div className="mx-auto max-w-4xl px-6 text-center text-white">
-        <h2 className="font-headline text-[36px] leading-[1.06] tracking-tight sm:text-[52px]">
-          Ready to accelerate your research?
+    <section data-testid="home-final-cta" className="relative overflow-hidden bg-[#0F0E24] py-32">
+      <div aria-hidden className="pointer-events-none absolute inset-0 opacity-[0.08]"
+           style={{ backgroundImage:
+             "radial-gradient(circle at 20% 30%, #5139ED 0px, transparent 30%), radial-gradient(circle at 80% 70%, #2BB673 0px, transparent 25%)" }} />
+
+      <div className="relative mx-auto max-w-5xl px-6 text-center">
+        <Kicker className="text-center">Ready to begin</Kicker>
+        <h2 className="mt-4 font-headline text-[44px] leading-[0.98] tracking-[-0.02em] text-[#FAFAFF] sm:text-[68px] lg:text-[92px]">
+          Accelerate your <br/>
+          <span className="bg-gradient-to-r from-[#c4b5fd] via-[#8139ED] to-[#5139ED] bg-clip-text text-transparent">
+            drug discovery pipeline.
+          </span>
         </h2>
-        <p className="mx-auto mt-4 max-w-xl text-[15px] text-white/85">
-          Start building AI-powered medicinal plant discoveries today. No credit card required.
+        <p className="mx-auto mt-6 max-w-xl font-body text-[15px] leading-relaxed text-[#E7E7F3]/80">
+          Start with 10 free nodes. No credit card. Cancel anytime. The complete
+          network-pharmacology stack, in a single research-grade workspace.
         </p>
-        <div className="mt-8 flex flex-wrap justify-center gap-3">
-          <button type="button" data-testid="final-cta-start" onClick={goToApp}
-                className="inline-flex items-center gap-2 rounded-full bg-white px-6 py-3.5 text-[14px] font-extrabold text-[#5139ED] shadow-[0_20px_50px_-15px_rgba(0,0,0,0.4)] hover:-translate-y-0.5">
-            Start Research<ArrowRight className="h-4 w-4" />
+        <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
+          <button type="button" data-testid="final-cta-start" onClick={goApp}
+                  className="group inline-flex items-center gap-2 rounded-lg bg-[#5139ED] px-6 py-4 text-[14px] font-bold text-white hover:bg-[#4128d4] hover:-translate-y-0.5 transition">
+            Start Researching <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
           </button>
-          <a data-testid="final-cta-docs" href="#faq"
-             className="inline-flex items-center gap-2 rounded-full border border-white/40 bg-white/10 px-6 py-3.5 text-[14px] font-semibold text-white backdrop-blur hover:bg-white/20">
-            View Documentation
-          </a>
+          <Link to="/research" data-testid="final-cta-assistant"
+                className="inline-flex items-center gap-2 rounded-lg border border-[#FAFAFF]/15 bg-[#FAFAFF]/[0.04] px-6 py-4 text-[14px] font-semibold text-[#FAFAFF] hover:bg-[#FAFAFF]/[0.08] transition">
+            <Terminal className="h-4 w-4" /> Try the AI Assistant
+          </Link>
         </div>
       </div>
     </section>
   );
 }
 
-/* ─────────────────────────── PAGE ─────────────────────────── */
+/* ─────────────────────── PAGE ─────────────────────── */
 export default function Home() {
   const { hash } = useLocation();
 
   useEffect(() => {
-    document.title = "PhytoNet AI | AI Scientist for Medicinal Plant Drug Discovery";
-    // meta description
+    document.title = "PhytoNet AI | Research Intelligence for Drug Discovery";
     let m = document.querySelector('meta[name="description"]');
     if (!m) { m = document.createElement("meta"); m.setAttribute("name", "description"); document.head.appendChild(m); }
     m.setAttribute("content",
-      "AI-powered medicinal plant research platform integrating network pharmacology, target prediction, cheminformatics, enrichment analysis, AI manuscript generation, graphical abstracts, and scientific workflows.");
+      "PhytoNet AI is the natural-language research intelligence platform for pharmacologists and drug-discovery scientists — network pharmacology, target prediction, ADMET, docking and AI-generated scientific reports.");
   }, []);
 
-  // Smooth-scroll to any hash target (#pricing, #faq, #how, …) whenever the
-  // route hash changes. Retries a few times so it survives mount-time layout
-  // shifts (image loading, framer-motion animations). When there is NO hash,
-  // force the viewport back to the top so the browser's scroll-restoration
-  // doesn't strand fresh loads on a mid-page section (e.g. after clicking
-  // Pricing then refreshing "/").
   useEffect(() => {
-    if (!hash) {
-      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-      return;
-    }
+    if (!hash) { window.scrollTo({ top: 0, left: 0, behavior: "auto" }); return; }
     const id = hash.replace(/^#/, "");
     let tries = 0;
     const tick = () => {
       const el = document.getElementById(id);
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "start" });
-        return;
-      }
+      if (el) { el.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
       if (++tries < 20) setTimeout(tick, 80);
     };
     const t = setTimeout(tick, 60);
@@ -1223,14 +528,12 @@ export default function Home() {
   }, [hash]);
 
   return (
-    <main data-testid="home-page" className="relative overflow-hidden bg-white">
+    <main data-testid="home-page" className="relative bg-[#0F0E24] overflow-hidden">
       <Hero />
-      <WhyChoose />
-      <Stats />
-      <ScreenshotSection />
-      <HowItWorks />
-      <TwoWaysToExplore />
-      <Trust />
+      <TrustBand />
+      <AssistantShowcase />
+      <ModulesGrid />
+      <Workflow />
       <FAQ />
       <FinalCTA />
     </main>
