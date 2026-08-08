@@ -1,135 +1,158 @@
 {
+  "theme": "dark",
+  "archetype": "THE PERFORMANCE PRO / CLINICAL CYBER",
   "typography": {
-    "font_families": {
-      "display": "Sora, sans-serif",
-      "headings": "Plus Jakarta Sans, sans-serif",
-      "body": "Inter, sans-serif",
-      "data": "Inter, sans-serif"
-    },
-    "scale": {
-      "h1": "text-5xl sm:text-6xl tracking-tighter font-extrabold text-slate-900 font-['Sora']",
-      "h2": "text-3xl sm:text-4xl tracking-tight font-bold text-slate-900 font-['Plus_Jakarta_Sans']",
-      "h3": "text-xl sm:text-2xl font-semibold text-slate-800 font-['Plus_Jakarta_Sans']",
-      "body": "text-base leading-relaxed text-slate-600 font-['Inter']",
-      "small": "text-sm text-slate-500 font-['Inter']",
-      "overline": "text-xs font-bold uppercase tracking-[0.2em] text-[#5139ED] font-['Plus_Jakarta_Sans']"
-    }
+    "headline": "font-headline (Existing display serif/geo-sans mix)",
+    "body": "font-body",
+    "kickers": "uppercase tracking-[0.14em] text-xs or text-sm font-body text-[#E7E7F3]/70",
+    "rules": [
+      "Use font-headline for all H1, H2, H3.",
+      "Use font-body for all paragraphs, labels, and UI text.",
+      "No generic 'Inter' feel. Emphasize serious scientific authority.",
+      "Line height: leading-none or leading-tight for headings, leading-relaxed for body."
+    ]
   },
   "colors": {
-    "primary": {
-      "base": "#5139ED",
-      "light": "#8139ED",
-      "royal": "#395AED",
-      "hover": "#4228C4",
-      "active": "#351E9B"
+    "background": {
+      "primary": "#0F0E24",
+      "secondary": "#12102E",
+      "tertiary": "#1E1B4B"
     },
-    "neutrals": {
-      "white": "#FFFFFF",
-      "slate_50": "#F8FAFC",
-      "slate_100": "#F1F5F9",
-      "slate_200": "#E2E8F0",
-      "slate_800": "#1E293B",
-      "slate_900": "#0F172A"
+    "brand": {
+      "primary": "#5139ED",
+      "deep": "#8139ED"
     },
-    "background": "#FFFFFF",
-    "theme_logic": "Strictly light mode per problem statement requirements."
+    "accent": {
+      "success": "#2BB673",
+      "warning": "#F59E0B"
+    },
+    "text": {
+      "primary": "#FAFAFF",
+      "secondary": "#E7E7F3",
+      "inverse": "#0F172A"
+    },
+    "rules": [
+      "No full-screen gradients. Use solid dark backgrounds with subtle structural borders.",
+      "Use Accent Green (#2BB673) for live tickers, node estimations, and success states.",
+      "Use Primary Violet (#5139ED) for primary CTAs and interactive hover states."
+    ]
   },
   "visual_enhancers": {
-    "glassmorphism": {
-      "surface": "bg-white/70",
-      "blur": "backdrop-blur-xl",
-      "border": "border border-slate-200/50",
-      "shadow": "shadow-[0_8px_32px_rgba(0,0,0,0.04)]",
-      "rule": "Only use over subtle background elements or faint colored blobs. Never fully transparent without blur."
-    },
-    "shadows": {
-      "subtle": "shadow-sm",
-      "card": "shadow-[0_2px_20px_rgb(0,0,0,0.04)]",
-      "hover": "shadow-[0_10px_40px_rgb(81,57,237,0.12)]"
-    },
-    "radii": {
-      "card": "rounded-2xl",
-      "button": "rounded-full",
-      "input": "rounded-lg",
-      "badge": "rounded-full"
-    },
-    "motifs": {
-      "description": "Scientific/biomedical visual motifs (molecule graphs, network nodes). Use abstract intersecting lines or faint dotted grids in the background, specifically tinted with #5139ED at very low opacity (e.g. 5%). Avoid generic AI-slop."
-    }
+    "surfaces": "Grid Borders (Technical look). Container items use border-r border-b border-[#5139ED]/20 to expose the grid skeleton.",
+    "glassmorphism": "Used ONLY for sticky SiteHeader and floating action bars. backdrop-blur-xl bg-[#0F0E24]/70 border-b border-[#FAFAFF]/10.",
+    "glow": "Subtle drop-shadow-[0_0_15px_rgba(43,182,115,0.2)] for active states or live nodes."
   },
   "grids_and_layouts": {
-    "hero": {
-      "composition": "Centered layout. Large Sora H1 headline. Subheading directly beneath. Generous spacing. Action area containing the primary 'Plant Database' CTA. Background should feature a subtle blue abstract network (opacity < 10%)."
-    },
-    "features_grid": {
-      "composition": "Bento style or standard 4-column grid (grid-cols-1 md:grid-cols-2 lg:grid-cols-4) with generous gap-6 or gap-8. Cards must be glassmorphic with white background. 1 active card, 7 'Coming soon' cards visually distinct (dimmed or locked state)."
-    },
-    "plant_database": {
-      "composition": "Search tool layout. Top section: large centered search bar with mode-switcher tabs (Plant name / LOTUS exact / LOTUS simple / etc.) above it. Filter section: Checkboxes for selectable output fields inline or as a collapsible sidebar. Main section: Full-width results table."
-    },
-    "spacing": "Generous. py-24 or py-32 for sections. gap-8 for grids. p-8 for cards. Containers with borders must have internal padding to prevent collision."
+    "hero": "Asymmetric split. Left: 7 columns (content). Right: 5 columns (HeroVisual canvas).",
+    "modules_grid": "Bento Grid Protocol (High Density). 3 columns on desktop. 1px solid borders, no border-radius (sharp) or max 8px.",
+    "spacing": "Generous. Section padding py-24 to py-32. Gap-8 to gap-12 in grids."
   },
-  "components": {
-    "buttons": {
-      "primary": "bg-[#5139ED] hover:bg-[#4228C4] text-white rounded-full px-8 py-3 font-semibold transition-transform duration-200 ease-out shadow-md hover:shadow-lg hover:-translate-y-0.5",
-      "secondary": "bg-white text-[#5139ED] border border-[#5139ED]/20 hover:bg-slate-50 rounded-full px-8 py-3 font-semibold transition-colors duration-200"
+  "sections_blueprint": [
+    {
+      "name": "SiteHeader",
+      "status": "KEEP EXISTING",
+      "instructions": "Ensure background is NOT completely transparent. Apply backdrop-blur-md bg-[#0F0E24]/80 so auth buttons remain visible."
     },
-    "cards": {
-      "base": "bg-white border border-slate-100 shadow-[0_2px_20px_rgb(0,0,0,0.04)] rounded-2xl p-6 transition-all duration-300 hover:shadow-[0_10px_40px_rgb(81,57,237,0.12)] hover:-translate-y-1"
+    {
+      "name": "Hero Section",
+      "status": "REWRITE",
+      "headline": "Decode Complex Biology with PhytoNet AI",
+      "sub_copy": "The natural language research intelligence platform for pharmacologists and drug-discovery scientists.",
+      "visual_treatment": "Asymmetric layout. Left: Typography and CTAs. Right: Implement an animated network graph in /app/frontend/src/components/HeroVisual.jsx representing compound-target-pathway mapping.",
+      "motion": "Staggered fade-up for left content. Continuous slow rotation/pulse for right canvas.",
+      "components": [
+        "Live Ticker: 'Nodes computed: 1,452,093' using accent green.",
+        "Primary CTA: 'Launch Workspace' -> /app",
+        "Secondary CTA: 'View Pricing' -> /pricing"
+      ]
     },
-    "search_bar": {
-      "base": "w-full max-w-3xl flex items-center bg-white border-2 border-slate-200 focus-within:border-[#5139ED] focus-within:ring-4 focus-within:ring-[#5139ED]/10 rounded-full p-2 pl-6 shadow-sm transition-all duration-200"
+    {
+      "name": "Trust & Credibility Band",
+      "status": "NEW",
+      "content": "Data integrated from: TCMSP, LOTUS, ChEMBL, PubChem, KEGG, DisGeNET, AlphaFold",
+      "visual_treatment": "Monochrome text logos, opacity 50%. Slow infinite marquee using organic ribbon approach. Tracking wide."
     },
-    "table": {
-      "header": "bg-slate-50/80 text-slate-600 font-semibold text-xs uppercase tracking-[0.05em] py-4 px-6 border-y border-slate-200",
-      "row": "border-b border-slate-100 hover:bg-[#5139ED]/[0.02] transition-colors",
-      "cell": "py-4 px-6 text-sm text-slate-700 align-middle"
+    {
+      "name": "AI Research Assistant Showcase",
+      "status": "NEW",
+      "headline": "From query to pharmacological insight in seconds.",
+      "visual_treatment": "Mock chat interface window. Show a natural language query followed by a 'Plan Preview' block, 'Node-Cost Estimate' (Amber/Green), and a streaming response.",
+      "cta": "Explore AI Assistant -> /research"
+    },
+    {
+      "name": "The 6 Standalone Modules",
+      "status": "NEW",
+      "headline": "A complete computational biology toolkit.",
+      "visual_treatment": "6-cell Bento grid. Sharp edges. Cards are dark #12102E with border-[#5139ED]/30.",
+      "modules": [
+        "Plant Database -> /plant-database",
+        "Compound Analysis -> /compound-analysis",
+        "Target Prediction -> /target-prediction",
+        "ADMET & Druglikeness -> /admet-druglikeness",
+        "Molecular Docking -> /molecular-docking",
+        "Disease Targets -> /disease-targets"
+      ],
+      "hover_effect": "1px inner glow or border color shift to #5139ED on hover. Keep flat."
+    },
+    {
+      "name": "Workflow Walkthrough",
+      "status": "NEW",
+      "headline": "How PhytoNet AI Works",
+      "steps": ["Query", "Plan", "Run", "Report"],
+      "visual_treatment": "Vertical timeline with sticky left side (headline) and scrolling right side (steps)."
+    },
+    {
+      "name": "FAQ",
+      "status": "KEEP EXISTING",
+      "instructions": "Ensure it uses dark mode theme colors and font-body."
+    },
+    {
+      "name": "Final CTA",
+      "status": "NEW",
+      "headline": "Accelerate your drug discovery pipeline.",
+      "visual_treatment": "Massive typography (text-5xl). Centered. High contrast.",
+      "cta": "Start Researching -> /app"
+    },
+    {
+      "name": "SiteFooter",
+      "status": "KEEP EXISTING",
+      "instructions": "Ensure spacing is generous and contrast aligns with the dark theme."
     }
-  },
-  "motion": {
-    "hover": "transition-all duration-300 ease-out",
-    "entrance": "Use framer-motion for staggered fade-in up (y: 20, opacity: 0 -> y: 0, opacity: 1) on feature cards.",
-    "interactions": "Micro-animations on buttons and checkboxes (scale 0.95 on tap)."
-  },
-  "accessibility": {
-    "contrast": "Ensure #5139ED on white exceeds 4.5:1. Use text-slate-900 for main headings and text-slate-700 for body.",
-    "focus": "focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5139ED] focus-visible:ring-offset-2",
-    "testing": "All interactive elements MUST include data-testid attributes."
-  },
+  ],
   "image_urls": [
     {
-      "url": "https://images.unsplash.com/photo-1644325349124-d1756b79dd42?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzF8MHwxfHNlYXJjaHwzfHxhYnN0cmFjdCUyMGRhdGElMjBuZXR3b3JrfGVufDB8fHx8MTc4MzYyNDM0OXww&ixlib=rb-4.1.0&q=85",
-      "description": "Abstract blue background with lines and dots. Use as a very subtle, low-opacity (5-10%) background behind the hero or global wrapper.",
-      "category": "Hero Background"
+      "url": "https://images.unsplash.com/photo-1678845536613-5cf0ec5245cd?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA3MDB8MHwxfHNlYXJjaHw0fHxjb21wdXRhdGlvbmFsJTIwYmlvbG9neSUyMG5ldHdvcmt8ZW58MHx8fHwxNzg2MTc3MjAxfDA&ixlib=rb-4.1.0&q=85",
+      "description": "Abstract computational biology network. Use as a subtle background texture in the AI showcase section, masked with a radial gradient to blend into #0F0E24.",
+      "category": "texture"
     },
     {
-      "url": "https://images.unsplash.com/photo-1656331797721-b593b8f00297?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA0MTJ8MHwxfHNlYXJjaHwxfHxtb2xlY3VsYXIlMjBuZXR3b3JrfGVufDB8fHx8MTc4MzYyNDM0OXww&ixlib=rb-4.1.0&q=85",
-      "description": "White molecular structure 3D render. Use as a decorative accent image for the 'Molecular Dynamics' or 'Compound Extractor' feature cards.",
-      "category": "Feature Cards Motif"
+      "url": "https://images.unsplash.com/photo-1579567761406-4684ee0c75b6?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzl8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMG1vbGVjdWxhciUyMHN0cnVjdHVyZSUyMGRhcmt8ZW58MHx8fHwxNzg2MTc3MjAxfDA&ixlib=rb-4.1.0&q=85",
+      "description": "Abstract molecular structure. Use for the Workflow or CTA section background with heavy opacity reduction (10%).",
+      "category": "background"
+    },
+    {
+      "url": "https://images.unsplash.com/photo-1631203882303-30634a9528d6?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDN8MHwxfHNlYXJjaHwyfHxsYWJvcmF0b3J5JTIwcmVzZWFyY2hlciUyMGRhcmt8ZW58MHx8fHwxNzg2MTc3MjAxfDA&ixlib=rb-4.1.0&q=85",
+      "description": "Scientist in lab. Can be used in a small, sharp-edged 16:9 frame within the Workflow or About section if a human element is needed to balance the tech.",
+      "category": "editorial"
     }
   ],
-  "instructions_to_main_agent": [
-    "Use pure HTML + Tailwind for marketing layouts (Hero, Features Grid). Avoid rigid structural Shadcn components here.",
-    "Use Shadcn UI components for complex logic (Tables, Tabs, Checkboxes, Pagination) but customize their styling heavily to match these guidelines.",
-    "For the 2D compound structures, integrate SmilesDrawer to render the SMILES strings inside the table cells. Ensure the canvas size is appropriate.",
-    "Implement the mode-switcher as Shadcn Tabs right above the main search bar in the Plant Database page.",
-    "Ensure 'Coming Soon' feature cards are visually distinct (e.g. grayscale, locked icon, opacity 60%) and non-clickable.",
-    "Adhere exactly to the color palette. No extraneous colors.",
-    "Create a clean, clinical yet modern vibe. Do NOT use heavy dark mode gradients. Stick to the white background."
-  ],
-  "UNIVERSAL GUIDELINES FOR MAIN AGENT": [
-    "You tend to converge toward generic, 'on distribution' outputs. In frontend design, this creates what users call the 'AI slop' aesthetic. Avoid this: make creative, distinctive frontends that surprise and delight.",
-    "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients.",
-    "Don't make generic centered layouts, simplistic gradients, and uniform styling.",
-    "Create depth through layered design elements with z-index hierarchy.",
-    "Use glass-morphism effects with backdrop filters (12-24px blur).",
-    "You MUST NOT apply universal transition. Eg: `transition: all`. Always add transitions for specific interactive elements excluding transforms.",
-    "You MUST NOT center align the app container, ie do not add `.App { text-align: center; }` in the css file. This disrupts the human natural reading flow of text.",
-    "Always use modern button styles like pill-shaped, or sharp button with interaction animations & color relevant to the app style.",
-    "NEVER: use AI assistant Emoji characters like 🤖🧠💭💡🔮🎯 etc for icons. Use standard professional icons (lucide-react).",
-    "Every interaction needs micro-animations - hover states, transitions, parallax effects, and entrance animations. Static = dead.",
-    "Use 2-3x more spacing than feels comfortable. Cramped designs look cheap.",
-    "Subtle grain textures, noise overlays, custom cursors, selection states, and loading animations: separates good from extraordinary.",
-    "Use sonner for toasts. Sonner component are located in /app/src/components/ui/sonner.tsx."
+  "accessibility": {
+    "focus_states": "focus:ring-2 focus:ring-[#5139ED] focus:outline-none",
+    "contrast": "Ensure all text meets APCA standards against the dark #0F0E24 background. Use text-[#FAFAFF] for primary, text-[#E7E7F3] for secondary.",
+    "aria": "Add aria-hidden='true' to decorative background networks."
+  },
+  "motion": {
+    "hover": "Subtle transform -translate-y-0.5, border color transition 0.2s ease.",
+    "entrance": "Framer motion initial opacity-0 y-4, animate opacity-1 y-0, staggerChildren 0.1.",
+    "hero_visual": "Continuous slow panning or rotation of the network graph nodes."
+  },
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "DO NOT use generic centered layouts. Prioritize left-aligned, asymmetrical structural grids.",
+    "DO NOT use default Inter font for headings. Use the existing font-headline.",
+    "Use data-testid on ALL interactive elements (buttons, links, inputs).",
+    "Preserve all existing routes and modal triggers.",
+    "Do not use transparent backgrounds under text. Use solid or glassmorphic backgrounds.",
+    "Create depth with layered elements (z-index) and subtle borders, not just shadows (shadows don't work well in dark mode, borders do).",
+    "Maintain serious scientific tone; avoid playful emoji or generic SaaS illustrations."
   ]
 }
