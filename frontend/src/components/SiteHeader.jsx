@@ -21,6 +21,9 @@ export default function SiteHeader() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const navigate = useNavigate();
+  // Home page uses the redesigned dark hero — switch header to a dark-glass
+  // variant so the transition into the hero feels seamless.
+  const dark = pathname === "/";
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -70,16 +73,20 @@ export default function SiteHeader() {
     <header
       data-testid="site-header"
       className={`sticky top-0 z-40 transition-all duration-300 ${
-        scrolled
-          ? "border-b border-[#E7E7F3]/80 bg-white/70 backdrop-blur-xl shadow-[0_1px_0_rgba(11,11,24,0.03)]"
-          : "border-b border-transparent bg-white/60 backdrop-blur-md"
+        dark
+          ? scrolled
+            ? "border-b border-[#FAFAFF]/10 bg-[#0F0E24]/85 backdrop-blur-xl"
+            : "border-b border-transparent bg-[#0F0E24]/60 backdrop-blur-md"
+          : scrolled
+            ? "border-b border-[#E7E7F3]/80 bg-white/70 backdrop-blur-xl shadow-[0_1px_0_rgba(11,11,24,0.03)]"
+            : "border-b border-transparent bg-white/60 backdrop-blur-md"
       }`}
     >
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-6">
         <Link to="/" data-testid="brand-link" className="flex items-center gap-2.5 shrink-0">
           <BrandLogo className="h-8 w-8" />
-          <span className="font-headline text-[17px] font-extrabold tracking-tight text-[#111827]">
-            PhytoNet<span className="text-[#5139ED]"> AI</span>
+          <span className={`font-headline text-[17px] font-extrabold tracking-tight ${dark ? "text-[#FAFAFF]" : "text-[#111827]"}`}>
+            PhytoNet<span className={dark ? "text-[#c4b5fd]" : "text-[#5139ED]"}> AI</span>
           </span>
         </Link>
 
@@ -92,8 +99,12 @@ export default function SiteHeader() {
               data-testid={`nav-${n.label.toLowerCase().replace(/\s/g, "-")}`}
               className={`rounded-full px-3.5 py-1.5 text-[13px] font-semibold transition-colors ${
                 isActive(n.to)
-                  ? "bg-[#5139ED]/8 text-[#5139ED]"
-                  : "text-[#374151] hover:text-[#5139ED]"
+                  ? dark
+                    ? "bg-[#5139ED]/25 text-white"
+                    : "bg-[#5139ED]/8 text-[#5139ED]"
+                  : dark
+                    ? "text-[#E7E7F3]/80 hover:text-white"
+                    : "text-[#374151] hover:text-[#5139ED]"
               }`}
             >
               {n.label}
@@ -104,12 +115,18 @@ export default function SiteHeader() {
         <div className="flex items-center gap-2">
           <button
             data-testid="header-search"
-            className="hidden items-center gap-2 rounded-full border border-[#E7E7F3] bg-white/70 px-3 py-1.5 text-[12px] font-medium text-[#6B7280] hover:border-[#5139ED]/30 hover:text-[#5139ED] md:inline-flex"
+            className={`hidden items-center gap-2 rounded-full border px-3 py-1.5 text-[12px] font-medium md:inline-flex ${
+              dark
+                ? "border-[#FAFAFF]/10 bg-[#FAFAFF]/[0.04] text-[#E7E7F3]/70 hover:border-[#c4b5fd]/40 hover:text-[#FAFAFF]"
+                : "border-[#E7E7F3] bg-white/70 text-[#6B7280] hover:border-[#5139ED]/30 hover:text-[#5139ED]"
+            }`}
             aria-label="Search"
           >
             <Search className="h-3.5 w-3.5" />
             <span className="hidden md:inline">Search</span>
-            <span className="ml-2 hidden rounded border border-[#E7E7F3] px-1.5 py-0.5 text-[10px] font-semibold text-[#9CA3AF] md:inline">⌘K</span>
+            <span className={`ml-2 hidden rounded border px-1.5 py-0.5 text-[10px] font-semibold md:inline ${
+              dark ? "border-[#FAFAFF]/15 text-[#E7E7F3]/60" : "border-[#E7E7F3] text-[#9CA3AF]"
+            }`}>⌘K</span>
           </button>
 
           {user && <SaveProjectMenu />}
@@ -118,7 +135,11 @@ export default function SiteHeader() {
             <button
               data-testid="header-signin"
               onClick={() => openModal("signin")}
-              className="inline-flex items-center rounded-full border border-[#E7E7F3] bg-white px-4 py-1.5 text-[13px] font-semibold text-[#111827] hover:border-[#5139ED]/40 hover:text-[#5139ED]"
+              className={`inline-flex items-center rounded-full border px-4 py-1.5 text-[13px] font-semibold ${
+                dark
+                  ? "border-[#FAFAFF]/15 bg-[#FAFAFF]/[0.05] text-[#FAFAFF] hover:border-[#c4b5fd]/50 hover:bg-[#FAFAFF]/[0.1]"
+                  : "border-[#E7E7F3] bg-white text-[#111827] hover:border-[#5139ED]/40 hover:text-[#5139ED]"
+              }`}
             >
               Sign In
             </button>
@@ -129,7 +150,11 @@ export default function SiteHeader() {
               <button
                 data-testid="header-avatar"
                 onClick={() => setMenuOpen((v) => !v)}
-                className="inline-flex items-center gap-2 rounded-full border border-[#E7E7F3] bg-white px-2 py-1.5 text-xs font-bold text-[#111827] hover:border-[#5139ED]/40"
+                className={`inline-flex items-center gap-2 rounded-full border px-2 py-1.5 text-xs font-bold ${
+                  dark
+                    ? "border-[#FAFAFF]/15 bg-[#FAFAFF]/[0.05] text-[#FAFAFF] hover:border-[#c4b5fd]/50"
+                    : "border-[#E7E7F3] bg-white text-[#111827] hover:border-[#5139ED]/40"
+                }`}
               >
                 <span className="grid h-7 w-7 place-items-center rounded-full bg-gradient-to-br from-[#5139ED] to-[#8139ED] text-white text-[11px]">
                   {initials || <User className="h-3.5 w-3.5" />}
@@ -159,7 +184,11 @@ export default function SiteHeader() {
             data-testid="mobile-menu-toggle"
             onClick={() => setMobileOpen((v) => !v)}
             aria-label="Toggle menu"
-            className="grid h-9 w-9 place-items-center rounded-full border border-[#E7E7F3] bg-white text-[#111827] lg:hidden"
+            className={`grid h-9 w-9 place-items-center rounded-full border lg:hidden ${
+              dark
+                ? "border-[#FAFAFF]/15 bg-[#FAFAFF]/[0.05] text-[#FAFAFF]"
+                : "border-[#E7E7F3] bg-white text-[#111827]"
+            }`}
           >
             {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
           </button>
