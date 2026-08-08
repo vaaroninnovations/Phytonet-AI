@@ -340,8 +340,8 @@ function ModulesGrid() {
 
         <div className="mt-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 border border-[#FAFAFF]/8">
           {MODULES.map((m) => (
-            <Link key={m.to} to={m.to} data-testid={`module-${m.to.replace(/^\//, "")}`}
-                  className="group relative p-7 border-b border-r border-[#FAFAFF]/8 last:border-r-0 bg-[#0F0E24] hover:bg-[#12102E] transition">
+            <div key={m.to} data-testid={`module-${m.to.replace(/^\//, "")}`}
+                 className="group relative p-7 border-b border-r border-[#FAFAFF]/8 last:border-r-0 bg-[#0F0E24] transition">
               <div aria-hidden className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition"
                    style={{ background: `radial-gradient(400px circle at 50% 0%, ${m.accent}12, transparent 60%)` }} />
               <div className="relative">
@@ -355,11 +355,8 @@ function ModulesGrid() {
                 </div>
                 <h3 className="mt-5 font-headline text-[20px] font-bold text-[#FAFAFF]">{m.label}</h3>
                 <p className="mt-2 font-body text-[13px] leading-relaxed text-[#E7E7F3]/70">{m.desc}</p>
-                <div className="mt-5 inline-flex items-center gap-1 text-[12px] font-semibold text-[#c4b5fd] opacity-70 group-hover:opacity-100 transition">
-                  Open module <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
-                </div>
               </div>
-            </Link>
+            </div>
           ))}
         </div>
       </div>

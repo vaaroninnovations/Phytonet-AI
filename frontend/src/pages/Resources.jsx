@@ -323,14 +323,14 @@ function DBCard({ db, index }) {
       viewport={{ once: true, amount: 0.15 }}
       transition={{ duration: 0.45, delay: (index % 8) * 0.03, ease: [0.22, 1, 0.36, 1] }}
       whileHover={{ y: -3 }}
-      className="group relative flex flex-col rounded-2xl border border-[#E7E7F3] bg-white/70 p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] backdrop-blur-sm transition-all hover:border-[#5139ED]/40 hover:shadow-[0_18px_40px_-24px_rgba(81,57,237,0.35)]"
+      className="group relative flex flex-col rounded-2xl border border-[#FAFAFF]/10 bg-[#12102E]/60 p-5 backdrop-blur-sm transition-all hover:border-[#5139ED]/40 hover:shadow-[0_18px_40px_-24px_rgba(81,57,237,0.5)]"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className={`inline-flex h-8 w-8 items-center justify-center rounded-xl ${color.bg} ${color.fg}`}>
             <DatabaseIcon className="h-4 w-4" />
           </span>
-          <h3 className="font-headline text-[15px] font-bold tracking-tight text-[#111827]">
+          <h3 className="font-headline text-[15px] font-bold tracking-tight text-[#FAFAFF]">
             {db.name}
           </h3>
         </div>
@@ -339,45 +339,45 @@ function DBCard({ db, index }) {
           target="_blank"
           rel="noreferrer"
           data-testid={`db-open-${db.name.replace(/[^a-z0-9]/gi, "-").toLowerCase()}`}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[#94A3B8] transition hover:bg-[#F1F5F9] hover:text-[#5139ED]"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[#E7E7F3]/50 transition hover:bg-[#FAFAFF]/[0.06] hover:text-[#c4b5fd]"
           aria-label={`Open ${db.name} website`}
         >
           <ExternalLink className="h-4 w-4" />
         </a>
       </div>
 
-      <p className="mt-3 text-[13px] leading-relaxed text-[#4B5563]">{db.desc}</p>
+      <p className="mt-3 text-[13px] leading-relaxed text-[#E7E7F3]/75">{db.desc}</p>
 
       <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2 text-[11.5px]">
         <div>
-          <dt className="font-semibold uppercase tracking-wider text-[#94A3B8]">Updates</dt>
-          <dd className="mt-0.5 text-[#374151]">{db.updates}</dd>
+          <dt className="font-semibold uppercase tracking-wider text-[#E7E7F3]/50">Updates</dt>
+          <dd className="mt-0.5 text-[#E7E7F3]/85">{db.updates}</dd>
         </div>
         <div>
-          <dt className="font-semibold uppercase tracking-wider text-[#94A3B8]">API</dt>
-          <dd className="mt-0.5 text-[#374151]">{db.api}</dd>
+          <dt className="font-semibold uppercase tracking-wider text-[#E7E7F3]/50">API</dt>
+          <dd className="mt-0.5 text-[#E7E7F3]/85">{db.api}</dd>
         </div>
       </dl>
 
       <div className="mt-4">
-        <p className="text-[11.5px] font-semibold uppercase tracking-wider text-[#94A3B8]">Supported data</p>
+        <p className="text-[11.5px] font-semibold uppercase tracking-wider text-[#E7E7F3]/50">Supported data</p>
         <ul className="mt-1.5 flex flex-wrap gap-1.5">
           {db.supports.map((s) => (
-            <li key={s} className="rounded-full border border-[#E7E7F3] bg-white px-2.5 py-0.5 text-[11px] text-[#374151]">
+            <li key={s} className="rounded-full border border-[#FAFAFF]/10 bg-[#FAFAFF]/[0.04] px-2.5 py-0.5 text-[11px] text-[#E7E7F3]/85">
               {s}
             </li>
           ))}
         </ul>
       </div>
 
-      <div className="mt-4 rounded-xl border border-[#E7E7F3] bg-[#F8FAFC] p-3">
-        <p className="text-[11.5px] font-semibold uppercase tracking-wider text-[#5139ED]">
+      <div className="mt-4 rounded-xl border border-[#5139ED]/25 bg-[#5139ED]/[0.06] p-3">
+        <p className="text-[11.5px] font-semibold uppercase tracking-wider text-[#c4b5fd]">
           Used in PhytoNet AI
         </p>
-        <p className="mt-1 text-[12.5px] leading-relaxed text-[#374151]">{db.usedFor}</p>
+        <p className="mt-1 text-[12.5px] leading-relaxed text-[#E7E7F3]/85">{db.usedFor}</p>
       </div>
 
-      <div className="mt-4 flex items-center justify-between text-[11.5px] text-[#64748B]">
+      <div className="mt-4 flex items-center justify-between text-[11.5px] text-[#E7E7F3]/60">
         <span className="inline-flex items-center gap-1.5">
           <BookOpen className="h-3.5 w-3.5" />
           <span className="line-clamp-1">{db.citation}</span>
@@ -386,7 +386,7 @@ function DBCard({ db, index }) {
           type="button"
           onClick={copyCite}
           data-testid={`db-cite-${db.name.replace(/[^a-z0-9]/gi, "-").toLowerCase()}`}
-          className="ml-3 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-[#5139ED] transition hover:bg-[#5139ED]/8"
+          className="ml-3 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-[#c4b5fd] transition hover:bg-[#5139ED]/15"
           aria-label={`Copy citation for ${db.name}`}
         >
           {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
@@ -433,21 +433,23 @@ export default function Resources() {
   return (
     <main
       data-testid="resources-page"
-      className="relative overflow-hidden bg-white"
+      className="relative overflow-hidden bg-[#0F0E24] text-[#FAFAFF]"
     >
       {/* ── Page hero ── */}
-      <section className="relative overflow-hidden border-b border-[#E7E7F3] bg-gradient-to-b from-[#F5F3FF] via-white to-white pb-14 pt-16">
-        <div aria-hidden className="brand-blur absolute -left-32 top-0 h-[360px] w-[360px] bg-[#5139ED]" />
-        <div aria-hidden className="brand-blur absolute -right-24 top-24 h-[300px] w-[300px] bg-[#2BB673]" />
+      <section className="relative overflow-hidden border-b border-[#FAFAFF]/10 pb-14 pt-16">
+        <div aria-hidden className="pointer-events-none absolute inset-0 opacity-30">
+          <div className="absolute left-1/3 top-0 h-[420px] w-[720px] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,#5139ED,transparent_75%)] blur-3xl opacity-40" />
+          <div className="absolute right-0 top-20 h-[320px] w-[420px] rounded-full bg-[radial-gradient(closest-side,#2BB673,transparent_70%)] opacity-20 blur-3xl" />
+        </div>
         <div className="relative mx-auto max-w-7xl px-6">
-          <div className="inline-flex items-center gap-2 rounded-full border border-[#E7E7F3] bg-white/70 px-3 py-1 text-[11px] font-bold uppercase tracking-widest text-[#5139ED] backdrop-blur">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[#FAFAFF]/10 bg-[#FAFAFF]/[0.04] px-3 py-1 text-[11px] font-bold uppercase tracking-widest text-[#c4b5fd] backdrop-blur">
             <DatabaseIcon className="h-3 w-3" />
             Central Knowledge Hub
           </div>
-          <h1 className="font-headline mt-3 text-[36px] font-bold tracking-[-0.02em] text-[#111827] sm:text-[44px]">
-            Every database <span className="gradient-text">that powers PhytoNet AI</span>
+          <h1 className="font-headline mt-3 text-[36px] font-bold tracking-[-0.02em] text-[#FAFAFF] sm:text-[44px]">
+            Every database <span className="bg-gradient-to-r from-[#c4b5fd] to-[#8139ED] bg-clip-text text-transparent">that powers PhytoNet AI</span>
           </h1>
-          <p className="mt-4 max-w-3xl text-[15px] leading-relaxed text-[#4B5563]">
+          <p className="mt-4 max-w-3xl text-[15px] leading-relaxed text-[#E7E7F3]/80">
             Browse each biological, chemical, pharmacological, structural, pathway and phytochemical
             data source integrated into the platform. Every entry tells you what it stores, how often
             it updates, whether it exposes an API, and exactly where PhytoNet AI consumes it.
@@ -459,17 +461,17 @@ export default function Resources() {
       <section className="mx-auto max-w-7xl px-6 py-14">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="relative w-full max-w-md">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94A3B8]" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#E7E7F3]/50" />
             <Input
               data-testid="db-search"
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search databases (e.g. KEGG, target, structure)…"
-              className="h-10 rounded-full border-[#E7E7F3] bg-white pl-10 text-[14px] shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+              className="h-10 rounded-full border-[#FAFAFF]/10 bg-[#FAFAFF]/[0.04] pl-10 text-[14px] text-[#FAFAFF] placeholder:text-[#E7E7F3]/50 focus-visible:ring-[#5139ED]/40"
             />
           </div>
-          <span data-testid="db-count" className="text-[12.5px] font-semibold text-[#64748B]">
-            Showing <strong className="text-[#111827]">{filtered.length}</strong> of {DBS.length}
+          <span data-testid="db-count" className="text-[12.5px] font-semibold text-[#E7E7F3]/60">
+            Showing <strong className="text-[#FAFAFF]">{filtered.length}</strong> of {DBS.length}
           </span>
         </div>
 
@@ -486,12 +488,12 @@ export default function Resources() {
                 className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-semibold transition ${
                   active
                     ? "border-[#5139ED] bg-[#5139ED] text-white shadow-[0_10px_24px_-14px_rgba(81,57,237,0.7)]"
-                    : "border-[#E7E7F3] bg-white/70 text-[#374151] hover:border-[#5139ED]/40 hover:text-[#5139ED]"
+                    : "border-[#FAFAFF]/10 bg-[#FAFAFF]/[0.04] text-[#E7E7F3]/80 hover:border-[#c4b5fd]/40 hover:text-[#FAFAFF]"
                 }`}
               >
                 <Ic className="h-3.5 w-3.5" />
                 {c.label}
-                <span className={`ml-1 rounded-full px-1.5 text-[10px] ${active ? "bg-white/20 text-white" : "bg-[#F1F5F9] text-[#64748B]"}`}>
+                <span className={`ml-1 rounded-full px-1.5 text-[10px] ${active ? "bg-white/20 text-white" : "bg-[#FAFAFF]/10 text-[#E7E7F3]/70"}`}>
                   {countByCat[c.id] ?? 0}
                 </span>
               </button>
@@ -501,8 +503,8 @@ export default function Resources() {
 
         <div className="mt-8">
           {filtered.length === 0 ? (
-            <div data-testid="db-empty" className="rounded-2xl border border-dashed border-[#E7E7F3] bg-white/70 p-16 text-center">
-              <p className="text-[14px] text-[#64748B]">No databases match your filters.</p>
+            <div data-testid="db-empty" className="rounded-2xl border border-dashed border-[#FAFAFF]/15 bg-[#12102E]/60 p-16 text-center">
+              <p className="text-[14px] text-[#E7E7F3]/60">No databases match your filters.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">

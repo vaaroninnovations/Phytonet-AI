@@ -25,6 +25,7 @@ export default function SiteHeader() {
   // so the transition into each hero feels seamless.
   const dark = pathname === "/"
             || pathname === "/pricing"
+            || pathname === "/resources"
             || pathname === "/referrals/leaderboard";
 
   useEffect(() => {
