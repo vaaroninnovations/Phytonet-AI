@@ -13,7 +13,7 @@ import {
   ShieldCheck, Database, Cpu, Radio,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import HeroVisual from "@/components/HeroVisual";
+import HeroMoleculeField from "@/components/HeroMoleculeField";
 
 /* ──────────────── SHARED ATOMS ─────────────── */
 function Kicker({ children, className = "" }) {
@@ -117,18 +117,12 @@ function Hero() {
           </div>
         </motion.div>
 
-        {/* Right — HeroVisual canvas (5 cols) */}
+        {/* Right — Hero molecular scene: protein ribbon + ligand + floating cards */}
         <motion.div className="col-span-12 lg:col-span-5 relative"
                     initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.9, delay: 0.15 }}>
-          <div className="relative rounded-2xl border border-[#FAFAFF]/10 bg-[#12102E]/60 backdrop-blur-sm p-4 lg:p-6">
-            <div className="mb-3 flex items-center justify-between text-[10px] font-body uppercase tracking-[0.18em] text-[#E7E7F3]/60">
-              <span className="inline-flex items-center gap-1.5"><Network className="h-3 w-3" /> Compound × Target × Pathway</span>
-              <span className="inline-flex items-center gap-1"><LiveDot color="#F59E0B" /> live sim</span>
-            </div>
-            <div className="aspect-[5/4] w-full">
-              <HeroVisual />
-            </div>
+          <div className="relative aspect-[5/4] w-full lg:aspect-auto lg:h-[520px]">
+            <HeroMoleculeField />
           </div>
         </motion.div>
       </div>

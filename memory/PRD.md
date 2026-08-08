@@ -1,5 +1,25 @@
 # Dr. / — Network Pharmacology SaaS
 
+## 2026-02-08 — Hero Molecular Scene (Homepage focal visualization)
+- Removed the "Compound × Target × Pathway" live network card from the hero
+  right column and replaced it with a full-scene molecular visualization
+  (`frontend/src/components/HeroMoleculeField.jsx`).
+- Composition (back → front):
+  1. Canvas particle field (~90 drifting atoms with faint inter-atomic links,
+     accent green highlights). Sits absolutely behind and never competes.
+  2. Large SVG protein ribbon — dual α-helix + β-sheet + active-site pocket,
+     with slow perspective tilt (18–22s CSS keyframes) for 3D feel without WebGL.
+  3. Small-molecule ligand (stylised Quercetin flavonoid: 3 fused rings) rendered
+     inside the pocket, visually suggesting compound–target interaction.
+  4. Five floating scientific cards positioned around the protein:
+     Protein Target · AKT1 · Binding Site · Active Site · Top Compound · Quercetin ·
+     Pathway · PI3K / AKT · Evidence · High. Glass panels with icon chips.
+- Home.jsx: swapped `HeroVisual` import for `HeroMoleculeField`; removed the
+  outer bordered card wrapper so the scene is unframed and dominant.
+- data-testids: `hero-molecule-field`, `hero-molecule-canvas`,
+  `hero-protein-svg`, `hero-card-target|binding|compound|pathway|evidence`.
+
+
 ## 2026-02-10 — Full Pricing Strategy Rollout (all 5 upgrades)
 - **Public /pricing landing page** (`frontend/src/pages/Pricing.jsx`) — hero,
   4-tier bundle grid, subscription + enterprise section, feature comparison
