@@ -1019,6 +1019,140 @@ function Pricing() {
 }
 
 
+/* ─────────────────────────── TWO WAYS TO EXPLORE ─────────────────
+   Highlights the two entry points into the platform without changing the
+   overall home layout: the chat-based AI Research Assistant on the left,
+   and the six standalone module pages on the right. Matches WhyChoose's
+   35/65 dual-card idiom so it feels native to the page. */
+const STANDALONE_MODULES = [
+  { name: "Plant Database",   to: "/plant-database",         color: "#2BB673" },
+  { name: "Compound Analysis", to: "/compound-analysis",      color: "#5139ED" },
+  { name: "Target Prediction", to: "/target-prediction",      color: "#8139ED" },
+  { name: "ADMET & Druglikeness", to: "/admet-druglikeness",  color: "#F59E0B" },
+  { name: "Molecular Docking", to: "/molecular-docking",      color: "#EC4899" },
+  { name: "Disease Targets",   to: "/disease-targets",        color: "#0EA5E9" },
+];
+
+function TwoWaysToExplore() {
+  const { guard } = useAuth();
+  const navigate = useNavigate();
+  const goResearch  = () => guard(() => navigate("/research"));
+  const goStandalone = (to) => guard(() => navigate(to));
+  return (
+    <section id="two-ways" data-testid="two-ways-to-explore"
+             className="relative overflow-hidden bg-gradient-to-b from-white via-[#FAFAFF] to-white py-24">
+      <div aria-hidden className="brand-blur absolute -right-40 top-20 h-[420px] w-[420px] bg-[#8139ED]" />
+      <div aria-hidden className="brand-blur absolute -left-32 bottom-40 h-[380px] w-[380px] bg-[#2BB673]" />
+
+      <div className="relative mx-auto max-w-7xl px-6">
+        {/* ── Section header ── */}
+        <div className="mx-auto max-w-3xl text-center">
+          <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">
+            Two Ways to Explore
+          </p>
+          <h2 className="font-headline mt-3 text-[36px] leading-[1.08] tracking-tight text-[#111827] sm:text-[44px]">
+            Chat with an AI scientist, <span className="gradient-text">or dive into any module.</span>
+          </h2>
+          <p className="mt-5 text-[14.5px] leading-relaxed text-[#374151]">
+            New in this update: an AI Research Assistant that plans and runs full network-pharmacology
+            workflows from a plain-English brief. You can still open each analytical module
+            standalone whenever you need a focused, targeted task.
+          </p>
+        </div>
+
+        {/* ── Two-column layout (35 / 65) mirroring WhyChoose ── */}
+        <div className="mt-16 grid grid-cols-1 gap-6 lg:grid-cols-[35fr_65fr] lg:gap-8">
+          {/* Left — AI Research Assistant (dark brand card) */}
+          <button
+            type="button"
+            data-testid="home-cta-research"
+            onClick={goResearch}
+            className="group relative flex flex-col overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-[#0F0E24] via-[#1E1B4B] to-[#12102E] p-7 text-left shadow-[0_20px_60px_-20px_rgba(30,27,75,0.65)] transition hover:-translate-y-1"
+          >
+            <div aria-hidden className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-[#8139ED]/30 blur-3xl" />
+            <div aria-hidden className="pointer-events-none absolute -left-16 bottom-0 h-48 w-48 rounded-full bg-[#2BB673]/15 blur-3xl" />
+
+            <div className="relative flex items-center gap-2">
+              <span className="inline-flex items-center gap-1 rounded-full border border-[#a48bff]/40 bg-[#5139ED]/30 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#c4b5fd]">
+                <Sparkles className="h-3 w-3" /> New
+              </span>
+              <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-[#a48bff]">
+                AI Research Assistant
+              </p>
+            </div>
+
+            <h3 className="font-headline mt-3 text-[26px] leading-tight text-white">
+              Chat your way <br/>through the workflow.
+            </h3>
+            <p className="mt-3 text-[13.5px] leading-relaxed text-white/80">
+              Ask in plain English — "find phytochemicals from Withania somnifera targeting IL-6"
+              — and the assistant plans the steps, runs them, streams live progress, and
+              generates a scientific report you can share.
+            </p>
+
+            <ul className="mt-5 space-y-2 text-[13px] text-white/90">
+              {[
+                "Plan preview + node-cost estimate before running",
+                "Live status streaming — Nodes used X / Y ticker",
+                "Rich visual result cards + shareable report",
+              ].map((t) => (
+                <li key={t} className="flex items-start gap-2">
+                  <span aria-hidden className="mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full bg-[#c4b5fd] shadow-[0_0_10px_2px_rgba(196,181,253,0.6)]" />
+                  <span>{t}</span>
+                </li>
+              ))}
+            </ul>
+
+            <span className="mt-6 inline-flex items-center gap-1.5 text-[13px] font-bold text-white">
+              Open the Assistant
+              <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-1" />
+            </span>
+          </button>
+
+          {/* Right — Standalone module grid (light, brand pastel) */}
+          <div className="relative flex flex-col overflow-hidden rounded-3xl border border-[#E7E7F3] bg-white p-7 shadow-[0_20px_60px_-25px_rgba(15,23,42,0.15)]">
+            <p className="font-body text-[11px] font-bold uppercase tracking-[0.24em] text-[#5139ED]">
+              Standalone Modules
+            </p>
+            <h3 className="font-headline mt-3 text-[26px] leading-tight text-[#111827]">
+              Focused tools for <span className="gradient-text">specific analyses.</span>
+            </h3>
+            <p className="mt-3 text-[13.5px] leading-relaxed text-[#4B5563]">
+              Prefer to run just one step? Every capability is available as a dedicated page —
+              deep-dive UI, exportable results, no chat required. Free discovery tools stay free;
+              premium modules bill per run.
+            </p>
+
+            <div className="mt-6 grid grid-cols-2 gap-2.5">
+              {STANDALONE_MODULES.map((m) => (
+                <button
+                  key={m.to}
+                  type="button"
+                  data-testid={`home-standalone-${m.to.replace(/^\//,"")}`}
+                  onClick={() => goStandalone(m.to)}
+                  className="group flex items-center gap-2 rounded-xl border border-[#E7E7F3] bg-white/60 px-3 py-2.5 text-left transition hover:border-[#5139ED]/40 hover:-translate-y-0.5 hover:shadow-md"
+                >
+                  <span aria-hidden className="inline-block h-2 w-2 rounded-full flex-shrink-0"
+                        style={{ background: m.color, boxShadow: `0 0 10px 1px ${m.color}44` }} />
+                  <span className="flex-1 text-[13px] font-semibold text-[#111827]">{m.name}</span>
+                  <ArrowRight className="h-3.5 w-3.5 text-[#94A3B8] transition group-hover:text-[#5139ED] group-hover:translate-x-0.5" />
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-5 rounded-xl border border-dashed border-[#E7E7F3] bg-[#FAFAFF] px-3 py-2.5 text-[12px] text-[#4B5563]">
+              <strong className="text-[#0F172A]">Tip:</strong> the Assistant can call any of these
+              modules automatically — but the dedicated pages give you full control over
+              parameters, uploads, and outputs.
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+
 /* ─────────────────────────── FINAL CTA ─────────────────────────── */
 function FinalCTA() {
   const { guard } = useAuth();
@@ -1095,6 +1229,7 @@ export default function Home() {
       <Stats />
       <ScreenshotSection />
       <HowItWorks />
+      <TwoWaysToExplore />
       <Trust />
       <FAQ />
       <FinalCTA />
