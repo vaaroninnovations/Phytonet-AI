@@ -13,6 +13,7 @@ import {
   ShieldCheck, Database, Cpu, Radio,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import HeroPremiumScene from "@/components/HeroPremiumScene";
 
 /* ──────────────── SHARED ATOMS ─────────────── */
 function Kicker({ children, className = "" }) {
@@ -51,15 +52,27 @@ function Hero() {
   return (
     <section data-testid="home-hero"
              className="relative overflow-hidden bg-[#0F0E24] text-[#FAFAFF]">
-      {/* Subtle radial + grid — sets the "clinical cyber" texture without
-          resorting to a full-screen gradient. */}
+      {/* Layer 0 — oversized 3D protein ribbon acting as an edge-to-edge
+          abstract background. Cropped past the viewport, feathered edges. */}
       <div aria-hidden className="pointer-events-none absolute inset-0">
-        <div className="absolute inset-0 opacity-[0.06]"
+        <HeroPremiumScene />
+      </div>
+
+      {/* Readability scrim — dark gradient on the left so headline & CTAs
+          stay high-contrast against the ribbon on the right. */}
+      <div aria-hidden className="pointer-events-none absolute inset-0"
+           style={{
+             background:
+               "linear-gradient(90deg, rgba(15,14,36,0.88) 0%, rgba(15,14,36,0.65) 40%, rgba(15,14,36,0.10) 70%, rgba(15,14,36,0.0) 100%)",
+           }} />
+
+      {/* Subtle radial + grid overlay (kept over the ribbon) */}
+      <div aria-hidden className="pointer-events-none absolute inset-0">
+        <div className="absolute inset-0 opacity-[0.05]"
              style={{ backgroundImage:
                "linear-gradient(rgba(255,255,255,.9) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.9) 1px, transparent 1px)",
                backgroundSize: "56px 56px" }} />
-        <div className="absolute left-1/3 top-0 h-[520px] w-[900px] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,#5139ED,transparent_75%)] opacity-25 blur-3xl" />
-        <div className="absolute right-0 bottom-[-160px] h-[420px] w-[520px] rounded-full bg-[radial-gradient(closest-side,#2BB673,transparent_70%)] opacity-15 blur-3xl" />
+        <div className="absolute left-1/3 top-0 h-[520px] w-[900px] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,#5139ED,transparent_75%)] opacity-20 blur-3xl" />
       </div>
 
       <div className="relative mx-auto max-w-7xl px-6 pt-16 pb-16 lg:pt-20 lg:pb-24">
