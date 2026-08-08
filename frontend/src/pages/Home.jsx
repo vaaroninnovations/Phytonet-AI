@@ -1096,7 +1096,6 @@ export default function Home() {
       <ScreenshotSection />
       <HowItWorks />
       <Trust />
-      <Pricing />
       <FAQ />
       <FinalCTA />
     </main>
