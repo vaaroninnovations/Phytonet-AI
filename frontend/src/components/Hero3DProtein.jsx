@@ -35,7 +35,13 @@ function baseCartoonColor(atom) {
   return `rgb(${r},${g},${b})`;
 }
 
-const Hero3DProtein = forwardRef(function Hero3DProtein({ autoRotate = true, interactive = true } = {}, ref) {
+const Hero3DProtein = forwardRef(function Hero3DProtein({
+  autoRotate = true,
+  interactive = true,
+  zoom = 1.35,
+  showLigand = true,
+  cartoonThickness = 0.55,
+} = {}, ref) {
   const hostRef   = useRef(null);
   const viewerRef = useRef(null);
   const rafRef    = useRef(null);
@@ -47,15 +53,17 @@ const Hero3DProtein = forwardRef(function Hero3DProtein({ autoRotate = true, int
     viewer.setStyle({}, {});
     viewer.setStyle(
       { hetflag: false },
-      { cartoon: { colorfunc: baseCartoonColor, thickness: 0.55, opacity: 1.0 } }
+      { cartoon: { colorfunc: baseCartoonColor, thickness: cartoonThickness, opacity: 1.0 } }
     );
-    viewer.setStyle(
-      { hetflag: true, not: { resn: SOLVENTS } },
-      {
-        stick:  { radius: 0.22, colorscheme: "default" },
-        sphere: { scale: 0.28,  colorscheme: "default" },
-      }
-    );
+    if (showLigand) {
+      viewer.setStyle(
+        { hetflag: true, not: { resn: SOLVENTS } },
+        {
+          stick:  { radius: 0.22, colorscheme: "default" },
+          sphere: { scale: 0.28,  colorscheme: "default" },
+        }
+      );
+    }
   };
 
   /* ── Highlight modes (called from the parent via ref) ────────── */
@@ -161,7 +169,7 @@ const Hero3DProtein = forwardRef(function Hero3DProtein({ autoRotate = true, int
         viewer.addModel(pdbText, "pdb");
         applyBaseStyle(viewer);
         viewer.zoomTo();
-        viewer.zoom(1.35);
+        viewer.zoom(zoom);
         viewer.render();
 
         const spin = () => {
