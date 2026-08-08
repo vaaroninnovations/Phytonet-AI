@@ -151,6 +151,7 @@ function AnchorLabel({ Icon, label, className = "", accent = "#2BB673", testid, 
 /* ─────────── Rich detail cards ─────────── */
 function DetailCard({
   Icon, label, value, valueColor = "#1E8A55", sub, cta = "View",
+  tint = "rgba(43,182,115,0.12)",       // subtle glass tint on the icon chip
   className = "", testid, delay = 0,
   onHoverEnter, onHoverLeave,
 }) {
@@ -162,22 +163,27 @@ function DetailCard({
       transition={{ duration: 0.6, delay }}
       onMouseEnter={onHoverEnter}
       onMouseLeave={onHoverLeave}
-      whileHover={{ y: -3, boxShadow: "0 18px 40px rgba(15,14,36,0.22)" }}
-      className={`absolute z-30 w-[176px] cursor-pointer rounded-xl border border-[#E7E7F3] bg-white/95 backdrop-blur-sm p-3 shadow-[0_12px_30px_rgba(15,14,36,0.12)] transition-shadow ${className}`}
+      whileHover={{ y: -3 }}
+      className={`absolute z-30 w-[196px] cursor-pointer rounded-2xl border border-white/70 bg-white/95 backdrop-blur-md p-3.5 shadow-[0_16px_40px_rgba(15,14,36,0.28),0_2px_6px_rgba(15,14,36,0.10)] transition-shadow hover:shadow-[0_22px_50px_rgba(15,14,36,0.36)] ${className}`}
     >
-      <div className="flex items-center gap-1.5 text-[10.5px] font-body font-semibold uppercase tracking-[0.12em] text-[#64748B]">
-        <Icon className="h-3.5 w-3.5" />
+      <div className="flex items-center gap-2 text-[10.5px] font-body font-semibold uppercase tracking-[0.14em] text-[#64748B]">
+        <span
+          className="grid h-6 w-6 place-items-center rounded-md"
+          style={{ background: tint, color: valueColor }}
+        >
+          <Icon className="h-3.5 w-3.5" />
+        </span>
         {label}
       </div>
-      <div className="mt-1.5 font-headline text-[16px] font-bold leading-tight" style={{ color: valueColor }}>
+      <div className="mt-2 font-headline text-[18px] font-bold leading-tight" style={{ color: valueColor }}>
         {value}
       </div>
       {sub && (
-        <div className="mt-0.5 font-body text-[10.5px] text-[#64748B]">{sub}</div>
+        <div className="mt-0.5 font-body text-[11px] text-[#64748B]">{sub}</div>
       )}
       <button
         type="button"
-        className="mt-2 inline-flex items-center gap-1 font-body text-[11px] font-semibold hover:underline"
+        className="mt-2.5 inline-flex items-center gap-1 font-body text-[11.5px] font-semibold hover:underline"
         style={{ color: valueColor }}
       >
         {cta} <ArrowRight className="h-3 w-3" />
