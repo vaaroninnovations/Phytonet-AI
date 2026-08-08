@@ -165,6 +165,64 @@ def _is_academic_email(email: Optional[str]) -> bool:
     return any(domain.endswith(sfx) for sfx in ACADEMIC_EMAIL_SUFFIXES)
 
 
+# ── Promo codes (first-time buyer discounts) ───────────────────────
+# Kept in-code for the first tier of codes so we can ship without an admin UI.
+# When we outgrow this, migrate to a `promo_codes` collection + admin CRUD.
+PROMO_CODES = {
+    "RESEARCH20": {
+        "id": "RESEARCH20",
+        "kind": "first_bundle",              # only redeemable on the user's FIRST bundle purchase
+        "percent_off": 20,
+        "applies_to_kinds": ("bundle",),      # bundles only — not subscription/enterprise/student
+        "description": "20% off your first PhytoNet AI bundle. Welcome to the community!",
+        "active": True,
+    },
+}
+
+def _resolve_promo(code: Optional[str]) -> Optional[dict]:
+    """Case-insensitive lookup that ignores whitespace. Returns None if unknown/inactive."""
+    if not code:
+        return None
+    normalized = code.strip().upper()
+    promo = PROMO_CODES.get(normalized)
+    if not promo or not promo.get("active"):
+        return None
+    return promo
+
+
+async def _promo_eligibility(db, promo: dict, user_doc: dict, plan: dict) -> tuple[bool, str]:
+    """Check whether `promo` is redeemable by `user_doc` on `plan` right now.
+
+    Returns (ok, reason). `reason` is empty on success and a user-facing
+    message on failure ("already used", "not on this plan", etc.).
+    """
+    if plan.get("kind") not in promo.get("applies_to_kinds", ()):
+        return False, "This promo only applies to one-time bundle purchases."
+    if promo["kind"] == "first_bundle":
+        # First-purchase gate — reject if user has ever purchased or redeemed.
+        if int(user_doc.get("nodes_lifetime_purchased") or 0) > 0:
+            return False, "This promo is only valid on your first purchase."
+        prior = await db["promo_redemptions"].find_one({
+            "user_id": str(user_doc["_id"]),
+            "promo_id": promo["id"],
+        })
+        if prior:
+            return False, "You've already used this promo."
+    return True, ""
+
+
+def _apply_promo_discount(amount_paise: int, promo: dict) -> int:
+    """Apply the promo's percent_off / flat discount to a paise amount.
+
+    Returns the discounted amount (never below Razorpay's 100-paise floor).
+    """
+    if promo.get("percent_off"):
+        amount_paise = int(round(amount_paise * (100 - int(promo["percent_off"])) / 100.0))
+    elif promo.get("flat_off_inr"):
+        amount_paise = max(0, amount_paise - int(promo["flat_off_inr"]) * 100)
+    return max(100, amount_paise)  # Razorpay min = 100 paise (₹1).
+
+
 def _pro_status_from_user(user_doc: dict) -> dict:
     """Return the user's Pro subscription state for the frontend badge / gating.
 
@@ -339,6 +397,7 @@ class ChargePayload(BaseModel):
 
 class PurchaseIntentPayload(BaseModel):
     plan_id: str = Field(..., min_length=2, max_length=32)
+    promo_code: Optional[str] = Field(default=None, max_length=32)
 
 
 class VerifyPaymentPayload(BaseModel):
@@ -353,6 +412,11 @@ class ContactSalesPayload(BaseModel):
     role: Optional[str] = Field(default=None, max_length=100)
     team_size: Optional[str] = Field(default=None, max_length=50)
     message: Optional[str] = Field(default=None, max_length=2000)
+
+
+class PromoPreviewPayload(BaseModel):
+    code: str = Field(min_length=1, max_length=32)
+    plan_id: str = Field(min_length=1, max_length=32)
 
 
 def build_router(db, get_current_user):
@@ -870,6 +934,20 @@ def build_router(db, get_current_user):
                 detail="Student plan requires a verified academic email address (.edu / .ac.in / .ac.uk).",
             )
 
+        # ── Promo code validation + discount ──
+        promo = _resolve_promo(payload.promo_code)
+        promo_info: Optional[dict] = None
+        applied_discount_paise = 0
+        if payload.promo_code and not promo:
+            raise HTTPException(status_code=400, detail="Invalid or expired promo code.")
+        if promo:
+            _u = await _ensure_node_fields(user)
+            ok, reason = await _promo_eligibility(db, promo, _u, plan)
+            if not ok:
+                raise HTTPException(status_code=400, detail=reason)
+            promo_info = {"id": promo["id"], "percent_off": promo.get("percent_off"),
+                          "flat_off_inr": promo.get("flat_off_inr")}
+
         client = _razorpay_client()
         if client is None:
             raise HTTPException(
@@ -878,6 +956,10 @@ def build_router(db, get_current_user):
             )
 
         amount_paise = int(plan["price_inr"]) * 100
+        original_paise = amount_paise
+        if promo:
+            amount_paise = _apply_promo_discount(amount_paise, promo)
+            applied_discount_paise = original_paise - amount_paise
         if amount_paise < 100:  # Razorpay minimum
             raise HTTPException(status_code=400, detail="Plan amount below Razorpay minimum (100 paise).")
 
@@ -893,6 +975,9 @@ def build_router(db, get_current_user):
             "nodes": plan["nodes"],
             "amount_inr": plan["price_inr"],
             "amount_paise": amount_paise,
+            "original_amount_paise": original_paise,
+            "discount_paise": applied_discount_paise,
+            "promo_id": (promo or {}).get("id"),
             "status": "created",
             "created_at": now,
         })
@@ -937,12 +1022,44 @@ def build_router(db, get_current_user):
             "plan": plan,
             "order_id": order["id"],
             "amount": amount_paise,
+            "original_amount": original_paise,
+            "discount": applied_discount_paise,
+            "promo": promo_info,
             "currency": "INR",
             "razorpay_key_id": os.environ["RAZORPAY_KEY_ID"],
             "prefill": {
                 "name": " ".join(x for x in [user.get("first_name"), user.get("last_name")] if x) or user.get("email", ""),
                 "email": user.get("email", ""),
             },
+        }
+
+    # ─────────────────── Promo validation (preview) ────────────────────
+    @router.post("/promo/validate")
+    async def promo_validate(payload: PromoPreviewPayload,
+                             user=Depends(get_current_user)):
+        """Preview a promo code before checkout. Returns the discounted amount
+        so the pricing UI can show "Was ₹500, Now ₹400 (20% off)" before the
+        user commits to Razorpay checkout."""
+        promo = _resolve_promo(payload.code)
+        if not promo:
+            raise HTTPException(status_code=404, detail="Invalid or expired promo code.")
+        plan = next((p for p in PRICING_PLANS if p["id"] == payload.plan_id), None)
+        if not plan:
+            raise HTTPException(status_code=404, detail=f"Unknown plan '{payload.plan_id}'")
+        _u = await _ensure_node_fields(user)
+        ok, reason = await _promo_eligibility(db, promo, _u, plan)
+        if not ok:
+            raise HTTPException(status_code=400, detail=reason)
+        original_paise = int(plan["price_inr"]) * 100
+        discounted_paise = _apply_promo_discount(original_paise, promo)
+        return {
+            "code": promo["id"],
+            "description": promo.get("description"),
+            "percent_off": promo.get("percent_off"),
+            "flat_off_inr": promo.get("flat_off_inr"),
+            "original_inr":  original_paise // 100,
+            "final_inr":     discounted_paise // 100,
+            "savings_inr":   (original_paise - discounted_paise) // 100,
         }
 
     @router.post("/verify-payment")
@@ -1046,6 +1163,22 @@ def build_router(db, get_current_user):
                 "paid_at": now,
             }},
         )
+        # ── Record promo redemption (idempotent — this row is the ledger). ──
+        if intent.get("promo_id"):
+            try:
+                await db["promo_redemptions"].insert_one({
+                    "user_id":  str(user["_id"]),
+                    "promo_id": intent["promo_id"],
+                    "plan_id":  intent.get("plan_id"),
+                    "intent_id": str(intent["_id"]),
+                    "razorpay_order_id": payload.razorpay_order_id,
+                    "discount_paise": int(intent.get("discount_paise") or 0),
+                    "at": now,
+                })
+            except Exception:
+                # Non-fatal — the user still gets their nodes even if we
+                # fail to record the redemption row.
+                pass
 
         # Re-read the user so we can return their fresh Pro status.
         fresh = upd or await users.find_one({"_id": user["_id"]})

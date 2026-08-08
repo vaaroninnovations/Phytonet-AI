@@ -108,8 +108,10 @@ export const chargeNodes = (payload) =>
 export const getNodeHistory = (params = {}) =>
   api.get("/nodes/history", { params }).then((r) => r.data);
 export const getNodePricing = () => api.get("/nodes/pricing").then((r) => r.data);
-export const createPurchaseIntent = (plan_id) =>
-  api.post("/nodes/purchase-intent", { plan_id }).then((r) => r.data);
+export const createPurchaseIntent = (plan_id, promo_code) =>
+  api.post("/nodes/purchase-intent", { plan_id, promo_code }).then((r) => r.data);
+export const validatePromo = (code, plan_id) =>
+  api.post("/nodes/promo/validate", { code, plan_id }).then((r) => r.data);
 export const verifyPayment = (payload) =>
   api.post("/nodes/verify-payment", payload).then((r) => r.data);
 export const contactSales = (payload) =>

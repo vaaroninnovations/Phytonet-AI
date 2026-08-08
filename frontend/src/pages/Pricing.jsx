@@ -6,13 +6,13 @@ import { useEffect, useState, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Check, Sparkles, Wallet, GraduationCap, Zap, Building2, Loader2,
-  ArrowRight, HelpCircle, Star, TrendingUp, Users,
+  ArrowRight, HelpCircle, Star, TrendingUp, Users, Tag, Check as CheckIcon, X as XIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { useNodes } from "@/context/NodeContext";
 import { getNodePricing, createPurchaseIntent, verifyPayment,
-         createSubscription, cancelSubscription } from "@/lib/api";
+         createSubscription, cancelSubscription, validatePromo } from "@/lib/api";
 import { openRazorpayCheckout, openRazorpaySubscription } from "@/lib/razorpay";
 import ContactSalesModal from "@/components/pricing/ContactSalesModal";
 import { GoldenLeaf } from "@/components/nodes/NodeBadge";
@@ -31,7 +31,7 @@ const TONE_CLASS = {
   slate:   { badge: "bg-slate-100 text-slate-700",     ring: "ring-slate-200",   accent: "text-slate-600"   },
 };
 
-function PlanCard({ plan, onBuy, onContact, busy, isAcademic, currentPlanId }) {
+function PlanCard({ plan, onBuy, onContact, busy, isAcademic, currentPlanId, promo }) {
   const kind = plan.kind || "bundle";
   const meta = KIND_META[kind] || KIND_META.bundle;
   const tone = TONE_CLASS[meta.tone];
@@ -41,6 +41,11 @@ function PlanCard({ plan, onBuy, onContact, busy, isAcademic, currentPlanId }) {
   const isActivePro = currentPlanId === plan.id;
   const disabledReason = plan.requires_academic_email && !isAcademic
     ? "Requires .edu / .ac.in / .ac.uk email"
+    : null;
+  // Only bundles (not subscription/enterprise/student) get the promo discount.
+  const promoApplies = promo && kind === "bundle";
+  const discountedInr = promoApplies
+    ? Math.round(plan.price_inr * (100 - (promo.percent_off || 0)) / 100)
     : null;
   return (
     <div
@@ -97,9 +102,21 @@ function PlanCard({ plan, onBuy, onContact, busy, isAcademic, currentPlanId }) {
               <span className="font-headline text-4xl font-bold text-[#0F172A]">{plan.nodes}</span>
               <span className="text-[12px] text-[#64748B]">nodes</span>
             </div>
-            <div className="mt-1 text-[22px] font-bold text-[#0F172A]">
-              ₹{plan.price_inr.toLocaleString()}
-              {perNode && <span className="ml-2 text-[12px] font-normal text-[#94A3B8]">₹{perNode}/node</span>}
+            <div className="mt-1 flex items-baseline flex-wrap gap-1.5">
+              {promoApplies ? (
+                <>
+                  <span className="text-[22px] font-bold text-emerald-600">₹{discountedInr.toLocaleString()}</span>
+                  <span className="text-[12.5px] text-slate-400 line-through">₹{plan.price_inr.toLocaleString()}</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider rounded-full bg-emerald-100 text-emerald-700 px-1.5 py-0.5">
+                    -{promo.percent_off}% ({promo.code})
+                  </span>
+                </>
+              ) : (
+                <span className="text-[22px] font-bold text-[#0F172A]">
+                  ₹{plan.price_inr.toLocaleString()}
+                  {perNode && <span className="ml-2 text-[12px] font-normal text-[#94A3B8]">₹{perNode}/node</span>}
+                </span>
+              )}
             </div>
           </>
         )}
@@ -205,12 +222,18 @@ function FAQ() {
 
 export default function Pricing() {
   const { user, openModal } = useAuth();
-  const { pro, academicEmailEligible, refresh, isPro } = useNodes();
+  const { pro, academicEmailEligible, refresh, isPro, lifetimePurchased } = useNodes();
   const [plans, setPlans] = useState([]);
   const [busy, setBusy] = useState(null);
   const [salesModal, setSalesModal] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [promoInput, setPromoInput] = useState("");
+  const [promo, setPromo] = useState(null);         // { code, percent_off, ... }
+  const [promoErr, setPromoErr] = useState(null);
+  const [promoBusy, setPromoBusy] = useState(false);
   const navigate = useNavigate();
+  // First-time buyer gets the RESEARCH20 offer — hide the banner once they buy.
+  const isFirstTime = user && (lifetimePurchased ?? 0) === 0;
 
   useEffect(() => {
     getNodePricing()
@@ -218,6 +241,30 @@ export default function Pricing() {
       .catch(() => setPlans([]))
       .finally(() => setLoading(false));
   }, []);
+
+  const applyPromo = async (planIdHint) => {
+    if (!promoInput.trim()) return;
+    if (!user) { openModal("login"); return; }
+    // Validate against the Research bundle by default (most popular). The
+    // backend re-validates on checkout against the exact plan being purchased.
+    const bundle = plans.find((p) => p.id === (planIdHint || "research"))
+                || plans.find((p) => p.kind === "bundle");
+    if (!bundle) return;
+    setPromoBusy(true); setPromoErr(null);
+    try {
+      const info = await validatePromo(promoInput.trim(), bundle.id);
+      setPromo(info);
+      toast.success(`Promo applied — ${info.percent_off}% off your first bundle!`);
+    } catch (e) {
+      setPromo(null);
+      const msg = e?.response?.data?.detail || "Invalid promo code";
+      setPromoErr(msg);
+    } finally {
+      setPromoBusy(false);
+    }
+  };
+
+  const clearPromo = () => { setPromo(null); setPromoInput(""); setPromoErr(null); };
 
   const grouped = useMemo(() => {
     const buckets = { student: [], bundle: [], subscription: [], enterprise: [] };
@@ -254,7 +301,7 @@ export default function Pricing() {
         return;
       }
       // ── Bundle / Student flow: one-time Razorpay Order ──
-      const intent = await createPurchaseIntent(plan.id);
+      const intent = await createPurchaseIntent(plan.id, promo?.code);
       await openRazorpayCheckout({
         intent,
         onSuccess: async (resp) => {
@@ -264,12 +311,15 @@ export default function Pricing() {
               razorpay_payment_id: resp.razorpay_payment_id,
               razorpay_signature:  resp.razorpay_signature,
             });
+            const savedMsg = intent.discount > 0
+              ? ` (saved ₹${Math.round(intent.discount / 100)})` : "";
             toast.success(
               r.already_verified ? "Payment already verified"
-                                 : `Purchase successful — ${r.credited} nodes added.`,
+                                 : `Purchase successful — ${r.credited} nodes added${savedMsg}.`,
               { description: `New balance: ${r.balance_after} nodes`, duration: 6000 },
             );
             refresh?.();
+            clearPromo();     // one-shot code — clear after use
             setBusy(null);
           } catch (e) {
             toast.error(e?.response?.data?.detail || "Payment received but verification failed. Please contact support.");
@@ -311,6 +361,90 @@ export default function Pricing() {
           </div>
         </div>
       </section>
+
+      {/* First-time buyer banner — surfaces the RESEARCH20 promo prominently.
+          Hidden once the user has any purchase history, or after they've
+          successfully applied the code. Guests see it too — they get prompted
+          to sign in when they click Apply. */}
+      {isFirstTime !== false && !promo && (
+        <div className="mx-auto max-w-6xl px-6 pb-2">
+          <div data-testid="pricing-promo-banner"
+               className="relative flex flex-col md:flex-row items-start md:items-center gap-4 rounded-2xl border border-dashed border-fuchsia-300 bg-gradient-to-r from-fuchsia-50 via-white to-white p-4">
+            <div className="flex items-center gap-3 flex-1">
+              <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-fuchsia-500 to-[#5139ED] text-white">
+                <Tag className="h-4 w-4" />
+              </span>
+              <div>
+                <div className="text-[13px] font-bold text-[#0F172A]">
+                  First-time buyer? Save 20% with code{" "}
+                  <button
+                    type="button"
+                    data-testid="pricing-promo-fill"
+                    onClick={() => setPromoInput("RESEARCH20")}
+                    className="mx-0.5 rounded-md bg-fuchsia-100 px-1.5 py-0.5 font-mono text-[12px] font-bold text-fuchsia-700 hover:bg-fuchsia-200"
+                  >RESEARCH20</button>
+                </div>
+                <div className="text-[11.5px] text-[#4B5563]">
+                  Valid once per account on any one-time bundle. Applied automatically at checkout.
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 w-full md:w-auto">
+              <input
+                data-testid="pricing-promo-input"
+                type="text"
+                value={promoInput}
+                onChange={(e) => { setPromoInput(e.target.value.toUpperCase()); setPromoErr(null); }}
+                placeholder="Enter code"
+                className="flex-1 md:w-40 rounded-lg border border-[#E7E7F3] bg-white px-3 py-2 text-[13px] font-mono uppercase text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#5139ED] focus:outline-none focus:ring-2 focus:ring-[#5139ED]/20"
+              />
+              <button
+                type="button"
+                data-testid="pricing-promo-apply"
+                onClick={() => applyPromo()}
+                disabled={promoBusy || !promoInput.trim()}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[#0F172A] px-4 py-2 text-[12.5px] font-bold text-white hover:bg-[#111827] disabled:opacity-50 transition"
+              >
+                {promoBusy ? "…" : "Apply"}
+              </button>
+            </div>
+          </div>
+          {promoErr && (
+            <div data-testid="pricing-promo-error"
+                 className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-rose-50 px-3 py-1.5 text-[12px] text-rose-700">
+              <XIcon className="h-3 w-3" /> {promoErr}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Promo applied — success card summarising the discount */}
+      {promo && (
+        <div className="mx-auto max-w-6xl px-6 pb-2">
+          <div data-testid="pricing-promo-applied"
+               className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white p-4">
+            <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500 text-white">
+              <CheckIcon className="h-5 w-5" />
+            </span>
+            <div className="flex-1">
+              <div className="text-[13px] font-bold text-[#0F172A]">
+                Promo <span className="font-mono text-emerald-700">{promo.code}</span> applied — you'll save{" "}
+                <strong>₹{promo.savings_inr?.toLocaleString?.() || promo.savings_inr}</strong>{" "}
+                ({promo.percent_off}% off) on your first bundle.
+              </div>
+              <div className="text-[11.5px] text-[#4B5563]">
+                Discounted price shows automatically at checkout. Not valid on subscription or enterprise plans.
+              </div>
+            </div>
+            <button
+              type="button"
+              data-testid="pricing-promo-remove"
+              onClick={clearPromo}
+              className="text-[12px] font-semibold text-emerald-700 hover:underline"
+            >Remove</button>
+          </div>
+        </div>
+      )}
 
       {/* Pro banner if user is Pro */}
       {isPro && (
@@ -357,7 +491,7 @@ export default function Pricing() {
             {[...grouped.student, ...grouped.bundle].map((p) => (
               <PlanCard key={p.id} plan={p} onBuy={buy} onContact={setSalesModal}
                         busy={busy} isAcademic={academicEmailEligible}
-                        currentPlanId={pro?.plan_id} />
+                        currentPlanId={pro?.plan_id} promo={promo} />
             ))}
           </div>
         )}
@@ -373,7 +507,7 @@ export default function Pricing() {
           {[...grouped.subscription, ...grouped.enterprise].map((p) => (
             <PlanCard key={p.id} plan={p} onBuy={buy} onContact={setSalesModal}
                       busy={busy} isAcademic={academicEmailEligible}
-                      currentPlanId={pro?.plan_id} />
+                      currentPlanId={pro?.plan_id} promo={promo} />
           ))}
         </div>
       </section>
