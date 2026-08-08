@@ -80,7 +80,7 @@ export default function SaveProjectMenu() {
           <ChevronDown className="h-3 w-3" />
         </button>
         {open && (
-          <div data-testid="header-save-menu" className="absolute right-0 mt-2 w-64 overflow-hidden rounded-2xl border border-[#E7E7F3] bg-white shadow-lg z-50">
+          <div data-testid="header-save-menu" className="absolute right-0 mt-2 w-64 overflow-hidden rounded-2xl border border-[#E7E7F3] bg-white shadow-lg z-[100]">
             <div className="px-4 py-3 border-b border-[#F1F1FA]">
               <p className="text-[10px] font-bold uppercase tracking-widest text-[#64748B]">Current</p>
               <p className="mt-1 text-xs font-semibold text-[#0B0B18] truncate">

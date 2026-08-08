@@ -64,7 +64,7 @@ function AvatarMenu({ user, navigate, logout }) {
       </button>
       {open && (
         <div data-testid="header-menu"
-             className="absolute right-0 top-full mt-1 w-56 overflow-hidden rounded-xl border border-white/10 bg-[#141024] shadow-2xl shadow-black/50 z-50">
+             className="absolute right-0 top-full mt-1 w-56 overflow-hidden rounded-xl border border-white/10 bg-[#141024] shadow-2xl shadow-black/50 z-[100]">
           <div className="border-b border-white/10 px-4 py-3">
             <p className="text-xs font-bold text-slate-100">{user.first_name} {user.last_name}</p>
             <p className="text-[10px] text-slate-400">{user.email}</p>
@@ -100,7 +100,7 @@ export function TabBar({ tabs, activeId, onActivate, onClose }) {
   const navigate = useNavigate();
   return (
     <div data-testid="app-header"
-         className="flex items-center gap-3 border-b border-white/10 bg-black/60 backdrop-blur-xl">
+         className="sticky top-0 z-40 flex items-center gap-3 border-b border-white/10 bg-black/60 backdrop-blur-xl">
       {/* Left — brand */}
       <Link to="/" data-testid="app-brand"
             className="flex-shrink-0 flex items-center gap-2 pl-4 pr-2 py-2.5 hover:opacity-90">

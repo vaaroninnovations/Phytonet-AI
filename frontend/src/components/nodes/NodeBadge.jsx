@@ -92,10 +92,10 @@ export default function NodeBadge() {
 
       {open && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} aria-hidden />
+          <div className="fixed inset-0 z-[90]" onClick={() => setOpen(false)} aria-hidden />
           <div
             data-testid="node-badge-popover"
-            className="absolute right-0 top-full z-50 mt-2 w-72 rounded-2xl border border-[#E7E7F3] bg-white p-3 shadow-[0_18px_40px_-20px_rgba(15,23,42,0.28)]"
+            className="absolute right-0 top-full z-[100] mt-2 w-72 rounded-2xl border border-[#E7E7F3] bg-white p-3 shadow-[0_18px_40px_-20px_rgba(15,23,42,0.28)]"
           >
             <div className="rounded-xl bg-gradient-to-br from-[#FFFBEB] to-white p-3">
               <div className="text-[11px] font-semibold uppercase tracking-wider text-[#B45309]">Current Balance</div>
