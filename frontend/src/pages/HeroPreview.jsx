@@ -42,9 +42,6 @@ export default function HeroPreview() {
               <button className="inline-flex items-center gap-2 rounded-lg bg-[#5139ED] px-5 py-3 text-[13.5px] font-bold text-white">
                 Launch Workspace
               </button>
-              <button className="inline-flex items-center gap-2 rounded-lg border border-[#FAFAFF]/15 bg-[#FAFAFF]/[0.04] px-5 py-3 text-[13.5px] font-semibold text-[#E7E7F3]">
-                Try the AI Assistant
-              </button>
             </div>
           </div>
         </div>

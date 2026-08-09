@@ -7,7 +7,6 @@ import { useNavigate } from "react-router-dom";
 import {
   Beaker, Atom, Dna, Target, Microscope, FlaskConical, Network,
   FileText, LayoutDashboard, Leaf, DollarSign, Book, Home as HomeIcon,
-  Bot,
 } from "lucide-react";
 import {
   CommandDialog, CommandEmpty, CommandGroup, CommandInput,
@@ -17,7 +16,6 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 
 const MODULES = [
-  { icon: Bot,         label: "AI Research Assistant",  path: "/research",            keywords: "ai assistant chat orchestrator" },
   { icon: LayoutDashboard, label: "Workspace",          path: "/app",                 keywords: "workspace tabs" },
   { icon: Leaf,        label: "Plant Database",         path: "/plant-database",      keywords: "plants phytochemicals lotus" },
   { icon: Beaker,      label: "ADMET · Drug-Likeness",  path: "/drug-likeness",       keywords: "admet lipinski swissadme" },

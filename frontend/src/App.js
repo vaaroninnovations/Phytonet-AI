@@ -3,8 +3,6 @@ import { BrowserRouter, Routes, Route, useLocation, Navigate } from "react-route
 import Home from "@/pages/Home";
 import HeroPreview from "@/pages/HeroPreview";
 import PhytoNetAI from "@/pages/PhytoNetAI";
-import ResearchWorkspace from "@/pages/ResearchWorkspace";
-import SharedResearch from "@/pages/SharedResearch";
 import AppWorkspace from "@/pages/AppWorkspace";
 import PlantDatabase from "@/pages/PlantDatabase";
 import DrugLikeness from "@/pages/DrugLikeness";
@@ -96,8 +94,6 @@ function App() {
                       <Route path="/" element={<Home />} />
                       <Route path="/hero-preview" element={<HeroPreview />} />
                       <Route path="/phytonet-ai" element={<PhytoNetAI />} />
-                      <Route path="/research" element={<ResearchWorkspace />} />
-                      <Route path="/research/shared/:slug" element={<SharedResearch />} />
                       <Route path="/app" element={<AppWorkspace />} />
                       <Route path="/workspace" element={<Navigate to="/app" replace />} />
                       <Route path="/plant-database" element={<PlantDatabase />} />

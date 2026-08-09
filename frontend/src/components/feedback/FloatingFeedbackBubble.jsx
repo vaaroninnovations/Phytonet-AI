@@ -20,7 +20,6 @@ const ROUTE_TO_MODULE = [
   ["/molecular-dynamics",            "molecular-dynamics"],
   ["/ai-scientific-report",          "ai-scientific-report"],
   ["/phytonet-ai",                   "phytonet-ai-agent"],
-  ["/research",                      "phytonet-ai-agent"],
   ["/app",                           "phytonet-ai-agent"],
 ];
 
