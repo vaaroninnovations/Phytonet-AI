@@ -32,6 +32,7 @@ const MARKETING = [
   { icon: HomeIcon,   label: "Home",       path: "/",           keywords: "landing marketing" },
   { icon: DollarSign, label: "Pricing",    path: "/pricing",    keywords: "plans nodes bundles" },
   { icon: Book,       label: "Resources",  path: "/resources",  keywords: "databases docs sources" },
+  { icon: Book,       label: "Documentation", path: "/documentation", keywords: "docs technical manual workflow architecture" },
 ];
 
 export default function CommandPalette({ open, onOpenChange }) {

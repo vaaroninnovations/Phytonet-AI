@@ -11,7 +11,7 @@ const NAV = [
   { label: "Home", to: "/" },
   { label: "Resources", to: "/resources" },
   { label: "Pricing", to: "/pricing" },
-  { label: "Docs", to: "/#docs" },
+  { label: "Docs", to: "/documentation" },
 ];
 
 export default function SiteHeader() {
