@@ -96,16 +96,17 @@ export default function ChartStyleDrawer({ open = false, onClose = () => {}, cha
   return (
     <div
       data-testid="chart-style-backdrop"
-      className="fixed inset-0 z-[80] flex justify-end bg-[#0B0B18]/30 backdrop-blur-sm"
+      className="fixed inset-0 z-[80] flex items-start justify-end bg-[#0B0B18]/30 p-4 backdrop-blur-sm"
       onClick={handleCancel}
     >
       <aside
         data-testid="chart-style-drawer"
         onClick={(e) => e.stopPropagation()}
-        className="flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-[#E7E7F3] bg-white shadow-2xl"
+        className="flex w-full max-w-md flex-col overflow-hidden rounded-2xl border border-[#E7E7F3] bg-white shadow-2xl"
+        style={{ maxHeight: "calc(100vh - 2rem)" }}
       >
-        {/* Sticky header */}
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#F1F1FA] bg-white/95 px-4 py-3 backdrop-blur">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-[#F1F1FA] bg-white px-4 py-3">
           <div>
             <p className="font-headline text-[11px] font-bold uppercase tracking-widest text-[#5139ED]">
               Figure customization
@@ -124,7 +125,7 @@ export default function ChartStyleDrawer({ open = false, onClose = () => {}, cha
           </div>
         </div>
 
-        <div className="flex-1 space-y-2.5 px-4 py-4">
+        <div className="space-y-2.5 overflow-y-auto px-4 py-4">
         {/* Scope toggle */}
         <label className="flex items-center gap-3 rounded-xl border border-[#5139ED]/20 bg-[#F5F3FE] p-2.5">
           <Switch
@@ -260,8 +261,8 @@ export default function ChartStyleDrawer({ open = false, onClose = () => {}, cha
         )}
         </div>
 
-        {/* Sticky footer — Reset / Cancel / Apply */}
-        <div className="sticky bottom-0 z-10 flex items-center justify-between gap-2 border-t border-[#F1F1FA] bg-white/95 px-4 py-2.5 backdrop-blur">
+        {/* Footer — Reset / Cancel / Apply */}
+        <div className="flex items-center justify-between gap-2 border-t border-[#F1F1FA] bg-white px-4 py-2.5">
           <button data-testid={applyToAll ? "chart-style-reset" : `chart-style-reset-${chartType}`}
                   onClick={handleResetToDefault}
                   className="inline-flex items-center gap-1.5 rounded-full border border-[#E7E7F3] bg-white px-3 py-2 text-[12px] font-bold text-[#0B0B18] hover:border-[#5139ED]/40">
