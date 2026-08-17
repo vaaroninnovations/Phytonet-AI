@@ -10,7 +10,7 @@
 //     restoring the previously applied configuration.
 //   • Reset clears the per-chart applied override entirely.
 import { useEffect, useMemo, useState } from "react";
-import { Palette, RotateCcw, X, Grid, Type as TypeIcon, LayoutGrid, Check } from "lucide-react";
+import { Palette, RotateCcw, X, Grid, Type as TypeIcon, LayoutGrid, Check, ChevronDown } from "lucide-react";
 import { useChartStyle, THEMES, CHART_TYPES, schemaFor } from "@/context/ChartStyleContext";
 
 export default function ChartStyleDrawer({ open = false, onClose = () => {}, chartType = "global" }) {
@@ -105,12 +105,12 @@ export default function ChartStyleDrawer({ open = false, onClose = () => {}, cha
         className="flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-[#E7E7F3] bg-white shadow-2xl"
       >
         {/* Sticky header */}
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#F1F1FA] bg-white/95 px-6 py-4 backdrop-blur">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#F1F1FA] bg-white/95 px-4 py-3 backdrop-blur">
           <div>
             <p className="font-headline text-[11px] font-bold uppercase tracking-widest text-[#5139ED]">
               Figure customization
             </p>
-            <h2 className="font-headline mt-1 text-[20px] text-[#0B0B18]">
+            <h2 className="font-headline mt-0.5 text-[17px] text-[#0B0B18]">
               {chartMeta?.label || "Figure style"}
             </h2>
           </div>
@@ -124,9 +124,9 @@ export default function ChartStyleDrawer({ open = false, onClose = () => {}, cha
           </div>
         </div>
 
-        <div className="flex-1 space-y-5 px-6 py-5">
+        <div className="flex-1 space-y-2.5 px-4 py-4">
         {/* Scope toggle */}
-        <label className="flex items-center gap-3 rounded-2xl border border-[#5139ED]/20 bg-[#F5F3FE] p-3">
+        <label className="flex items-center gap-3 rounded-xl border border-[#5139ED]/20 bg-[#F5F3FE] p-2.5">
           <Switch
             testid="chart-style-apply-all"
             checked={applyToAll}
@@ -141,8 +141,8 @@ export default function ChartStyleDrawer({ open = false, onClose = () => {}, cha
             <p className="text-[12px] font-bold text-[#0B0B18]">Apply to all figures in this project</p>
             <p className="mt-0.5 text-[10.5px] leading-snug text-[#64748B]">
               {applyToAll
-                ? "Changes will propagate to every figure globally on Apply."
-                : "Changes will apply only to this figure on Apply."}
+                ? "Changes propagate to every figure globally on Apply."
+                : "Changes apply only to this figure on Apply."}
             </p>
           </div>
         </label>
@@ -174,7 +174,7 @@ export default function ChartStyleDrawer({ open = false, onClose = () => {}, cha
         )}
 
         {/* Colors */}
-        <Section title="Colors">
+        <Section title="Colors" defaultOpen>
           {has("colors", "node")       && <ColorRow label={chartType === "admet" ? "Fill" : "Node"} testid={`${scope}-color-node`}  value={val("nodeColor") || style.node}      onChange={(v) => write({ nodeColor: v })} />}
           {has("colors", "edge")       && <ColorRow label="Edge"        testid={`${scope}-color-edge`}  value={val("edgeColor") || style.edge}      onChange={(v) => write({ edgeColor: v })} />}
           {has("colors", "background") && <ColorRow label="Background"  testid={`${scope}-color-bg`}    value={val("backgroundColor") || style.background} onChange={(v) => write({ backgroundColor: v })} />}
@@ -261,7 +261,7 @@ export default function ChartStyleDrawer({ open = false, onClose = () => {}, cha
         </div>
 
         {/* Sticky footer — Reset / Cancel / Apply */}
-        <div className="sticky bottom-0 z-10 flex items-center justify-between gap-2 border-t border-[#F1F1FA] bg-white/95 px-6 py-3 backdrop-blur">
+        <div className="sticky bottom-0 z-10 flex items-center justify-between gap-2 border-t border-[#F1F1FA] bg-white/95 px-4 py-2.5 backdrop-blur">
           <button data-testid={applyToAll ? "chart-style-reset" : `chart-style-reset-${chartType}`}
                   onClick={handleResetToDefault}
                   className="inline-flex items-center gap-1.5 rounded-full border border-[#E7E7F3] bg-white px-3 py-2 text-[12px] font-bold text-[#0B0B18] hover:border-[#5139ED]/40">
@@ -285,13 +285,27 @@ export default function ChartStyleDrawer({ open = false, onClose = () => {}, cha
 }
 
 /* ── Building blocks ────────────────────────────────────────────────── */
-function Section({ title, icon, children }) {
+// Collapsible accordion — keeps the drawer feeling short even when the
+// figure exposes every section. Only the first section is open by default;
+// clicking the header toggles the rest.
+function Section({ title, icon, children, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
-    <div>
-      <p className="font-headline flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-[#64748B]">
-        {icon}{title}
-      </p>
-      <div className="mt-2.5 space-y-2.5">{children}</div>
+    <div className="rounded-lg border border-[#EEF0F8] bg-white">
+      <button
+        type="button"
+        data-testid={`chart-style-section-${String(title).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between px-3 py-2 text-left"
+      >
+        <span className="font-headline flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-[#64748B]">
+          {icon}{title}
+        </span>
+        <ChevronDown
+          className={`h-3.5 w-3.5 text-[#94A3B8] transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open && <div className="space-y-2 px-3 pb-3">{children}</div>}
     </div>
   );
 }

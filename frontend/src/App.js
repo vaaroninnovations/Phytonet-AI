@@ -2,6 +2,7 @@ import "@/App.css";
 import { BrowserRouter, Routes, Route, useLocation, Navigate } from "react-router-dom";
 import Home from "@/pages/Home";
 import HeroPreview from "@/pages/HeroPreview";
+import DrawerPreview from "@/pages/DrawerPreview";
 import PhytoNetAI from "@/pages/PhytoNetAI";
 import AppWorkspace from "@/pages/AppWorkspace";
 import PlantDatabase from "@/pages/PlantDatabase";
@@ -93,6 +94,7 @@ function App() {
                     <Routes>
                       <Route path="/" element={<Home />} />
                       <Route path="/hero-preview" element={<HeroPreview />} />
+                      <Route path="/drawer-preview" element={<DrawerPreview />} />
                       <Route path="/phytonet-ai" element={<PhytoNetAI />} />
                       <Route path="/app" element={<AppWorkspace />} />
                       <Route path="/workspace" element={<Navigate to="/app" replace />} />
