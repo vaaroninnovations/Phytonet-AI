@@ -15,6 +15,7 @@ import { exportCSV, exportXLSX } from "@/lib/exporters";
 import { useSortable, SortableTh } from "@/lib/useSortable";
 import { useNetwork } from "@/context/NetworkContext";
 import { useWorkflow } from "@/context/WorkflowContext";
+import WorkflowProceedBar from "@/components/WorkflowProceedBar";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -669,54 +670,26 @@ export default function DiseaseTargets() {
         </main>
 
         {!standalone && rows.length > 0 && !loadingTargets && (
-          <div
-            data-testid="disease-proceed-bar"
-            className="pointer-events-none fixed inset-x-0 bottom-6 z-30 flex justify-center px-4"
-          >
-            <div className="pointer-events-auto flex w-full max-w-4xl flex-col items-center justify-between gap-3 rounded-full border border-[#E7E7F3] bg-white/95 px-5 py-3 shadow-[0_20px_60px_-20px_rgba(81,57,237,0.35)] backdrop-blur md:flex-row">
-              <div className="flex flex-1 flex-wrap items-center gap-3">
-                <span className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-[#5139ED] via-[#395AED] to-[#8139ED] text-white">
-                  <Stethoscope className="h-4 w-4" />
-                </span>
-                <div>
-                  <div className="font-heading text-sm font-semibold text-[#0B0B18]">
-                    <span data-testid="disease-selected-count">{selectedCount}</span> of{" "}
-                    {rows.length} disease targets selected
-                  </div>
-                  <div className="text-[11px] text-[#64748B]">
-                    These flow into Network Analysis.
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Link
-                  to="/target-prediction"
-                  className="inline-flex items-center gap-1 rounded-full border border-[#E7E7F3] bg-white px-3.5 py-2 text-xs font-semibold text-[#0B0B18] hover:border-[#5139ED]/40 hover:text-[#5139ED]"
-                >
-                  <ArrowLeft className="h-3.5 w-3.5" />
-                  Back
-                </Link>
-                <button
-                  data-testid="disease-clear"
-                  onClick={() => setSelected({})}
-                  disabled={selectedCount === 0}
-                  className="rounded-full border border-[#E7E7F3] px-4 py-2 text-xs font-semibold text-[#64748B] hover:border-red-500/40 hover:text-red-500 disabled:opacity-40"
-                >
-                  <Trash2 className="mr-1 inline h-3 w-3" />
-                  Clear
-                </button>
-                <button
-                  data-testid="continue-disease-target-identification"
-                  onClick={onContinue}
-                  disabled={selectedCount === 0}
-                  className="inline-flex items-center gap-2 rounded-full bg-[#5139ED] px-5 py-2.5 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 hover:bg-[#4127c9] disabled:pointer-events-none disabled:opacity-50"
-                >
-                  Proceed to Network Analysis
-                  <ArrowRight className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          </div>
+          <WorkflowProceedBar
+            testid="disease-proceed-bar"
+            icon={Stethoscope}
+            label={<><span data-testid="disease-selected-count">{selectedCount}</span> of {rows.length} disease targets selected</>}
+            sub="These flow into Network Analysis."
+            backHref="/target-prediction"
+            secondary={{
+              testid: "disease-clear",
+              label: "Clear",
+              onClick: () => setSelected({}),
+              disabled: selectedCount === 0,
+              icon: Trash2,
+            }}
+            primary={{
+              testid: "continue-disease-target-identification",
+              label: "Proceed to Network Analysis",
+              onClick: onContinue,
+              disabled: selectedCount === 0,
+            }}
+          />
         )}
       </TooltipProvider>
     </WorkflowLayout>
