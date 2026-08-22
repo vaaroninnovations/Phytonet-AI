@@ -1,6 +1,6 @@
 // PhytoNet AI — glassmorphism auth modal (Sign In / Sign Up tabs).
-import { useEffect, useState } from "react";
-import { X, Loader2, LogIn, UserPlus, Github, Mail, ChevronRight, Eye, EyeOff } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { X, Loader2, LogIn, UserPlus, Github, Mail, ChevronRight, Eye, EyeOff, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 
@@ -187,7 +187,10 @@ function SignUpForm({ register, setModalTab }) {
       <Field label="First Name"><input data-testid="signup-first" required value={f.first_name} onChange={upd("first_name")} className={inp} /></Field>
       <Field label="Last Name"><input data-testid="signup-last" required value={f.last_name} onChange={upd("last_name")} className={inp} /></Field>
       <Field label="Email" className="md:col-span-2"><input data-testid="signup-email" type="email" required value={f.email} onChange={upd("email")} className={inp} /></Field>
-      <Field label="Password"><PasswordInput testid="signup-password" autoComplete="new-password" minLength={8} value={f.password} onChange={upd("password")} /></Field>
+      <Field label="Password">
+        <PasswordInput testid="signup-password" autoComplete="new-password" minLength={8} value={f.password} onChange={upd("password")} />
+        <StrengthMeter password={f.password} testid="signup-password-strength" />
+      </Field>
       <Field label="Confirm Password"><PasswordInput testid="signup-confirm" autoComplete="new-password" minLength={8} value={f.confirm} onChange={upd("confirm")} /></Field>
       <Field label="Country"><input data-testid="signup-country" value={f.country} onChange={upd("country")} className={inp} /></Field>
       <Field label="Institution / Organization"><input data-testid="signup-institution" value={f.institution} onChange={upd("institution")} className={inp} /></Field>
@@ -233,32 +236,108 @@ function Field({ label, children, className = "" }) {
 }
 const inp = "brand-focus mt-1 w-full rounded-lg border border-[#E7E7F3] bg-white px-3 py-2 text-sm font-normal normal-case tracking-normal text-[#0B0B18]";
 
-// Password input with an eye-icon show/hide toggle. Toggle is button-typed
-// so it never accidentally submits the surrounding <form>.
+// Password input with an eye-icon show/hide toggle + Caps Lock detection.
+// Toggle is button-typed so it never accidentally submits the form. Caps
+// Lock is detected on every key event while the input has focus; the
+// warning shows only while focused so it never sticks around unhelpfully.
 function PasswordInput({ testid, value, onChange, autoComplete, minLength, required = true }) {
   const [show, setShow] = useState(false);
+  const [caps, setCaps] = useState(false);
+  const [focused, setFocused] = useState(false);
+
+  const onKey = (e) => {
+    // getModifierState works on keydown, keyup and keypress — track live.
+    const on = typeof e.getModifierState === "function" && e.getModifierState("CapsLock");
+    setCaps(on);
+  };
+
   return (
-    <div className="relative">
-      <input
-        data-testid={testid}
-        type={show ? "text" : "password"}
-        required={required}
-        minLength={minLength}
-        autoComplete={autoComplete}
-        value={value}
-        onChange={onChange}
-        className={`${inp} pr-9`}
-      />
-      <button
-        type="button"
-        data-testid={`${testid}-toggle`}
-        onClick={() => setShow((s) => !s)}
-        aria-label={show ? "Hide password" : "Show password"}
-        title={show ? "Hide password" : "Show password"}
-        className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md text-[#64748B] transition-colors hover:bg-[#F8FAFC] hover:text-[#5139ED]"
+    <div>
+      <div className="relative">
+        <input
+          data-testid={testid}
+          type={show ? "text" : "password"}
+          required={required}
+          minLength={minLength}
+          autoComplete={autoComplete}
+          value={value}
+          onChange={onChange}
+          onKeyDown={onKey}
+          onKeyUp={onKey}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          className={`${inp} pr-9`}
+        />
+        <button
+          type="button"
+          data-testid={`${testid}-toggle`}
+          onClick={() => setShow((s) => !s)}
+          aria-label={show ? "Hide password" : "Show password"}
+          title={show ? "Hide password" : "Show password"}
+          className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md text-[#64748B] transition-colors hover:bg-[#F8FAFC] hover:text-[#5139ED]"
+        >
+          {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+        </button>
+      </div>
+      {focused && caps && (
+        <div
+          data-testid={`${testid}-caps`}
+          className="mt-1 inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 text-[10.5px] font-body font-semibold text-amber-700 ring-1 ring-amber-200"
+        >
+          <AlertTriangle className="h-3 w-3" />
+          Caps Lock is on
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Password strength meter — colour-graded bar shown under the Create
+// Account password input as the user types. Purely heuristic (length +
+// character-class diversity + common-pattern penalty) so we don't ship
+// zxcvbn just for this bar. Enough to nudge users towards stronger passwords.
+function scorePassword(pw) {
+  if (!pw) return { score: 0, label: "" };
+  let score = 0;
+  const L = pw.length;
+  if (L >= 8)  score += 1;
+  if (L >= 12) score += 1;
+  if (L >= 16) score += 1;
+  if (/[a-z]/.test(pw)) score += 1;
+  if (/[A-Z]/.test(pw)) score += 1;
+  if (/\d/.test(pw))    score += 1;
+  if (/[^A-Za-z0-9]/.test(pw)) score += 1;
+  // Common patterns penalty
+  if (/^([a-z]+|[A-Z]+|\d+)$/.test(pw)) score -= 1;
+  if (/(password|1234|qwerty|letmein|admin|welcome)/i.test(pw)) score -= 2;
+  const clamped = Math.max(0, Math.min(4, Math.floor(score * 0.6)));
+  const labels = ["Very weak", "Weak", "Fair", "Strong", "Excellent"];
+  return { score: clamped, label: L >= 1 ? labels[clamped] : "" };
+}
+
+function StrengthMeter({ password, testid = "password-strength" }) {
+  const { score, label } = useMemo(() => scorePassword(password || ""), [password]);
+  if (!password) return null;
+  const colors = ["#EF4444", "#F97316", "#F59E0B", "#22C55E", "#059669"];
+  const color = colors[score];
+  return (
+    <div data-testid={testid} className="mt-1.5">
+      <div className="flex gap-1">
+        {[0, 1, 2, 3, 4].map((i) => (
+          <div
+            key={i}
+            className="h-1 flex-1 rounded-full transition-colors"
+            style={{ background: i <= score ? color : "#E7E7F3" }}
+          />
+        ))}
+      </div>
+      <div
+        className="mt-1 text-[10.5px] font-body font-semibold uppercase tracking-widest"
+        style={{ color }}
+        data-testid={`${testid}-label`}
       >
-        {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-      </button>
+        {label}
+      </div>
     </div>
   );
 }

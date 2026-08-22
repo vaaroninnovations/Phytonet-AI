@@ -126,10 +126,15 @@ body {
     font-family: "JetBrains Mono", ui-monospace, monospace;
 }
 
-/* Selection */
+/* Selection — high-contrast so text stays legible on both light and dark
+   surfaces (previously used a near-black colour that vanished on dark bg). */
 ::selection {
-    background: rgba(81, 57, 237, 0.18);
-    color: #12122a;
+    background: rgba(129, 57, 237, 0.55);
+    color: #FAFAFF;
+}
+::-moz-selection {
+    background: rgba(129, 57, 237, 0.55);
+    color: #FAFAFF;
 }
 
 /* Custom scrollbar */
