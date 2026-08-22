@@ -141,6 +141,48 @@ def verification_email_html(app_name: str, verify_link: str, first_name: str = "
 """.strip()
 
 
+def password_reset_email_html(app_name: str, reset_link: str,
+                              first_name: str = "") -> str:
+    """One-shot password reset link. TTL 30 min — the copy warns the reader."""
+    greet = f"Hi {first_name}," if first_name else "Hello,"
+    return f"""
+<!DOCTYPE html>
+<html><body style="font-family:'Inter',Helvetica,Arial,sans-serif;background:#FAFAFF;padding:32px 0;color:#0B0B18;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #E7E7F3;border-radius:16px;overflow:hidden;">
+    <tr><td style="padding:26px 28px;background:linear-gradient(135deg,#5139ED 0%,#395AED 55%,#8139ED 100%);color:#ffffff;">
+      <h1 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-0.01em;">{app_name}</h1>
+      <p style="margin:6px 0 0;font-size:12px;opacity:0.9;">Password reset request</p>
+    </td></tr>
+    <tr><td style="padding:32px 28px;">
+      <p style="font-size:15px;margin:0 0 12px;">{greet}</p>
+      <p style="font-size:14px;line-height:1.55;color:#1E1E33;margin:0 0 20px;">
+        We received a request to reset the password for your {app_name} account.
+        Click the button below to choose a new one.
+      </p>
+      <p style="text-align:center;margin:28px 0;">
+        <a href="{reset_link}"
+           style="display:inline-block;padding:12px 26px;background:#5139ED;color:#ffffff;
+                  text-decoration:none;font-weight:700;font-size:14px;border-radius:999px;">
+          Reset my password
+        </a>
+      </p>
+      <p style="font-size:12px;color:#64748B;margin:16px 0 0;">
+        This link expires in <strong>30 minutes</strong>. If you didn't request a reset,
+        you can safely ignore this message — your password stays the same.
+      </p>
+      <p style="font-size:11px;color:#94A3B8;word-break:break-all;margin:22px 0 0;">
+        Trouble clicking? Paste this into your browser:<br/>{reset_link}
+      </p>
+    </td></tr>
+    <tr><td style="padding:16px 28px;border-top:1px solid #E7E7F3;background:#FAFAFF;">
+      <p style="font-size:11px;color:#94A3B8;margin:0;">© PhytoNet AI · Computational Pharmacology Platform</p>
+    </td></tr>
+  </table>
+</body></html>
+""".strip()
+
+
+
 def welcome_email_html(app_name: str, first_name: str = "",
                        app_url: str = "") -> str:
     """Warm onboarding email sent immediately after signup (email + Google)."""

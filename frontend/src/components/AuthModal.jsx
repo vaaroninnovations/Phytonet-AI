@@ -111,6 +111,12 @@ function SignInForm({ login, setModalTab }) {
   const [remember, setRemember] = useState(true);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  // Forgot-password mode: swaps the sign-in form for a compact "send reset
+  // email" panel without leaving the modal. Auto-fills the current email.
+  const [forgotMode, setForgotMode] = useState(false);
+  const [forgotBusy, setForgotBusy] = useState(false);
+  const [forgotSent, setForgotSent] = useState(false);
+  const [forgotErr, setForgotErr] = useState("");
 
   const submit = async (e) => {
     e.preventDefault();
@@ -119,6 +125,76 @@ function SignInForm({ login, setModalTab }) {
     catch (ex) { setErr(fmtErr(ex)); }
     finally { setBusy(false); }
   };
+
+  const requestReset = async (e) => {
+    e.preventDefault();
+    if (!email) { setForgotErr("Enter the email you registered with."); return; }
+    setForgotBusy(true); setForgotErr("");
+    try {
+      // Backend always returns 200 for enumeration-safety, so we always show
+      // the same success state regardless of whether the email exists.
+      await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/auth/request-password-reset`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email }),
+      });
+      setForgotSent(true);
+    } catch (ex) {
+      setForgotErr(ex?.message || "Could not send reset email. Try again.");
+    } finally {
+      setForgotBusy(false);
+    }
+  };
+
+  if (forgotMode) {
+    return (
+      <form data-testid="forgot-form" onSubmit={requestReset} className="mt-2 space-y-3">
+        <p className="text-[13px] text-[#64748B]">
+          Enter the email you registered with. We'll send you a link to reset your password.
+        </p>
+        <Field label="Email">
+          <input
+            data-testid="forgot-email"
+            type="email"
+            required
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className={inp}
+          />
+        </Field>
+        {forgotSent ? (
+          <div data-testid="forgot-success" className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-800">
+            Check your inbox — if an account exists for <strong>{email}</strong>, a reset link is on its way. The link expires in 30 minutes.
+          </div>
+        ) : (
+          <>
+            {forgotErr && (
+              <p data-testid="forgot-error" className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{forgotErr}</p>
+            )}
+            <button
+              data-testid="forgot-submit"
+              type="submit"
+              disabled={forgotBusy}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#5139ED] via-[#395AED] to-[#8139ED] px-5 py-3 text-sm font-bold uppercase tracking-widest text-white shadow-[0_10px_30px_-10px_rgba(81,57,237,0.6)] disabled:opacity-40"
+            >
+              {forgotBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+              Send reset link
+            </button>
+          </>
+        )}
+        <button
+          type="button"
+          data-testid="forgot-back"
+          onClick={() => { setForgotMode(false); setForgotSent(false); setForgotErr(""); }}
+          className="w-full text-center text-[12px] text-[#64748B] hover:text-[#5139ED]"
+        >
+          ← Back to sign in
+        </button>
+      </form>
+    );
+  }
 
   return (
     <form data-testid="signin-form" onSubmit={submit} className="mt-2 space-y-3">
@@ -134,7 +210,7 @@ function SignInForm({ login, setModalTab }) {
         {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />} Sign In
       </button>
       <div className="flex items-center justify-between text-xs text-[#64748B]">
-        <button type="button" data-testid="signin-forgot" className="hover:text-[#5139ED]">Forgot password?</button>
+        <button type="button" data-testid="signin-forgot" onClick={() => setForgotMode(true)} className="hover:text-[#5139ED]">Forgot password?</button>
         <div className="text-[#94A3B8]">
           Don't have an account?{" "}
           <button data-testid="signin-goto-signup" type="button" onClick={() => setModalTab("signup")} className="font-semibold text-[#5139ED] hover:underline">Create Account</button>

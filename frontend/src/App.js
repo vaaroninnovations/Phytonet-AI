@@ -4,6 +4,7 @@ import Home from "@/pages/Home";
 import HeroPreview from "@/pages/HeroPreview";
 import DrawerPreview from "@/pages/DrawerPreview";
 import Documentation from "@/pages/Documentation";
+import ResetPassword from "@/pages/ResetPassword";
 import PhytoNetAI from "@/pages/PhytoNetAI";
 import AppWorkspace from "@/pages/AppWorkspace";
 import PlantDatabase from "@/pages/PlantDatabase";
@@ -97,6 +98,7 @@ function App() {
                       <Route path="/hero-preview" element={<HeroPreview />} />
                       <Route path="/drawer-preview" element={<DrawerPreview />} />
                       <Route path="/documentation" element={<Documentation />} />
+                      <Route path="/reset-password" element={<ResetPassword />} />
                       <Route path="/phytonet-ai" element={<PhytoNetAI />} />
                       <Route path="/app" element={<AppWorkspace />} />
                       <Route path="/workspace" element={<Navigate to="/app" replace />} />

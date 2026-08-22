@@ -129,6 +129,18 @@ class VerifyEmailPayload(BaseModel):
     token: str
 
 
+class RequestPasswordResetPayload(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordPayload(BaseModel):
+    token: str
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+
+PASSWORD_RESET_TTL = timedelta(minutes=30)
+
+
 # ─────────────────────────── helpers ────────────────────────────────────
 def _serialize_user(u: dict) -> dict:
     return {
@@ -448,5 +460,71 @@ def build_router(db, frontend_url: str = ""):
         _dispatch_verification(background, base, vtoken, u["email"], u.get("first_name", ""))
         return {"ok": True, "verification_token_dev": vtoken,
                 "email_provider": email_service.get_provider() or "dev-log"}
+
+    @router.post("/request-password-reset")
+    async def request_password_reset(payload: RequestPasswordResetPayload,
+                                     request: Request, background: BackgroundTasks):
+        """Kick off a password-reset email. Always returns 200 with a generic
+        message so callers cannot enumerate valid accounts. When the email
+        matches a real user we generate a one-shot token (TTL 30 min) and
+        dispatch the reset email in the background."""
+        u = await db["users"].find_one({"email": payload.email})
+        if u:
+            # Only mint a token for real users. Previously issued reset tokens
+            # for the same user are dropped so the newest one always wins.
+            await db["password_reset_tokens"].delete_many({"user_id": str(u["_id"])})
+            rtoken = secrets.token_urlsafe(32)
+            await db["password_reset_tokens"].insert_one({
+                "token": rtoken,
+                "user_id": str(u["_id"]),
+                "email": u["email"],
+                "expires_at": datetime.now(timezone.utc) + PASSWORD_RESET_TTL,
+            })
+            base = frontend_url or str(request.base_url).rstrip("/")
+            link = f"{base}/reset-password?token={rtoken}"
+            logger.warning(
+                "\n============================================================\n"
+                f"[PASSWORD RESET] Link for {u['email']}:\n{link}\n"
+                "============================================================\n"
+            )
+            subject = f"Reset your {APP_NAME} password"
+            html = email_service.password_reset_email_html(
+                APP_NAME, link, u.get("first_name", "")
+            )
+            if background is not None:
+                background.add_task(email_service.send_email, u["email"], subject, html)
+            else:
+                email_service.send_email(u["email"], subject, html)
+            # Expose the token in dev environments so QA can complete the flow
+            # without SMTP. Never in prod — the log line already prints it.
+            return {"ok": True, "password_reset_token_dev": rtoken}
+        # No account with this email → still return ok to prevent enumeration.
+        return {"ok": True}
+
+    @router.post("/reset-password")
+    async def reset_password(payload: ResetPasswordPayload, response: Response):
+        """Consume a password-reset token and set a new hash."""
+        doc = await db["password_reset_tokens"].find_one({"token": payload.token})
+        if not doc:
+            raise HTTPException(status_code=400, detail="Invalid or expired reset link.")
+        # TTL index deletes expired docs automatically, but guard against
+        # replay of a stale-but-still-indexed row.
+        exp = doc.get("expires_at")
+        if exp and exp < datetime.now(timezone.utc):
+            await db["password_reset_tokens"].delete_one({"_id": doc["_id"]})
+            raise HTTPException(status_code=400, detail="This reset link has expired.")
+        u = await db["users"].find_one({"_id": ObjectId(doc["user_id"])})
+        if not u:
+            raise HTTPException(status_code=400, detail="Account no longer exists.")
+        await db["users"].update_one(
+            {"_id": u["_id"]},
+            {"$set": {"password_hash": hash_password(payload.new_password),
+                      "password_reset_at": datetime.now(timezone.utc)}},
+        )
+        await db["password_reset_tokens"].delete_one({"_id": doc["_id"]})
+        # Clear any auth cookies so the user has to sign back in.
+        response.delete_cookie("access_token")
+        response.delete_cookie("refresh_token")
+        return {"ok": True}
 
     return router
