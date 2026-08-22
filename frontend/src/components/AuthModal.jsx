@@ -1,6 +1,6 @@
 // PhytoNet AI — glassmorphism auth modal (Sign In / Sign Up tabs).
 import { useEffect, useState } from "react";
-import { X, Loader2, LogIn, UserPlus, Github, Mail, ChevronRight } from "lucide-react";
+import { X, Loader2, LogIn, UserPlus, Github, Mail, ChevronRight, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 
@@ -123,7 +123,7 @@ function SignInForm({ login, setModalTab }) {
   return (
     <form data-testid="signin-form" onSubmit={submit} className="mt-2 space-y-3">
       <Field label="Email"><input data-testid="signin-email" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inp} /></Field>
-      <Field label="Password"><input data-testid="signin-password" type="password" required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className={inp} /></Field>
+      <Field label="Password"><PasswordInput testid="signin-password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
       <label className="flex items-center gap-2 text-xs text-[#64748B]">
         <input data-testid="signin-remember" type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="accent-[#5139ED]" />
         Remember me on this device
@@ -187,8 +187,8 @@ function SignUpForm({ register, setModalTab }) {
       <Field label="First Name"><input data-testid="signup-first" required value={f.first_name} onChange={upd("first_name")} className={inp} /></Field>
       <Field label="Last Name"><input data-testid="signup-last" required value={f.last_name} onChange={upd("last_name")} className={inp} /></Field>
       <Field label="Email" className="md:col-span-2"><input data-testid="signup-email" type="email" required value={f.email} onChange={upd("email")} className={inp} /></Field>
-      <Field label="Password"><input data-testid="signup-password" type="password" required minLength={8} value={f.password} onChange={upd("password")} className={inp} /></Field>
-      <Field label="Confirm Password"><input data-testid="signup-confirm" type="password" required minLength={8} value={f.confirm} onChange={upd("confirm")} className={inp} /></Field>
+      <Field label="Password"><PasswordInput testid="signup-password" autoComplete="new-password" minLength={8} value={f.password} onChange={upd("password")} /></Field>
+      <Field label="Confirm Password"><PasswordInput testid="signup-confirm" autoComplete="new-password" minLength={8} value={f.confirm} onChange={upd("confirm")} /></Field>
       <Field label="Country"><input data-testid="signup-country" value={f.country} onChange={upd("country")} className={inp} /></Field>
       <Field label="Institution / Organization"><input data-testid="signup-institution" value={f.institution} onChange={upd("institution")} className={inp} /></Field>
       <Field label="Department (optional)"><input data-testid="signup-department" value={f.department} onChange={upd("department")} className={inp} /></Field>
@@ -232,6 +232,36 @@ function Field({ label, children, className = "" }) {
   );
 }
 const inp = "brand-focus mt-1 w-full rounded-lg border border-[#E7E7F3] bg-white px-3 py-2 text-sm font-normal normal-case tracking-normal text-[#0B0B18]";
+
+// Password input with an eye-icon show/hide toggle. Toggle is button-typed
+// so it never accidentally submits the surrounding <form>.
+function PasswordInput({ testid, value, onChange, autoComplete, minLength, required = true }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="relative">
+      <input
+        data-testid={testid}
+        type={show ? "text" : "password"}
+        required={required}
+        minLength={minLength}
+        autoComplete={autoComplete}
+        value={value}
+        onChange={onChange}
+        className={`${inp} pr-9`}
+      />
+      <button
+        type="button"
+        data-testid={`${testid}-toggle`}
+        onClick={() => setShow((s) => !s)}
+        aria-label={show ? "Hide password" : "Show password"}
+        title={show ? "Hide password" : "Show password"}
+        className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md text-[#64748B] transition-colors hover:bg-[#F8FAFC] hover:text-[#5139ED]"
+      >
+        {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      </button>
+    </div>
+  );
+}
 
 function fmtErr(ex) {
   const d = ex?.response?.data?.detail;

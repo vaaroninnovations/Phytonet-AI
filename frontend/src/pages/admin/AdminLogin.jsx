@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAdminAuth } from "@/context/AdminAuthContext";
-import { ShieldCheck, Lock, Mail, Loader2, KeyRound } from "lucide-react";
+import { ShieldCheck, Lock, Mail, Loader2, KeyRound, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 
 export default function AdminLogin() {
@@ -11,6 +11,7 @@ export default function AdminLogin() {
   const [step, setStep] = useState("credentials"); // credentials | 2fa
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPw, setShowPw] = useState(false);
   const [challenge, setChallenge] = useState(null); // { token, method }
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
@@ -88,11 +89,21 @@ export default function AdminLogin() {
                   <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
                   <input
                     data-testid="admin-password-input"
-                    type="password" autoComplete="current-password" required
+                    type={showPw ? "text" : "password"} autoComplete="current-password" required
                     value={password} onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-10 pr-3 py-2.5 rounded-lg bg-slate-950 border border-slate-800 focus:border-amber-500/50 focus:outline-none text-sm"
+                    className="w-full pl-10 pr-10 py-2.5 rounded-lg bg-slate-950 border border-slate-800 focus:border-amber-500/50 focus:outline-none text-sm"
                     placeholder="••••••••"
                   />
+                  <button
+                    type="button"
+                    data-testid="admin-password-toggle"
+                    onClick={() => setShowPw((s) => !s)}
+                    aria-label={showPw ? "Hide password" : "Show password"}
+                    title={showPw ? "Hide password" : "Show password"}
+                    className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md text-slate-400 hover:bg-slate-800 hover:text-amber-400"
+                  >
+                    {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
                 </div>
               </label>
               {error && (
