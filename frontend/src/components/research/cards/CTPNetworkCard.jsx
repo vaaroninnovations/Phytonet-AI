@@ -157,24 +157,11 @@ export function CTPNetworkCard({ data, message }) {
             "line-color": "#FDE68A", "line-opacity": 0.95, "width": 2.5,
             "z-index": 998 } },
       ],
-      // Concentric 3-tier layout — Pathway (inner) · Target (middle) ·
-      // Compound (outer). Guaranteed non-overlapping, publication-clean.
-      layout: {
-        name: "concentric",
-        concentric: (n) => {
-          const t = n.data("type");
-          if (t === "Pathway")  return 3 + (n.data("degree") || 0);
-          if (t === "Target")   return 2 + (n.data("degree") || 0);
-          return 1 + (n.data("degree") || 0);  // Compound outermost
-        },
-        levelWidth: () => 1,
-        minNodeSpacing: 22,
-        avoidOverlap: true,
-        nodeDimensionsIncludeLabels: true,
-        animate: false,
-        padding: 40,
-        equidistant: false,
-      },
+      // Force-directed cose layout — restored per user preference. Shape
+      // distinction (hexagon/ellipse/diamond) is kept so compound / target /
+      // pathway remain visually differentiated.
+      layout: { name: "cose", nodeRepulsion: 4200, idealEdgeLength: 60,
+                animate: false, padding: 40 },
       textureOnViewport: true, motionBlur: false, pixelRatio: 1,
     });
     cy.autoungrabify(true);

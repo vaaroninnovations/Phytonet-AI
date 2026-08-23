@@ -47,20 +47,11 @@ function NetworkCardImpl({ network }) {
             "curve-style": "bezier",
             "target-arrow-shape": "none" } },
       ],
-      // Concentric layout — compounds on the outer ring, targets in the
-      // centre. Deterministic, never overlaps, always publication-clean
-      // for bipartite compound→target graphs.
-      layout: {
-        name: "concentric",
-        concentric: (n) => (n.data("type") === "compound" ? 1 : 2 + (n.data("degree") || 0)),
-        levelWidth: () => 1,
-        minNodeSpacing: 26,
-        avoidOverlap: true,
-        nodeDimensionsIncludeLabels: true,
-        animate: false,
-        padding: 40,
-        equidistant: false,
-      },
+      // Force-directed cose layout — restored per user preference. Shape
+      // distinction (hexagon vs ellipse) is kept so node types remain
+      // visually differentiated.
+      layout: { name: "cose", nodeRepulsion: 4500, idealEdgeLength: 80,
+                animate: false, padding: 30 },
     });
     cy.autolock(false);
     cy.autoungrabify(true);
