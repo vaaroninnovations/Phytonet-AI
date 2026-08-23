@@ -1,12 +1,31 @@
 // NetworkCard — memoised Cytoscape compound→target graph.
-import { memo, useEffect, useRef } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import cytoscape from "cytoscape";
-import { FileText, ImageDown } from "lucide-react";
+import { FileText, ImageDown, Waves, Target as TargetIcon } from "lucide-react";
 import { downloadCytoscapePublicationPng } from "@/lib/publicationExport";
+
+// Layout presets — the toggle in each network header cycles between them.
+// `cose` = organic force-directed. `concentric` = tidy rings.
+const LAYOUTS = {
+  cose:       { name: "cose", nodeRepulsion: 4500, idealEdgeLength: 80,
+                animate: false, padding: 30 },
+  concentric: {
+    name: "concentric",
+    concentric: (n) => (n.data("type") === "compound" ? 1 : 2 + (n.data("degree") || 0)),
+    levelWidth: () => 1,
+    minNodeSpacing: 26,
+    avoidOverlap: true,
+    nodeDimensionsIncludeLabels: true,
+    animate: false,
+    padding: 40,
+    equidistant: false,
+  },
+};
 
 function NetworkCardImpl({ network }) {
   const ref = useRef(null);
   const cyRef = useRef(null);
+  const [layout, setLayout] = useState("cose");
   useEffect(() => {
     if (!ref.current || !network) return;
     // Only build once. Rerenders with the same nodes/edges (handled by the
@@ -50,14 +69,22 @@ function NetworkCardImpl({ network }) {
       // Force-directed cose layout — restored per user preference. Shape
       // distinction (hexagon vs ellipse) is kept so node types remain
       // visually differentiated.
-      layout: { name: "cose", nodeRepulsion: 4500, idealEdgeLength: 80,
-                animate: false, padding: 30 },
+      layout: LAYOUTS[layout],
     });
     cy.autolock(false);
     cy.autoungrabify(true);
     cyRef.current = cy;
     return () => cy.destroy();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [network]);
+
+  // Live-relayout on toggle without rebuilding the whole cytoscape instance.
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    cy.layout(LAYOUTS[layout]).run();
+    cy.fit(undefined, 20);
+  }, [layout]);
 
   return (
     <div data-testid="network-card"
@@ -67,6 +94,33 @@ function NetworkCardImpl({ network }) {
         <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-300">
           {network.nodes.length} nodes · {network.edges.length} edges
         </span>
+        {/* Layout toggle — organic (cose) ⇄ tidy rings (concentric). */}
+        <div
+          data-testid="network-layout-toggle"
+          className="ml-auto inline-flex overflow-hidden rounded-md border border-white/10 bg-white/5 text-[10.5px] font-semibold text-slate-300"
+        >
+          {[
+            { key: "cose",       Icon: Waves,      label: "Organic",    testid: "network-layout-cose" },
+            { key: "concentric", Icon: TargetIcon, label: "Rings",      testid: "network-layout-concentric" },
+          ].map(({ key, Icon, label, testid }) => (
+            <button
+              key={key}
+              type="button"
+              data-testid={testid}
+              onClick={() => setLayout(key)}
+              title={`${label} layout`}
+              aria-pressed={layout === key}
+              className={`inline-flex items-center gap-1 px-2 py-1 transition-colors ${
+                layout === key
+                  ? "bg-[#5139ED]/25 text-white"
+                  : "hover:bg-white/10"
+              }`}
+            >
+              <Icon size={11} />
+              {label}
+            </button>
+          ))}
+        </div>
         <button
           data-testid="network-download-png"
           onClick={() => {
@@ -76,7 +130,7 @@ function NetworkCardImpl({ network }) {
             const a = document.createElement("a");
             a.href = url; a.download = "compound_target_network.png"; a.click();
           }}
-          className="ml-auto inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[10.5px] font-semibold text-slate-200 hover:bg-white/10">
+          className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[10.5px] font-semibold text-slate-200 hover:bg-white/10">
           <FileText size={10} /> PNG
         </button>
         <button
@@ -89,9 +143,17 @@ function NetworkCardImpl({ network }) {
           <ImageDown size={10} /> Publication PNG
         </button>
       </div>
-      <div className="mt-2 text-[10.5px] text-slate-500 flex items-center gap-3">
-        <span><span className="inline-block h-2.5 w-2.5 rotate-30 bg-[#5139ED] mr-1" style={{ clipPath: "polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)" }} />Compounds (hexagons)</span>
-        <span><span className="inline-block h-2 w-3 rounded-full bg-[#2BB673] mr-1" />Targets (ellipses, larger = more overlaps)</span>
+      <div className="mt-2 text-[10.5px] text-slate-500 flex items-center flex-wrap gap-x-3 gap-y-1">
+        <span><span className="inline-block h-2.5 w-2.5 bg-[#5139ED] mr-1" style={{ clipPath: "polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)" }} />Compounds (hexagons)</span>
+        <span><span className="inline-block h-2 w-3 rounded-full bg-[#2BB673] mr-1" />Targets (ellipses)</span>
+        <span data-testid="network-size-legend" className="inline-flex items-center gap-1 rounded-full bg-white/[0.04] border border-white/10 px-2 py-0.5 text-slate-400">
+          <span className="inline-flex items-center gap-0.5">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#2BB673]/70" />
+            <span className="inline-block h-2 w-2 rounded-full bg-[#2BB673]/85" />
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#2BB673]" />
+          </span>
+          Node size scales with degree
+        </span>
       </div>
       <div ref={ref} data-testid="network-cytoscape"
            className="mt-2 w-full h-[420px] rounded-lg border border-white/5 bg-black/40" />

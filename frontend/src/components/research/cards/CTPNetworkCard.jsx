@@ -2,9 +2,32 @@
 // top-N pathway re-filter sliders and first-degree neighborhood isolation.
 import { useEffect, useMemo, useRef, useState } from "react";
 import cytoscape from "cytoscape";
-import { FileText, FileJson, ImageDown } from "lucide-react";
+import { FileText, FileJson, ImageDown, Waves, Target as TargetIcon } from "lucide-react";
 import { trigger } from "./_helpers";
 import { downloadCytoscapePublicationPng } from "@/lib/publicationExport";
+
+// Layout presets — cose (organic) vs concentric 3-tier rings.
+// Pathway innermost, Target middle, Compound outermost.
+const CTP_LAYOUTS = {
+  cose:       { name: "cose", nodeRepulsion: 4200, idealEdgeLength: 60,
+                animate: false, padding: 40 },
+  concentric: {
+    name: "concentric",
+    concentric: (n) => {
+      const t = n.data("type");
+      if (t === "Pathway") return 3 + (n.data("degree") || 0);
+      if (t === "Target")  return 2 + (n.data("degree") || 0);
+      return 1 + (n.data("degree") || 0);
+    },
+    levelWidth: () => 1,
+    minNodeSpacing: 22,
+    avoidOverlap: true,
+    nodeDimensionsIncludeLabels: true,
+    animate: false,
+    padding: 40,
+    equidistant: false,
+  },
+};
 
 export function CTPNetworkCard({ data, message }) {
   const ref = useRef(null);
@@ -21,6 +44,7 @@ export function CTPNetworkCard({ data, message }) {
   const [topKegg, setTopKegg] = useState(metrics.top_kegg_used ?? 20);
   const [topGo,   setTopGo]   = useState(metrics.top_go_used   ?? 20);
   const [isolatedNodeId, setIsolatedNodeId] = useState(null);
+  const [layout, setLayout] = useState("cose");
 
   const { nodes, edges, liveMetrics } = useMemo(() => {
     if (!raw) {
@@ -160,8 +184,7 @@ export function CTPNetworkCard({ data, message }) {
       // Force-directed cose layout — restored per user preference. Shape
       // distinction (hexagon/ellipse/diamond) is kept so compound / target /
       // pathway remain visually differentiated.
-      layout: { name: "cose", nodeRepulsion: 4200, idealEdgeLength: 60,
-                animate: false, padding: 40 },
+      layout: CTP_LAYOUTS[layout],
       textureOnViewport: true, motionBlur: false, pixelRatio: 1,
     });
     cy.autoungrabify(true);
@@ -174,7 +197,16 @@ export function CTPNetworkCard({ data, message }) {
 
     cyRef.current = cy;
     return () => cy.destroy();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodes, edges]);
+
+  // Re-run layout on toggle without rebuilding the whole cytoscape instance.
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    cy.layout(CTP_LAYOUTS[layout]).run();
+    cy.fit(undefined, 30);
+  }, [layout]);
 
   useEffect(() => {
     const cy = cyRef.current;
@@ -298,7 +330,40 @@ export function CTPNetworkCard({ data, message }) {
         <span><span className="inline-block h-2.5 w-2.5 bg-[#5139ED] mr-1" style={{ clipPath: "polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)" }} />Compounds (hexagons)</span>
         <span><span className="inline-block h-2 w-3 rounded-full bg-[#2BB673] mr-1" />Targets (ellipses)</span>
         <span><span className="inline-block h-2 w-2 rotate-45 bg-[#F5B301] mr-1" />Pathways (diamonds)</span>
+        <span data-testid="ctp-size-legend" className="inline-flex items-center gap-1 rounded-full bg-white/[0.04] border border-white/10 px-2 py-0.5 text-slate-400">
+          <span className="inline-flex items-center gap-0.5">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#c4b5fd]/70" />
+            <span className="inline-block h-2 w-2 rounded-full bg-[#c4b5fd]/85" />
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#c4b5fd]" />
+          </span>
+          Node size scales with degree
+        </span>
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          {/* Layout toggle — cose ⇄ concentric. */}
+          <div
+            data-testid="ctp-layout-toggle"
+            className="inline-flex overflow-hidden rounded-md border border-white/10 bg-white/5 text-[10.5px] font-semibold text-slate-300"
+          >
+            {[
+              { key: "cose",       Icon: Waves,      label: "Organic", testid: "ctp-layout-cose" },
+              { key: "concentric", Icon: TargetIcon, label: "Rings",   testid: "ctp-layout-concentric" },
+            ].map(({ key, Icon, label, testid }) => (
+              <button
+                key={key}
+                type="button"
+                data-testid={testid}
+                onClick={() => setLayout(key)}
+                title={`${label} layout`}
+                aria-pressed={layout === key}
+                className={`inline-flex items-center gap-1 px-2 py-1 transition-colors ${
+                  layout === key ? "bg-[#5139ED]/25 text-white" : "hover:bg-white/10"
+                }`}
+              >
+                <Icon size={11} />
+                {label}
+              </button>
+            ))}
+          </div>
           <button data-testid="ctp-download-nodes-csv" onClick={() => dl("ctp_nodes.csv")}
             className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[10.5px] font-semibold text-slate-200 hover:bg-white/10">
             <FileText size={10} /> nodes.csv
