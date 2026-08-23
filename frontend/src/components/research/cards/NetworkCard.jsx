@@ -1,7 +1,8 @@
 // NetworkCard — memoised Cytoscape compound→target graph.
 import { memo, useEffect, useRef } from "react";
 import cytoscape from "cytoscape";
-import { FileText } from "lucide-react";
+import { FileText, ImageDown } from "lucide-react";
+import { downloadCytoscapePublicationPng } from "@/lib/publicationExport";
 
 function NetworkCardImpl({ network }) {
   const ref = useRef(null);
@@ -27,22 +28,39 @@ function NetworkCardImpl({ network }) {
       ],
       style: [
         { selector: "node[type='compound']", style: {
-            "background-color": "#5139ED", "label": "data(label)",
+            "background-color": "#5139ED", "shape": "hexagon",
+            "label": "data(label)",
             "color": "#e0e0ff", "font-size": 10, "text-outline-color": "#0B0B18",
-            "text-outline-width": 2, "width": 22, "height": 22 } },
+            "text-outline-width": 2,
+            "text-valign": "center", "text-halign": "center",
+            "width": 26, "height": 26 } },
         { selector: "node[type='target']", style: {
-            "background-color": "#2BB673", "label": "data(label)",
+            "background-color": "#2BB673", "shape": "ellipse",
+            "label": "data(label)",
             "color": "#d0ffd0", "font-size": 10, "text-outline-color": "#0B0B18",
             "text-outline-width": 2,
-            "width":  (n) => 14 + Math.min(20, (n.data("degree") || 1) * 3),
-            "height": (n) => 14 + Math.min(20, (n.data("degree") || 1) * 3) } },
+            "text-valign": "center", "text-halign": "center",
+            "width":  (n) => 18 + Math.min(24, (n.data("degree") || 1) * 3),
+            "height": (n) => 14 + Math.min(18, (n.data("degree") || 1) * 2) } },
         { selector: "edge", style: {
-            "width": 1, "line-color": "#8139ED", "line-opacity": 0.33,
+            "width": 1, "line-color": "#8139ED", "line-opacity": 0.28,
             "curve-style": "bezier",
             "target-arrow-shape": "none" } },
       ],
-      layout: { name: "cose", nodeRepulsion: 4500, idealEdgeLength: 80,
-                animate: false, padding: 30 },
+      // Concentric layout — compounds on the outer ring, targets in the
+      // centre. Deterministic, never overlaps, always publication-clean
+      // for bipartite compound→target graphs.
+      layout: {
+        name: "concentric",
+        concentric: (n) => (n.data("type") === "compound" ? 1 : 2 + (n.data("degree") || 0)),
+        levelWidth: () => 1,
+        minNodeSpacing: 26,
+        avoidOverlap: true,
+        nodeDimensionsIncludeLabels: true,
+        animate: false,
+        padding: 40,
+        equidistant: false,
+      },
     });
     cy.autolock(false);
     cy.autoungrabify(true);
@@ -70,10 +88,19 @@ function NetworkCardImpl({ network }) {
           className="ml-auto inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[10.5px] font-semibold text-slate-200 hover:bg-white/10">
           <FileText size={10} /> PNG
         </button>
+        <button
+          data-testid="network-download-publication-png"
+          title="Publication-quality PNG on a clean white background"
+          onClick={() => downloadCytoscapePublicationPng(
+            cyRef.current, "compound_target_network_publication.png"
+          )}
+          className="inline-flex items-center gap-1 rounded-md border border-emerald-400/40 bg-emerald-500/10 px-2 py-1 text-[10.5px] font-semibold text-emerald-200 hover:bg-emerald-500/20">
+          <ImageDown size={10} /> Publication PNG
+        </button>
       </div>
       <div className="mt-2 text-[10.5px] text-slate-500 flex items-center gap-3">
-        <span><span className="inline-block h-2 w-2 rounded-full bg-[#5139ED] mr-1" />Compounds</span>
-        <span><span className="inline-block h-2 w-2 rounded-full bg-[#2BB673] mr-1" />Targets (larger = more overlapping compounds)</span>
+        <span><span className="inline-block h-2.5 w-2.5 rotate-30 bg-[#5139ED] mr-1" style={{ clipPath: "polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)" }} />Compounds (hexagons)</span>
+        <span><span className="inline-block h-2 w-3 rounded-full bg-[#2BB673] mr-1" />Targets (ellipses, larger = more overlaps)</span>
       </div>
       <div ref={ref} data-testid="network-cytoscape"
            className="mt-2 w-full h-[420px] rounded-lg border border-white/5 bg-black/40" />

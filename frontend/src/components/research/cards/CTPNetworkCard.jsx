@@ -2,8 +2,9 @@
 // top-N pathway re-filter sliders and first-degree neighborhood isolation.
 import { useEffect, useMemo, useRef, useState } from "react";
 import cytoscape from "cytoscape";
-import { FileText, FileJson } from "lucide-react";
+import { FileText, FileJson, ImageDown } from "lucide-react";
 import { trigger } from "./_helpers";
+import { downloadCytoscapePublicationPng } from "@/lib/publicationExport";
 
 export function CTPNetworkCard({ data, message }) {
   const ref = useRef(null);
@@ -119,25 +120,28 @@ export function CTPNetworkCard({ data, message }) {
       ],
       style: [
         { selector: "node[type='Compound']", style: {
-            "background-color": "#5139ED", "label": "data(label)",
-            "color": "#e0e0ff", "font-size": 10,
+            "background-color": "#5139ED", "shape": "hexagon",
+            "label": "data(label)", "color": "#e0e0ff", "font-size": 10,
             "text-outline-color": "#0B0B18", "text-outline-width": 2,
-            "width":  (n) => 18 + Math.min(24, (n.data("degree") || 1) * 2),
-            "height": (n) => 18 + Math.min(24, (n.data("degree") || 1) * 2) } },
+            "text-valign": "center", "text-halign": "center",
+            "width":  (n) => 22 + Math.min(20, (n.data("degree") || 1) * 1.8),
+            "height": (n) => 22 + Math.min(20, (n.data("degree") || 1) * 1.8) } },
         { selector: "node[type='Target']", style: {
-            "background-color": "#2BB673", "label": "data(label)",
-            "color": "#d0ffd0", "font-size": 9,
+            "background-color": "#2BB673", "shape": "ellipse",
+            "label": "data(label)", "color": "#d0ffd0", "font-size": 9,
             "text-outline-color": "#0B0B18", "text-outline-width": 2,
-            "width":  (n) => 14 + Math.min(18, (n.data("degree") || 1) * 2),
-            "height": (n) => 14 + Math.min(18, (n.data("degree") || 1) * 2) } },
+            "text-valign": "center", "text-halign": "center",
+            "width":  (n) => 18 + Math.min(18, (n.data("degree") || 1) * 1.6),
+            "height": (n) => 14 + Math.min(14, (n.data("degree") || 1) * 1.2) } },
         { selector: "node[type='Pathway']", style: {
             "background-color": "#F5B301", "shape": "diamond",
             "label": "data(label)", "color": "#fef3c7", "font-size": 9,
             "text-outline-color": "#0B0B18", "text-outline-width": 2,
-            "width":  (n) => 14 + Math.min(18, (n.data("degree") || 1) * 2),
-            "height": (n) => 14 + Math.min(18, (n.data("degree") || 1) * 2) } },
+            "text-valign": "center", "text-halign": "center",
+            "width":  (n) => 20 + Math.min(18, (n.data("degree") || 1) * 1.4),
+            "height": (n) => 20 + Math.min(18, (n.data("degree") || 1) * 1.4) } },
         { selector: "edge", style: {
-            "width": 1, "line-color": "#8139ED", "line-opacity": 0.32,
+            "width": 1, "line-color": "#8139ED", "line-opacity": 0.28,
             "curve-style": "bezier", "target-arrow-shape": "none" } },
         { selector: "edge[interaction='involved_in']", style: {
             "line-color": "#F5B301", "line-opacity": 0.28 } },
@@ -153,8 +157,24 @@ export function CTPNetworkCard({ data, message }) {
             "line-color": "#FDE68A", "line-opacity": 0.95, "width": 2.5,
             "z-index": 998 } },
       ],
-      layout: { name: "cose", nodeRepulsion: 4200, idealEdgeLength: 60,
-                animate: false, padding: 40 },
+      // Concentric 3-tier layout — Pathway (inner) · Target (middle) ·
+      // Compound (outer). Guaranteed non-overlapping, publication-clean.
+      layout: {
+        name: "concentric",
+        concentric: (n) => {
+          const t = n.data("type");
+          if (t === "Pathway")  return 3 + (n.data("degree") || 0);
+          if (t === "Target")   return 2 + (n.data("degree") || 0);
+          return 1 + (n.data("degree") || 0);  // Compound outermost
+        },
+        levelWidth: () => 1,
+        minNodeSpacing: 22,
+        avoidOverlap: true,
+        nodeDimensionsIncludeLabels: true,
+        animate: false,
+        padding: 40,
+        equidistant: false,
+      },
       textureOnViewport: true, motionBlur: false, pixelRatio: 1,
     });
     cy.autoungrabify(true);
@@ -288,9 +308,9 @@ export function CTPNetworkCard({ data, message }) {
       )}
 
       <div className="flex flex-wrap items-center gap-3 mb-2 text-[10.5px] text-slate-400">
-        <span><span className="inline-block h-2 w-2 rounded-full bg-[#5139ED] mr-1" />Compounds</span>
-        <span><span className="inline-block h-2 w-2 rounded-full bg-[#2BB673] mr-1" />Targets</span>
-        <span><span className="inline-block h-2 w-2 rotate-45 bg-[#F5B301] mr-1" />Pathways</span>
+        <span><span className="inline-block h-2.5 w-2.5 bg-[#5139ED] mr-1" style={{ clipPath: "polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)" }} />Compounds (hexagons)</span>
+        <span><span className="inline-block h-2 w-3 rounded-full bg-[#2BB673] mr-1" />Targets (ellipses)</span>
+        <span><span className="inline-block h-2 w-2 rotate-45 bg-[#F5B301] mr-1" />Pathways (diamonds)</span>
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
           <button data-testid="ctp-download-nodes-csv" onClick={() => dl("ctp_nodes.csv")}
             className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[10.5px] font-semibold text-slate-200 hover:bg-white/10">
@@ -317,6 +337,14 @@ export function CTPNetworkCard({ data, message }) {
             }}
             className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[10.5px] font-semibold text-slate-200 hover:bg-white/10">
             <FileText size={10} /> PNG
+          </button>
+          <button data-testid="ctp-download-publication-png"
+            title="Publication-quality PNG on a clean white background"
+            onClick={() => downloadCytoscapePublicationPng(
+              cyRef.current, "ctp_network_publication.png"
+            )}
+            className="inline-flex items-center gap-1 rounded-md border border-emerald-400/40 bg-emerald-500/10 px-2 py-1 text-[10.5px] font-semibold text-emerald-200 hover:bg-emerald-500/20">
+            <ImageDown size={10} /> Publication PNG
           </button>
         </div>
       </div>

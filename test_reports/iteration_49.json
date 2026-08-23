@@ -1,0 +1,28 @@
+{
+  "summary": "Re-verified sticky WorkflowProceedBar retraction on /disease-target-identification after defensive hardening (tightened selectors to only [data-testid='site-footer']/[data-testid='workflow-end-sentinel'], added MutationObserver on document.body, and WeakSet dedupe). All 3 scroll states pass exactly like iteration_48.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Fix behaves identically to prior iteration. Refined useHideOnFooter hook correctly ignores nested <footer> elements now and picks up lazy-mounted footers via MutationObserver."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A", "frontend": "100%"},
+  "test_credentials": "rtest1785979513@phytonetai.com / TestPass123! (verified working)",
+  "seed_data_creation": "None. Used existing account and Alzheimer disease (MONDO_0004975 / MONDO_0100087) search.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Auth is via a modal opened by top-right 'Sign In' link. There are TWO button[type=submit] on the page (auth-modal SIGN IN + footer newsletter Subscribe) -- always scope submit clicks to [data-testid=auth-modal-backdrop]. Disease search suggestion dropdown does NOT use role=option; typing shows suggestions in a plain div list. The WorkflowProceedBar on this page has data-testid='disease-proceed-bar' with data-hidden='0|1' attribute. Site footer has data-testid='site-footer'.",
+  "test_evidence": {
+    "state_top_before_scroll": "data-hidden=0 (expected 0) PASS",
+    "state_footer_visible": "data-hidden=1 (expected 1) PASS",
+    "state_top_after_scroll_back": "data-hidden=0 (expected 0) PASS",
+    "screenshots": ["/app/.screenshots/s1_top.png", "/app/.screenshots/s2_footer.png", "/app/.screenshots/s3_top_again.png"]
+  },
+  "rca of the issue": "Not applicable - fix verified working. Refined IntersectionObserver hook toggles data-hidden='1' when site-footer intersects viewport, causing the fixed pill bar to slide/fade down; toggles back to '0' when footer leaves viewport."
+}

@@ -67,6 +67,8 @@ export function downloadJson(data, filename) {
                     { type: "application/json" }), filename);
 }
 
+import { downloadSvgAsPublicationPng } from "@/lib/publicationExport";
+
 // ─── SVG chart exporters ─────────────────────────────────────────
 export function downloadSvgFile(svgEl, filename) {
   if (!svgEl) return;
@@ -118,7 +120,10 @@ export function downloadSvgAsPng(svgEl, filename, scale = 2) {
   img.src = url;
 }
 
-// Small download-chart toolbar rendered above each SVG chart.
+// Small download-chart toolbar rendered above each SVG chart. Includes a
+// dark-theme PNG (matches on-screen appearance) + a publication-quality
+// PNG (white background, dark text, palette-safe) for use in manuscripts
+// and slide decks.
 export function ChartDownloadBar({ svgSelector, filenameBase }) {
   const get = () => document.querySelector(svgSelector);
   return (
@@ -132,6 +137,12 @@ export function ChartDownloadBar({ svgSelector, filenameBase }) {
               onClick={() => downloadSvgAsPng(get(), `${filenameBase}.png`, 2)}
               className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[10.5px] font-semibold text-slate-200 hover:bg-white/10">
         PNG
+      </button>
+      <button data-testid={`chart-download-publication-png-${filenameBase}`}
+              title="Publication-quality PNG (white background, dark text, high resolution)"
+              onClick={() => downloadSvgAsPublicationPng(get(), `${filenameBase}_publication.png`, 3)}
+              className="inline-flex items-center gap-1 rounded-md border border-emerald-400/40 bg-emerald-500/10 px-2 py-1 text-[10.5px] font-semibold text-emerald-200 hover:bg-emerald-500/20">
+        Publication PNG
       </button>
     </div>
   );

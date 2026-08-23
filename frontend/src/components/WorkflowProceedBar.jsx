@@ -4,9 +4,68 @@
 // bold label and optional sub-line, one primary gradient CTA on the right,
 // plus optional Back / secondary buttons in-between.
 //
+// Behaviour: the bar is `position: fixed` so it hovers above results, but
+// it AUTOMATICALLY HIDES once the page footer enters the viewport. That
+// way, when the user scrolls past the results into the footer area, the
+// bar retracts and never overlaps the footer content.
+//
 // Callers pass their own testid so each usage stays discoverable.
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, ArrowRight } from "lucide-react";
+
+// Selectors we treat as "start of footer / end of results". Explicit
+// data-testids only — no plain `footer` tag matcher (which would also
+// catch nested <footer> elements inside cards/dialogs and hide the bar
+// prematurely, per code-review feedback).
+const FOOTER_SELECTORS = [
+  "[data-testid='site-footer']",
+  "[data-testid='workflow-end-sentinel']",
+];
+
+function useHideOnFooter() {
+  const [hidden, setHidden] = useState(false);
+  useEffect(() => {
+    let obs = null;
+    const visibility = new WeakMap();
+    const observed = new WeakSet();
+
+    const attach = () => {
+      const nodes = FOOTER_SELECTORS.flatMap((sel) =>
+        Array.from(document.querySelectorAll(sel))
+      );
+      if (!nodes.length) return;
+      if (!obs) {
+        obs = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((e) => visibility.set(e.target, e.isIntersecting));
+            const anyVisible = nodes.some((n) => visibility.get(n));
+            setHidden(anyVisible);
+          },
+          { rootMargin: "0px" }
+        );
+      }
+      nodes.forEach((n) => {
+        if (!observed.has(n)) {
+          obs.observe(n);
+          observed.add(n);
+        }
+      });
+    };
+
+    // Initial attach + re-scan when the DOM changes (defensive: catches
+    // footers that mount after us on route change or lazy-loaded views).
+    attach();
+    const mo = new MutationObserver(attach);
+    mo.observe(document.body, { childList: true, subtree: true });
+
+    return () => {
+      mo.disconnect();
+      if (obs) obs.disconnect();
+    };
+  }, []);
+  return hidden;
+}
 
 export default function WorkflowProceedBar({
   testid = "workflow-proceed-bar",
@@ -18,11 +77,15 @@ export default function WorkflowProceedBar({
   secondary,               // { label, onClick, disabled, testid, icon }
   primary,                 // { label, to?, onClick?, disabled, testid, icon }
 }) {
+  const hidden = useHideOnFooter();
   const primaryHref = primary?.to;
   return (
     <div
       data-testid={testid}
-      className="pointer-events-none fixed inset-x-0 bottom-6 z-30 flex justify-center px-4"
+      data-hidden={hidden ? "1" : "0"}
+      className={`pointer-events-none fixed inset-x-0 bottom-6 z-30 flex justify-center px-4 transition-all duration-300 ${
+        hidden ? "translate-y-24 opacity-0" : "translate-y-0 opacity-100"
+      }`}
     >
       <div className="pointer-events-auto flex w-full max-w-4xl flex-col items-center justify-between gap-3 rounded-full border border-[#E7E7F3] bg-white/95 px-4 py-2.5 shadow-[0_20px_60px_-20px_rgba(81,57,237,0.35)] backdrop-blur-xl md:flex-row">
         {/* Left cluster — icon + label */}

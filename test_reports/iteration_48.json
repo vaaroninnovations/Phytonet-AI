@@ -1,0 +1,25 @@
+{
+  "summary": "Verified the fix for the sticky WorkflowProceedBar overlapping the site footer. On /disease-target-identification (after logging in as rtest1785979513@phytonetai.com and running an 'Alzheimer disease' search that returned 301 targets), the disease-proceed-bar was observed to (a) initially render with data-hidden='0', (b) transition to data-hidden='1' once the site-footer entered the viewport after scrolling to the bottom, and (c) revert to data-hidden='0' after scrolling back to the top. Screenshots confirm the bar is no longer visually overlapping the footer at the bottom of the results page. Molecular Docking sticky bar could not be tested from the standalone /molecular-docking route because dock-proceed-bar only renders when the docking page is opened in workflow mode (with a project context); the same shared component and hook is used so the fix is expected to apply identically.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Optional: also validate dock-proceed-bar behaviour on /molecular-docking when reached via a workflow project (couldn't be exercised from the standalone route in this session)."
+  ],
+  "critical_code_review_comments": [
+    "WorkflowProceedBar.useHideOnFooter registers the IntersectionObserver only once on mount and observes DOM nodes present at that moment. This is fine for the current pages where SiteFooter mounts alongside the bar, but if a future workflow route lazily inserts a footer/sentinel after mount, the hook won't observe it. Consider re-scanning on route change or using a MutationObserver as a defensive measure.",
+    "The FOOTER_SELECTORS list uses 'footer' which will also match any nested <footer> element rendered by a card or dialog inside the results area. That could accidentally hide the bar even when the real site footer is far below. Preferring the explicit [data-testid='site-footer'] / [data-testid='workflow-end-sentinel'] selectors and dropping the plain 'footer' selector would be safer."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "100% (3/3 sticky-bar states on disease page)"},
+  "test_credentials": "rtest1785979513@phytonetai.com / TestPass123!",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Sticky-bar fix verified on /disease-target-identification. Molecular Docking's dock-proceed-bar renders only in workflow-with-project mode; to test it, start from Plant Database step, run the workflow through disease→network→dock, then repeat the scroll-to-footer check. Login flow: click [data-testid='header-signin'], then fill signin-email/signin-password and click signin-submit.",
+  "rca of the issue": "Root cause: WorkflowProceedBar is position:fixed at bottom-6 with z-30, so when a user scrolls past the results into the site footer, the pill bar visually sits on top of the footer content. The applied fix mounts an IntersectionObserver on 'footer, [data-testid=site-footer], [data-testid=workflow-end-sentinel]' and toggles a data-hidden attribute plus translate-y-24/opacity-0 classes, sliding the bar out of view when the footer intersects the viewport. Verified end-to-end: initial data-hidden='0' → scroll-to-bottom data-hidden='1' → scroll-to-top data-hidden='0'."
+}

@@ -195,6 +195,38 @@ export function EnrichmentCard({ data, message }) {
 }
 
 
+// Per-source styling for the enrichment charts — different colour and
+// marker shape for KEGG vs GO groups (BP / MF / CC) so a manuscript
+// figure legend can immediately identify each family.
+function styleForSource(source) {
+  const s = String(source || "").toLowerCase();
+  if (s.includes("kegg")) return { color: "#5139ED", fill: "#a48bff", shape: "circle" };
+  if (s.includes("bp") || s.includes("biological_process")) return { color: "#2BB673", fill: "#6EE7B7", shape: "square" };
+  if (s.includes("mf") || s.includes("molecular_function")) return { color: "#F59E0B", fill: "#FCD34D", shape: "triangle" };
+  if (s.includes("cc") || s.includes("cellular_component")) return { color: "#E11D48", fill: "#FCA5A5", shape: "diamond" };
+  return { color: "#8139ED", fill: "#c4b5fd", shape: "circle" };
+}
+
+// Draw a shaped marker centred on (cx, cy). Kept simple so it also survives
+// the SVG → publication PNG rewrite.
+function ShapeMarker({ shape, cx, cy, size, fill, stroke }) {
+  const s = size;
+  if (shape === "square") {
+    return <rect x={cx - s} y={cy - s} width={s * 2} height={s * 2}
+                 fill={fill} fillOpacity="0.55" stroke={stroke} strokeWidth="1" />;
+  }
+  if (shape === "triangle") {
+    const path = `M ${cx} ${cy - s} L ${cx + s} ${cy + s} L ${cx - s} ${cy + s} Z`;
+    return <path d={path} fill={fill} fillOpacity="0.55" stroke={stroke} strokeWidth="1" />;
+  }
+  if (shape === "diamond") {
+    const path = `M ${cx} ${cy - s} L ${cx + s} ${cy} L ${cx} ${cy + s} L ${cx - s} ${cy} Z`;
+    return <path d={path} fill={fill} fillOpacity="0.55" stroke={stroke} strokeWidth="1" />;
+  }
+  return <circle cx={cx} cy={cy} r={s} fill={fill} fillOpacity="0.55"
+                 stroke={stroke} strokeWidth="1" />;
+}
+
 function EnrichBubble({ rows }) {
   if (!rows.length)
     return <div className="p-4 text-center text-[12px] italic text-slate-500">
@@ -208,6 +240,8 @@ function EnrichBubble({ rows }) {
   const maxLog = Math.max(1, ...rows.map((r) =>
     -Math.log10(Math.max(r.p_value || 1, 1e-30))));
   const maxCount = Math.max(1, ...rows.map((r) => r.gene_count || 0));
+  // Deduplicated source list for the legend row.
+  const legendSources = Array.from(new Set(rows.map((r) => r.source)));
   return (
     <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h}
          style={{ fontFamily: "Inter, system-ui" }}
@@ -222,21 +256,36 @@ function EnrichBubble({ rows }) {
         const x = plotL + (logp / maxLog) * plotW;
         const rB = 4 + ((r.gene_count || 0) / maxCount) * 14;
         const label = r.term.length > 40 ? r.term.slice(0, 38) + "…" : r.term;
+        const st = styleForSource(r.source);
         return (
           <g key={i}>
             <text x={labelW - 8} y={y + 4} textAnchor="end" fontSize="10" fill="#e2e8f0">
               {label}
             </text>
-            <circle cx={x} cy={y} r={rB} fill="#a48bff" fillOpacity="0.55"
-                    stroke="#8139ED" strokeWidth="1" />
+            <ShapeMarker shape={st.shape} cx={x} cy={y} size={rB}
+                         fill={st.fill} stroke={st.color} />
             <text x={x + rB + 4} y={y + 3} fontSize="9" fill="#94a3b8">
               {r.gene_count ?? ""}
             </text>
           </g>
         );
       })}
-      <text x={plotL + plotW / 2} y={h - 12} textAnchor="middle" fontSize="10"
-            fill="#94a3b8">−log₁₀(P-value) · bubble size = overlap gene count</text>
+      {/* Legend row */}
+      <g transform={`translate(${plotL}, ${h - 26})`}>
+        {legendSources.map((src, i) => {
+          const st = styleForSource(src);
+          const gx = i * 128;
+          return (
+            <g key={src} transform={`translate(${gx}, 0)`}>
+              <ShapeMarker shape={st.shape} cx={6} cy={0} size={5}
+                           fill={st.fill} stroke={st.color} />
+              <text x={16} y={3} fontSize="10" fill="#94a3b8">{src}</text>
+            </g>
+          );
+        })}
+      </g>
+      <text x={plotL + plotW / 2} y={h - 4} textAnchor="middle" fontSize="10"
+            fill="#94a3b8">−log₁₀(P-value) · marker size = overlap gene count</text>
     </svg>
   );
 }
@@ -263,15 +312,16 @@ function EnrichLollipop({ rows }) {
         const y = 30 + i * rowH;
         const bw = ((r.combined_score || 0) / maxScore) * plotW;
         const label = r.term.length > 40 ? r.term.slice(0, 38) + "…" : r.term;
+        const st = styleForSource(r.source);
         return (
           <g key={i}>
             <text x={labelW - 8} y={y + 4} textAnchor="end" fontSize="10" fill="#e2e8f0">
               {label}
             </text>
             <line x1={plotL} y1={y} x2={plotL + bw} y2={y}
-                  stroke="#8139ED" strokeOpacity="0.7" strokeWidth="2" />
-            <circle cx={plotL + bw} cy={y} r={5} fill="#a48bff"
-                    stroke="#0B0B18" strokeWidth="1.5" />
+                  stroke={st.color} strokeOpacity="0.7" strokeWidth="2" />
+            <ShapeMarker shape={st.shape} cx={plotL + bw} cy={y} size={5}
+                         fill={st.fill} stroke={st.color} />
             <text x={plotL + bw + 10} y={y + 3} fontSize="10" fill="#94a3b8">
               {(r.combined_score || 0).toFixed(1)}
             </text>
