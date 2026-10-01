@@ -1,4 +1,19 @@
 # Dr. / — Network Pharmacology SaaS
+## 2026-10-01 — Light-mode amber/green status colors fix ✅
+
+**Bug report**: In light mode, the Execution Plan card's amber ("Resolving…" running status) and green ("Retrieved 40 compounds…" done status) sub-status text was invisible (screenshots attached by user).
+
+**Root cause**: The light remap only covered `text-emerald-200/300` and `text-amber-200/300` base classes. The chat cards actually use `text-emerald-400/80`, `text-amber-200/90`, `text-amber-100`, `text-emerald-400` variants — none remapped.
+
+**Fixes** (`index.css` light block):
+- Added `text-emerald-400`, `text-emerald-400/80`, `text-emerald-300/80`, `text-emerald-200/80` → dark green (#047857 / rgba).
+- Added `text-amber-400`, `text-amber-200/90`, `text-amber-300/90`, `text-amber-100` → dark amber (#B45309 / #92400E / rgba).
+- **Bonus fix**: user chat bubble (`bg-gradient-to-br from-[#5139ED] to-[#8139ED] text-white` — gradient + text-white on the SAME div) showed dark text on purple in light mode because the CTA restore rule only matched descendants or button/a elements. Added self-combined `:is(.from-[#5139ED], …).text-white` selectors.
+- `text-slate-500` light mapping lightened from #94A3B8 → #64748B (tool chips like `COMPOUND_LOOKUP` were too faint on lavender plan cards).
+
+**Verified** (computed styles on live /app project tab): user bubble `rgb(255,255,255)` on purple gradient, tool chips `rgb(100,116,139)`, free-run chip dark green, plan steps readable.
+
+
 ## 2026-10-01 — Full Theme Audit Pass ✅
 
 Comprehensive dark/light sweep across all 20+ public, module, and authenticated routes using a Playwright crawler + screenshot comparison. Full report in `/app/memory/THEME_AUDIT.md`.

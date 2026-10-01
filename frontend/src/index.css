@@ -508,16 +508,26 @@ html[data-theme="light"] .text-slate-100,
 html[data-theme="light"] .text-slate-200 { color: #1E293B !important; }
 html[data-theme="light"] .text-slate-300 { color: #475569 !important; }
 html[data-theme="light"] .text-slate-400 { color: #64748B !important; }
-html[data-theme="light"] .text-slate-500 { color: #94A3B8 !important; }
+html[data-theme="light"] .text-slate-500 { color: #64748B !important; }
 html[data-theme="light"] .text-\[\#a48bff\],
 html[data-theme="light"] .text-\[\#c4b5fd\] { color: #5139ED !important; }
 html[data-theme="light"] .text-emerald-200,
-html[data-theme="light"] .text-emerald-300 { color: #047857 !important; }
+html[data-theme="light"] .text-emerald-300,
+html[data-theme="light"] .text-emerald-400 { color: #047857 !important; }
+html[data-theme="light"] .text-emerald-400\/80,
+html[data-theme="light"] .text-emerald-300\/80,
+html[data-theme="light"] .text-emerald-200\/80 { color: rgba(4, 120, 87, 0.85) !important; }
 html[data-theme="light"] .text-amber-200,
-html[data-theme="light"] .text-amber-300 { color: #B45309 !important; }
+html[data-theme="light"] .text-amber-300,
+html[data-theme="light"] .text-amber-400 { color: #B45309 !important; }
+html[data-theme="light"] .text-amber-200\/90,
+html[data-theme="light"] .text-amber-300\/90 { color: rgba(180, 83, 9, 0.92) !important; }
+html[data-theme="light"] .text-amber-100 { color: #92400E !important; }
 html[data-theme="light"] .text-white { color: #111827 !important; }
 
-/* …but keep white text on genuinely coloured surfaces (CTAs, badges) */
+/* …but keep white text on genuinely coloured surfaces (CTAs, badges,
+   chat bubbles). Covers both descendants AND elements carrying the
+   colour + text-white on the same node (e.g. the user chat bubble). */
 html[data-theme="light"] :is(button, a).text-white,
 html[data-theme="light"] :is(
     .bg-\[\#5139ED\], .bg-\[\#4128d4\], .bg-\[\#6242f5\], .bg-\[\#2BB673\],
@@ -525,7 +535,13 @@ html[data-theme="light"] :is(
     .bg-emerald-500, .bg-emerald-600, .bg-amber-500, .bg-red-500, .bg-red-600,
     .from-amber-400, .from-amber-500,
     .bg-violet-600, .bg-indigo-600, .bg-slate-600, .bg-\[\#111827\], .bg-\[\#0F172A\]
-) :is(.text-white, .text-\[\#FAFAFF\]) {
+) :is(.text-white, .text-\[\#FAFAFF\]),
+html[data-theme="light"] :is(
+    .from-\[\#5139ED\], .from-\[\#F59E0B\], .from-amber-400, .from-amber-500,
+    .bg-\[\#5139ED\], .bg-\[\#2BB673\], .bg-emerald-500, .bg-emerald-600,
+    .bg-amber-500, .bg-red-500, .bg-red-600, .bg-violet-600, .bg-indigo-600,
+    .bg-slate-600
+):is(.text-white, .text-\[\#FAFAFF\]) {
     color: #FFFFFF !important;
 }
 html[data-theme="light"] .text-rose-300 { color: #E11D48 !important; }
