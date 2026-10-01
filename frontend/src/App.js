@@ -50,6 +50,7 @@ import { AdminAuthProvider } from "@/context/AdminAuthContext";
 import { ProjectProvider } from "@/context/ProjectContext";
 import { ChartStyleProvider } from "@/context/ChartStyleContext";
 import { CommandPaletteProvider } from "@/context/CommandPaletteContext";
+import { ThemeProvider } from "@/context/ThemeContext";
 import { NodeProvider } from "@/context/NodeContext";
 import { AuthModal } from "@/components/AuthModal";
 import ResumeSessionModal from "@/components/ResumeSessionModal";
@@ -80,6 +81,7 @@ function App() {
   return (
     <div className="App">
       <BrowserRouter>
+        <ThemeProvider>
         <AdminAuthProvider>
         <AuthProvider>
           <NodeProvider>
@@ -170,6 +172,7 @@ function App() {
           </NodeProvider>
         </AuthProvider>
         </AdminAuthProvider>
+        </ThemeProvider>
         <Toaster position="top-right" richColors />
       </BrowserRouter>
     </div>

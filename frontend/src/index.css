@@ -250,3 +250,137 @@ body {
     padding: 0 0.15em;
     border-radius: 6px;
 }
+
+
+/* ════════════════════════ Dark theme overrides ════════════════════════
+   Activated by html[data-theme="dark"] (ThemeContext). The module pages were
+   authored light-first with hard-coded utility colours, so dark mode works by
+   remapping the shared palette: CSS variables first, then the most common
+   light-surface utility classes. Pages that are dark by design (Home hero,
+   Pricing, /app workspace) are unaffected because they never use these
+   light-only classes. */
+html[data-theme="dark"] {
+    color-scheme: dark;
+    --brand-1: #7C63FF;
+    --brand-2: #9D6BFF;
+    --brand-3: #6B8AFF;
+    --ink: #EDEAFB;
+    --ink-1: #EDEAFB;
+    --ink-2: #D8D3F0;
+    --ink-3: #C3BBE4;
+    --muted: #9B94B8;
+    --muted-2: #8E86AC;
+    --line: #2A2745;
+    --line-2: #232041;
+    --paper: #0B0B18;
+    --paper-2: #121022;
+
+    /* shadcn tokens */
+    --background: 248 40% 7%;
+    --foreground: 250 40% 94%;
+    --card: 246 34% 11%;
+    --card-foreground: 250 40% 94%;
+    --popover: 246 34% 11%;
+    --popover-foreground: 250 40% 94%;
+    --primary: 250 82% 66%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 246 25% 16%;
+    --secondary-foreground: 250 30% 92%;
+    --muted: 246 25% 15%;
+    --muted-foreground: 248 15% 62%;
+    --accent: 246 28% 18%;
+    --accent-foreground: 250 30% 94%;
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 246 25% 20%;
+    --input: 246 25% 22%;
+    --ring: 250 82% 66%;
+}
+
+html[data-theme="dark"] body {
+    background: var(--paper) !important;
+    color: var(--ink) !important;
+}
+html[data-theme="dark"] .App {
+    background: var(--paper) !important;
+    color: var(--ink) !important;
+}
+
+/* ── Light-surface utility classes → dark surfaces ── */
+html[data-theme="dark"] .bg-white,
+html[data-theme="dark"] .bg-\[\#FFFFFF\] {
+    background-color: #121022 !important;
+}
+html[data-theme="dark"] .data-\[state\=active\]\:bg-white[data-state="active"] {
+    background-color: rgba(81, 57, 237, 0.25) !important;
+    color: #EDEAFB !important;
+}
+html[data-theme="dark"] .bg-\[\#F8FAFC\],
+html[data-theme="dark"] .bg-\[\#FAFAFF\] {
+    background-color: #151230 !important;
+}
+html[data-theme="dark"] .bg-\[\#F1F1FA\],
+html[data-theme="dark"] .bg-\[\#F5F5FC\] {
+    background-color: #1B1838 !important;
+}
+html[data-theme="dark"] .bg-white\/70,
+html[data-theme="dark"] .bg-white\/60,
+html[data-theme="dark"] .bg-white\/80 {
+    background-color: rgba(15, 14, 36, 0.78) !important;
+}
+html[data-theme="dark"] .hover\:bg-\[\#F8FAFC\]:hover {
+    background-color: #1B1838 !important;
+}
+
+/* ── Ink text → light text ── */
+html[data-theme="dark"] .text-\[\#111827\],
+html[data-theme="dark"] .text-\[\#0B0B18\] {
+    color: #EDEAFB !important;
+}
+html[data-theme="dark"] .text-\[\#1E1E33\],
+html[data-theme="dark"] .text-\[\#374151\] {
+    color: #D8D3F0 !important;
+}
+html[data-theme="dark"] .text-\[\#4B5563\],
+html[data-theme="dark"] .text-\[\#6B7280\] {
+    color: #9B94B8 !important;
+}
+html[data-theme="dark"] .text-\[\#64748B\] {
+    color: #8E86AC !important;
+}
+html[data-theme="dark"] .text-\[\#9CA3AF\] {
+    color: #8E86AC !important;
+}
+
+/* ── Light borders / dividers → dark lines ── */
+html[data-theme="dark"] .border-\[\#E7E7F3\],
+html[data-theme="dark"] .border-\[\#F1F1FA\],
+html[data-theme="dark"] .border-\[\#E5E7EB\] {
+    border-color: #2A2745 !important;
+}
+html[data-theme="dark"] .divide-\[\#F1F1FA\] > * + * {
+    border-color: #2A2745 !important;
+}
+
+/* ── Glass + scrollbar + soft shadows in dark ── */
+html[data-theme="dark"] .glass {
+    background: rgba(18, 16, 34, 0.72);
+    border-color: rgba(129, 57, 237, 0.22);
+}
+html[data-theme="dark"] ::-webkit-scrollbar-thumb {
+    background: #2E2A52;
+}
+html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+    background: #443D78;
+}
+html[data-theme="dark"] .shadow-lg,
+html[data-theme="dark"] .shadow-xl {
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55) !important;
+}
+
+/* Inputs & tables stay legible */
+html[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]),
+html[data-theme="dark"] textarea,
+html[data-theme="dark"] select {
+    color-scheme: dark;
+}

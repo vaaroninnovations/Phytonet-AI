@@ -1,7 +1,8 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { Search, User, LogOut, LayoutDashboard, FolderOpen, Download, Settings, Menu, X } from "lucide-react";
+import { Search, User, LogOut, LayoutDashboard, FolderOpen, Download, Settings, Menu, X, Sun, Moon, Type, Check } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { useTheme } from "@/context/ThemeContext";
 import NodeBadge from "@/components/nodes/NodeBadge";
 import SaveProjectMenu from "@/components/SaveProjectMenu";
 import BrandLogo from "@/components/BrandLogo";
@@ -18,17 +19,21 @@ export default function SiteHeader() {
   const { pathname, hash } = useLocation();
   const isActive = (p) => (p.startsWith("/#") ? false : pathname === p);
   const { user, openModal, logout } = useAuth();
+  const { isDark, toggleTheme, fontSize, setFontSize, fontSizes } = useTheme();
+  const [fontMenuOpen, setFontMenuOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const navigate = useNavigate();
   const { open: openPalette } = useCommandPalette();
   // These marketing routes use the dark canvas — switch header to dark-glass
-  // so the transition into each hero feels seamless.
-  const dark = pathname === "/"
+  // so the transition into each hero feels seamless. In dark mode the header
+  // is dark-glass on every route.
+  const darkRoute = pathname === "/"
             || pathname === "/pricing"
             || pathname === "/resources"
             || pathname === "/referrals/leaderboard";
+  const dark = isDark || darkRoute;
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -137,6 +142,84 @@ export default function SiteHeader() {
           </button>
 
           {user && <SaveProjectMenu />}
+
+          {/* Appearance controls — theme toggle + font-size modifier */}
+          <button
+            data-testid="theme-toggle"
+            type="button"
+            onClick={toggleTheme}
+            aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+            title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+            className={`grid h-9 w-9 place-items-center rounded-full border transition-colors ${
+              dark
+                ? "border-[#FAFAFF]/15 bg-[#FAFAFF]/[0.05] text-[#FAFAFF] hover:border-[#c4b5fd]/50"
+                : "border-[#E7E7F3] bg-white text-[#111827] hover:border-[#5139ED]/40 hover:text-[#5139ED]"
+            }`}
+          >
+            {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </button>
+
+          <div className="relative">
+            <button
+              data-testid="font-size-toggle"
+              type="button"
+              onClick={() => setFontMenuOpen((v) => !v)}
+              aria-label="Adjust text size"
+              aria-expanded={fontMenuOpen}
+              title="Adjust text size"
+              className={`grid h-9 w-9 place-items-center rounded-full border transition-colors ${
+                dark
+                  ? "border-[#FAFAFF]/15 bg-[#FAFAFF]/[0.05] text-[#FAFAFF] hover:border-[#c4b5fd]/50"
+                  : "border-[#E7E7F3] bg-white text-[#111827] hover:border-[#5139ED]/40 hover:text-[#5139ED]"
+              }`}
+            >
+              <Type className="h-4 w-4" />
+            </button>
+            {fontMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setFontMenuOpen(false)} />
+                <div
+                  data-testid="font-size-menu"
+                  className={`absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-2xl border shadow-lg ${
+                    dark ? "border-[#2A2745] bg-[#151230]" : "border-[#E7E7F3] bg-white"
+                  }`}
+                >
+                  <div className={`border-b px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest ${
+                    dark ? "border-[#2A2745] text-[#9B94B8]" : "border-[#F1F1FA] text-[#6B7280]"
+                  }`}>
+                    Text size
+                  </div>
+                  {fontSizes.map((f) => (
+                    <button
+                      key={f.id}
+                      data-testid={`font-size-${f.id}`}
+                      onClick={() => { setFontSize(f.id); setFontMenuOpen(false); }}
+                      aria-pressed={fontSize === f.id}
+                      className={`flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                        dark
+                          ? "text-[#EDEAFB] hover:bg-[#1B1838]"
+                          : "text-[#111827] hover:bg-[#F8FAFC]"
+                      }`}
+                    >
+                      <span
+                        className={`font-headline font-extrabold leading-none ${
+                          fontSize === f.id ? "text-[#5139ED]" : dark ? "text-[#c4b5fd]" : "text-[#374151]"
+                        }`}
+                        style={{ fontSize: `${12 + f.px - 14}px` }}
+                      >
+                        Aa
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[12.5px] font-bold">{f.label}</span>
+                        <span className={`block text-[10.5px] ${dark ? "text-[#9B94B8]" : "text-[#6B7280]"}`}>{f.hint}</span>
+                      </span>
+                      {fontSize === f.id && <Check className="h-3.5 w-3.5 text-[#5139ED]" />}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
 
           {!user ? (
             <button
