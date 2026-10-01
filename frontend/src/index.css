@@ -463,6 +463,15 @@ html[data-theme="light"] .via-\[\#141024\] {
 html[data-theme="light"] .to-\[\#1A0F2E\] {
     --tw-gradient-to: #EDE9FE var(--tw-gradient-to-position);
 }
+/* Workspace TabBar active-tab gradient stops */
+html[data-theme="light"] .from-\[\#141024\] {
+    --tw-gradient-from: #FFFFFF var(--tw-gradient-from-position);
+    --tw-gradient-to: rgb(255 255 255 / 0) var(--tw-gradient-to-position);
+    --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+html[data-theme="light"] .to-\[\#0B0B18\] {
+    --tw-gradient-to: #F4F1FE var(--tw-gradient-to-position);
+}
 
 /* Light-on-dark text → dark-on-light */
 html[data-theme="light"] .text-\[\#FAFAFF\] { color: #111827 !important; }
@@ -495,10 +504,12 @@ html[data-theme="light"] :is(
     .bg-\[\#5139ED\], .bg-\[\#4128d4\], .bg-\[\#6242f5\], .bg-\[\#2BB673\],
     .bg-\[\#F5B301\], .from-\[\#5139ED\], .from-\[\#F59E0B\],
     .bg-emerald-500, .bg-emerald-600, .bg-amber-500, .bg-red-500, .bg-red-600,
+    .from-amber-400, .from-amber-500,
     .bg-violet-600, .bg-indigo-600, .bg-slate-600, .bg-\[\#111827\], .bg-\[\#0F172A\]
 ) :is(.text-white, .text-\[\#FAFAFF\]) {
     color: #FFFFFF !important;
 }
+html[data-theme="light"] .text-rose-300 { color: #E11D48 !important; }
 
 /* White-alpha borders → light lines */
 html[data-theme="light"] .border-white\/5,
@@ -511,6 +522,37 @@ html[data-theme="light"] .border-\[\#FAFAFF\]\/15 {
     border-color: #E7E7F3 !important;
 }
 
+
+/* ── text-white opacity variants (workspace sidebar, cards) ── */
+html[data-theme="light"] .text-white\/85,
+html[data-theme="light"] .text-white\/80 { color: #374151 !important; }
+html[data-theme="light"] .text-white\/70,
+html[data-theme="light"] .text-white\/60,
+html[data-theme="light"] .text-white\/55,
+html[data-theme="light"] .text-white\/50 { color: #6B7280 !important; }
+html[data-theme="light"] .text-white\/40,
+html[data-theme="light"] .text-white\/30 { color: #9CA3AF !important; }
+
+/* ── keep-dark-card: deliberate dark accent cards (e.g. the PhytoNet
+   Automate hero in the workspace sidebar) stay purple in BOTH themes, so
+   their white text, light borders and glass chips are exempted. ── */
+html[data-theme="light"] .keep-dark-card .text-white,
+html[data-theme="light"] .keep-dark-card .text-white\/85,
+html[data-theme="light"] .keep-dark-card .text-white\/80 {
+    color: #FFFFFF !important;
+}
+html[data-theme="light"] .keep-dark-card .text-white\/40 {
+    color: rgba(255, 255, 255, 0.4) !important;
+}
+html[data-theme="light"] .keep-dark-card .text-\[\#c4b5fd\] {
+    color: #c4b5fd !important;
+}
+html[data-theme="light"] .keep-dark-card :is(.border-white\/10, .border-white\/15) {
+    border-color: rgba(255, 255, 255, 0.14) !important;
+}
+html[data-theme="light"] .keep-dark-card :is(.bg-white\/5, .bg-white\/10, .bg-white\/\[0\.06\]) {
+    background-color: rgba(255, 255, 255, 0.09) !important;
+}
 /* Home hero — inline-styled dark scene + scrim get light counterparts */
 html[data-theme="light"] .hero-scene-bg {
     background:

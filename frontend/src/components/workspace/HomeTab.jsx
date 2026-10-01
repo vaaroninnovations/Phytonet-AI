@@ -223,7 +223,7 @@ function RightSidebar({ onOpenModule }) {
           type="button"
           data-testid={`home-module-${AUTOMATE.key}`}
           onClick={() => onOpenModule(AUTOMATE)}
-          className="group relative w-full overflow-hidden rounded-2xl border border-[#8139ED]/40 bg-gradient-to-br from-[#2A1F6F] via-[#5139ED]/40 to-[#8139ED]/30 p-4 text-left shadow-[0_20px_50px_-20px_rgba(129,57,237,0.6),0_0_0_1px_rgba(129,57,237,0.15)_inset] transition-transform hover:-translate-y-0.5"
+          className="keep-dark-card group relative w-full overflow-hidden rounded-2xl border border-[#8139ED]/40 bg-gradient-to-br from-[#2A1F6F] via-[#5139ED]/40 to-[#8139ED]/30 p-4 text-left shadow-[0_20px_50px_-20px_rgba(129,57,237,0.6),0_0_0_1px_rgba(129,57,237,0.15)_inset] transition-transform hover:-translate-y-0.5"
         >
           {/* Radial glow accent */}
           <div className="pointer-events-none absolute -right-14 -top-14 h-40 w-40 rounded-full bg-[radial-gradient(closest-side,#c4b5fd,transparent_75%)] opacity-30 blur-2xl" />

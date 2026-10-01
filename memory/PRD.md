@@ -1,4 +1,20 @@
 # Dr. / — Network Pharmacology SaaS
+## 2026-10-01 — Workspace Tabs Theme Adoption Fix ✅
+
+**Bug report**: workspace TabBar tabs didn't adopt theme changes (screenshot showed dark active "Home" tab next to light inactive tab in light mode).
+
+**Root causes & fixes**
+- Active tab gradient `from-[#141024] to-[#0B0B18]` was not in the light-mode remap → added gradient-stop overrides (from→white, to→#F4F1FE).
+- Brand `text-white` sat on an `<a>` → the CTA restore rule (`:is(button,a).text-white`) kept it white on the light header → changed brand span to `text-[#FAFAFF]` (remapped to ink in light mode).
+- `text-white/85..30` opacity variants (HomeTab sidebar, cards) were not remapped → added full opacity-variant scale (85/80→#374151, 70/60/55/50→#6B7280, 40/30→#9CA3AF).
+- PRO badge gradient (`from-amber-400`) added to the white-text restore list.
+- New `keep-dark-card` marker class + CSS exemptions: deliberate dark accent cards (PhytoNet Automate hero in workspace sidebar) stay purple in BOTH themes with white text/borders/chips intact.
+
+**Verified** (screenshot + computed styles): light mode → active tab `linear-gradient(white, #F4F1FE)` with `rgb(17,24,39)` text, header translucent white, node balance dark/readable; dark mode unchanged (`rgb(255,255,255)` tab text).
+
+**Files touched**: `components/workspace/TabBar.jsx`, `components/workspace/HomeTab.jsx`, `index.css`.
+
+
 ## 2026-10-01 — Workspace Toggles + Pricing Contrast + Bulk Docking UX ✅
 
 **User asks (triage from iter-51 action items):**

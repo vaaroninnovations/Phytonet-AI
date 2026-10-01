@@ -129,7 +129,7 @@ export function TabBar({ tabs, activeId, onActivate, onClose }) {
       <Link to="/" data-testid="app-brand"
             className="flex-shrink-0 flex items-center gap-2 pl-4 pr-2 py-2.5 hover:opacity-90">
         <BrandLogo className="h-7 w-7" />
-        <span className="font-headline text-[15px] font-extrabold tracking-tight text-white hidden sm:inline">
+        <span className="font-headline text-[15px] font-extrabold tracking-tight text-[#FAFAFF] hidden sm:inline">
           PhytoNet<span className="text-[#a48bff]"> AI</span>
         </span>
       </Link>
