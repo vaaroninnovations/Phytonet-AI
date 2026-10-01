@@ -1,0 +1,1217 @@
+[
+  {
+    "route": "/",
+    "light": {
+      "screenshot_error": "Page.screenshot: options.quality is unsupported for the png screenshots",
+      "probe": {
+        "bodyBg": "rgb(255, 255, 255)",
+        "bodyIsDark": false,
+        "suspect": [
+          {
+            "text": "NODES COMPUTED",
+            "color": "rgb(43, 182, 115)",
+            "bg": "rgb(43,182,115)",
+            "sel": "span.font-body.text-[10.5px]"
+          }
+        ]
+      }
+    },
+    "dark": {
+      "screenshot_error": "Page.screenshot: options.quality is unsupported for the png screenshots",
+      "probe": {
+        "bodyBg": "rgb(11, 11, 24)",
+        "bodyIsDark": true,
+        "suspect": [
+          {
+            "text": "Search\n\u2318K",
+            "color": "rgba(231, 231, 243, 0.7)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.hidden.items-center"
+          },
+          {
+            "text": "Search",
+            "color": "rgba(231, 231, 243, 0.7)",
+            "bg": "rgb(250,250,255)",
+            "sel": "span.hidden.md:inline"
+          },
+          {
+            "text": "Sign In",
+            "color": "rgb(250, 250, 255)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.inline-flex.items-center"
+          },
+          {
+            "text": "RESEARCH INTELLIGENCE \u00b7 V2.0",
+            "color": "rgba(231, 231, 243, 0.8)",
+            "bg": "rgb(250,250,255)",
+            "sel": "div.inline-flex.items-center"
+          },
+          {
+            "text": "with PhytoNet AI.",
+            "color": "rgba(0, 0, 0, 0)",
+            "bg": "rgb(15,14,36)",
+            "sel": "span.bg-gradient-to-r.from-[#c4b5fd]"
+          },
+          {
+            "text": "NODES COMPUTED",
+            "color": "rgb(43, 182, 115)",
+            "bg": "rgb(43,182,115)",
+            "sel": "span.font-body.text-[10.5px]"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "route": "/pricing",
+    "light": {
+      "screenshot_error": "Page.screenshot: options.quality is unsupported for the png screenshots",
+      "probe": {
+        "bodyBg": "rgb(255, 255, 255)",
+        "bodyIsDark": false,
+        "suspect": [
+          {
+            "text": "Buy plan",
+            "color": "rgb(255, 255, 255)",
+            "bg": "rgb(255,255,255)",
+            "sel": "button.inline-flex.w-full"
+          }
+        ]
+      }
+    },
+    "dark": {
+      "screenshot_error": "Page.screenshot: options.quality is unsupported for the png screenshots",
+      "probe": {
+        "bodyBg": "rgb(11, 11, 24)",
+        "bodyIsDark": true,
+        "suspect": [
+          {
+            "text": "Search\n\u2318K",
+            "color": "rgba(231, 231, 243, 0.7)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.hidden.items-center"
+          },
+          {
+            "text": "Search",
+            "color": "rgba(231, 231, 243, 0.7)",
+            "bg": "rgb(250,250,255)",
+            "sel": "span.hidden.md:inline"
+          },
+          {
+            "text": "Sign In",
+            "color": "rgb(250, 250, 255)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.inline-flex.items-center"
+          },
+          {
+            "text": "PAY ONLY FOR WHAT YOU USE",
+            "color": "rgb(196, 181, 253)",
+            "bg": "rgb(196,181,253)",
+            "sel": "span.inline-flex.items-center"
+          },
+          {
+            "text": "that scales with your research.",
+            "color": "rgba(0, 0, 0, 0)",
+            "bg": "rgb(15,14,36)",
+            "sel": "span.bg-gradient-to-r.from-[#c4b5fd]"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "route": "/resources",
+    "light": {
+      "screenshot_error": "Page.screenshot: options.quality is unsupported for the png screenshots",
+      "probe": {
+        "bodyBg": "rgb(255, 255, 255)",
+        "bodyIsDark": false,
+        "suspect": [
+          {
+            "text": "CENTRAL KNOWLEDGE HUB",
+            "color": "rgb(81, 57, 237)",
+            "bg": "rgb(81,57,237)",
+            "sel": "div.inline-flex.items-center"
+          },
+          {
+            "text": "USED IN PHYTONET AI",
+            "color": "rgb(81, 57, 237)",
+            "bg": "rgb(81,57,237)",
+            "sel": "p.text-[11.5px].font-semibold"
+          }
+        ]
+      }
+    },
+    "dark": {
+      "screenshot_error": "Page.screenshot: options.quality is unsupported for the png screenshots",
+      "probe": {
+        "bodyBg": "rgb(11, 11, 24)",
+        "bodyIsDark": true,
+        "suspect": [
+          {
+            "text": "Search\n\u2318K",
+            "color": "rgba(231, 231, 243, 0.7)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.hidden.items-center"
+          },
+          {
+            "text": "Search",
+            "color": "rgba(231, 231, 243, 0.7)",
+            "bg": "rgb(250,250,255)",
+            "sel": "span.hidden.md:inline"
+          },
+          {
+            "text": "Sign In",
+            "color": "rgb(250, 250, 255)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.inline-flex.items-center"
+          },
+          {
+            "text": "that powers PhytoNet AI",
+            "color": "rgba(0, 0, 0, 0)",
+            "bg": "rgb(15,14,36)",
+            "sel": "span.bg-gradient-to-r.from-[#c4b5fd]"
+          },
+          {
+            "text": "Chemistry\n3",
+            "color": "rgba(231, 231, 243, 0.8)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.inline-flex.items-center"
+          },
+          {
+            "text": "Targets & PPI\n3",
+            "color": "rgba(231, 231, 243, 0.8)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.inline-flex.items-center"
+          },
+          {
+            "text": "Disease\n3",
+            "color": "rgba(231, 231, 243, 0.8)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.inline-flex.items-center"
+          },
+          {
+            "text": "Pathways\n5",
+            "color": "rgba(231, 231, 243, 0.8)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.inline-flex.items-center"
+          },
+          {
+            "text": "Structures\n2",
+            "color": "rgba(231, 231, 243, 0.8)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.inline-flex.items-center"
+          },
+          {
+            "text": "Phytochemistry\n7",
+            "color": "rgba(231, 231, 243, 0.8)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.inline-flex.items-center"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "route": "/documentation",
+    "light": {
+      "screenshot_error": "Page.screenshot: options.quality is unsupported for the png screenshots",
+      "probe": {
+        "bodyBg": "rgb(255, 255, 255)",
+        "bodyIsDark": false,
+        "suspect": [
+          {
+            "text": "PHYTONET AI\nDocumentation\nDownload Markdown",
+            "color": "rgb(17, 24, 39)",
+            "bg": "rgb(15,14,36)",
+            "sel": "div.relative.z-10"
+          },
+          {
+            "text": "PHYTONET AI\nDocumentation",
+            "color": "rgb(17, 24, 39)",
+            "bg": "rgb(15,14,36)",
+            "sel": "div.flex.items-center"
+          },
+          {
+            "text": "Documentation",
+            "color": "rgb(17, 24, 39)",
+            "bg": "rgb(15,14,36)",
+            "sel": "h1.font-headline.text-[18px]"
+          },
+          {
+            "text": "1. What is PhytoNet AI?",
+            "color": "rgb(81, 57, 237)",
+            "bg": "rgb(81,57,237)",
+            "sel": "a.block.truncate"
+          }
+        ]
+      }
+    },
+    "dark": {
+      "screenshot_error": "Page.screenshot: options.quality is unsupported for the png screenshots",
+      "probe": {
+        "bodyBg": "rgb(11, 11, 24)",
+        "bodyIsDark": true,
+        "suspect": [
+          {
+            "text": "Search\n\u2318K",
+            "color": "rgba(231, 231, 243, 0.7)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.hidden.items-center"
+          },
+          {
+            "text": "Search",
+            "color": "rgba(231, 231, 243, 0.7)",
+            "bg": "rgb(250,250,255)",
+            "sel": "span.hidden.md:inline"
+          },
+          {
+            "text": "Sign In",
+            "color": "rgb(250, 250, 255)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.inline-flex.items-center"
+          },
+          {
+            "text": "Download Markdown",
+            "color": "rgb(231, 231, 243)",
+            "bg": "rgb(250,250,255)",
+            "sel": "a.inline-flex.items-center"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "route": "/plant-database",
+    "light": {
+      "screenshot_error": "Page.screenshot: options.quality is unsupported for the png screenshots",
+      "probe": {
+        "bodyBg": "rgb(255, 255, 255)",
+        "bodyIsDark": false,
+        "suspect": []
+      }
+    },
+    "dark": {
+      "screenshot_error": "Page.screenshot: options.quality is unsupported for the png screenshots",
+      "probe": {
+        "bodyBg": "rgb(11, 11, 24)",
+        "bodyIsDark": true,
+        "suspect": [
+          {
+            "text": "Search\n\u2318K",
+            "color": "rgba(231, 231, 243, 0.7)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.hidden.items-center"
+          },
+          {
+            "text": "Search",
+            "color": "rgba(231, 231, 243, 0.7)",
+            "bg": "rgb(250,250,255)",
+            "sel": "span.hidden.md:inline"
+          },
+          {
+            "text": "Sign In",
+            "color": "rgb(250, 250, 255)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.inline-flex.items-center"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "route": "/compound-target-prediction",
+    "light": {
+      "screenshot_error": "Page.screenshot: options.quality is unsupported for the png screenshots",
+      "probe": {
+        "bodyBg": "rgb(255, 255, 255)",
+        "bodyIsDark": false,
+        "suspect": []
+      }
+    },
+    "dark": {
+      "screenshot_error": "Page.screenshot: options.quality is unsupported for the png screenshots",
+      "probe": {
+        "bodyBg": "rgb(11, 11, 24)",
+        "bodyIsDark": true,
+        "suspect": [
+          {
+            "text": "Search\n\u2318K",
+            "color": "rgba(231, 231, 243, 0.7)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.hidden.items-center"
+          },
+          {
+            "text": "Search",
+            "color": "rgba(231, 231, 243, 0.7)",
+            "bg": "rgb(250,250,255)",
+            "sel": "span.hidden.md:inline"
+          },
+          {
+            "text": "Sign In",
+            "color": "rgb(250, 250, 255)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.inline-flex.items-center"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "route": "/disease-target-identification",
+    "light": {
+      "screenshot_error": "Page.screenshot: options.quality is unsupported for the png screenshots",
+      "probe": {
+        "bodyBg": "rgb(255, 255, 255)",
+        "bodyIsDark": false,
+        "suspect": [
+          {
+            "text": "04\nDisease Target Identification\nNOW",
+            "color": "rgb(81, 57, 237)",
+            "bg": "rgb(81,57,237)",
+            "sel": "button.group.flex"
+          },
+          {
+            "text": "Disease Target Identification",
+            "color": "rgb(81, 57, 237)",
+            "bg": "rgb(81,57,237)",
+            "sel": "span.flex-1.truncate"
+          }
+        ]
+      }
+    },
+    "dark": {
+      "screenshot_error": "Page.screenshot: options.quality is unsupported for the png screenshots",
+      "probe": {
+        "bodyBg": "rgb(11, 11, 24)",
+        "bodyIsDark": true,
+        "suspect": [
+          {
+            "text": "Search\n\u2318K",
+            "color": "rgba(231, 231, 243, 0.7)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.hidden.items-center"
+          },
+          {
+            "text": "Search",
+            "color": "rgba(231, 231, 243, 0.7)",
+            "bg": "rgb(250,250,255)",
+            "sel": "span.hidden.md:inline"
+          },
+          {
+            "text": "Sign In",
+            "color": "rgb(250, 250, 255)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.inline-flex.items-center"
+          },
+          {
+            "text": "PHYTONET AI SCIENTIST\n\nResearch Workflow",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div.px-5.pb-3"
+          },
+          {
+            "text": "Research Workflow",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "h2.mt-1.font-display"
+          },
+          {
+            "text": "01\nPlant Database\nADMET & Drug-Likeness Analysis\nCompound Target Identification\n",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "nav.flex-1.space-y-0.5"
+          },
+          {
+            "text": "01\nPlant Database",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div."
+          },
+          {
+            "text": "ADMET & Drug-Likeness Analysis",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div."
+          },
+          {
+            "text": "Compound Target Identification",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div."
+          },
+          {
+            "text": "04\nDisease Target Identification\nNOW",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div."
+          }
+        ]
+      }
+    }
+  },
+  {
+    "route": "/admet",
+    "light": {
+      "screenshot_error": "Page.screenshot: options.quality is unsupported for the png screenshots",
+      "probe": {
+        "bodyBg": "rgb(255, 255, 255)",
+        "bodyIsDark": false,
+        "suspect": []
+      }
+    },
+    "dark": {
+      "screenshot_error": "Page.screenshot: options.quality is unsupported for the png screenshots",
+      "probe": {
+        "bodyBg": "rgb(11, 11, 24)",
+        "bodyIsDark": true,
+        "suspect": [
+          {
+            "text": "Search\n\u2318K",
+            "color": "rgba(231, 231, 243, 0.7)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.hidden.items-center"
+          },
+          {
+            "text": "Search",
+            "color": "rgba(231, 231, 243, 0.7)",
+            "bg": "rgb(250,250,255)",
+            "sel": "span.hidden.md:inline"
+          },
+          {
+            "text": "Sign In",
+            "color": "rgb(250, 250, 255)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.inline-flex.items-center"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "route": "/drug-likeness",
+    "light": {
+      "screenshot_error": "Page.screenshot: options.quality is unsupported for the png screenshots",
+      "probe": {
+        "bodyBg": "rgb(255, 255, 255)",
+        "bodyIsDark": false,
+        "suspect": [
+          {
+            "text": "02\nADMET & Drug-Likeness Analysis\nNOW",
+            "color": "rgb(81, 57, 237)",
+            "bg": "rgb(81,57,237)",
+            "sel": "button.group.flex"
+          },
+          {
+            "text": "ADMET & Drug-Likeness Analysis",
+            "color": "rgb(81, 57, 237)",
+            "bg": "rgb(81,57,237)",
+            "sel": "span.flex-1.truncate"
+          }
+        ]
+      }
+    },
+    "dark": {
+      "screenshot_error": "Page.screenshot: options.quality is unsupported for the png screenshots",
+      "probe": {
+        "bodyBg": "rgb(11, 11, 24)",
+        "bodyIsDark": true,
+        "suspect": [
+          {
+            "text": "Search\n\u2318K",
+            "color": "rgba(231, 231, 243, 0.7)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.hidden.items-center"
+          },
+          {
+            "text": "Search",
+            "color": "rgba(231, 231, 243, 0.7)",
+            "bg": "rgb(250,250,255)",
+            "sel": "span.hidden.md:inline"
+          },
+          {
+            "text": "Sign In",
+            "color": "rgb(250, 250, 255)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.inline-flex.items-center"
+          },
+          {
+            "text": "PHYTONET AI SCIENTIST\n\nResearch Workflow",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div.px-5.pb-3"
+          },
+          {
+            "text": "Research Workflow",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "h2.mt-1.font-display"
+          },
+          {
+            "text": "Plant Database\n02\nADMET & Drug-Likeness Analysis\nNOW\nCompound Target Identificat",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "nav.flex-1.space-y-0.5"
+          },
+          {
+            "text": "Plant Database",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div."
+          },
+          {
+            "text": "02\nADMET & Drug-Likeness Analysis\nNOW",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div."
+          },
+          {
+            "text": "ADMET & Drug-Likeness Analysis",
+            "color": "rgb(81, 57, 237)",
+            "bg": "rgb(81,57,237)",
+            "sel": "span.flex-1.truncate"
+          },
+          {
+            "text": "Compound Target Identification",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div."
+          }
+        ]
+      }
+    }
+  },
+  {
+    "route": "/molecular-docking",
+    "light": {
+      "screenshot_error": "Page.screenshot: options.quality is unsupported for the png screenshots",
+      "probe": {
+        "bodyBg": "rgb(255, 255, 255)",
+        "bodyIsDark": false,
+        "suspect": [
+          {
+            "text": "06\nMolecular Docking\nNOW",
+            "color": "rgb(81, 57, 237)",
+            "bg": "rgb(81,57,237)",
+            "sel": "button.group.flex"
+          },
+          {
+            "text": "Molecular Docking",
+            "color": "rgb(81, 57, 237)",
+            "bg": "rgb(81,57,237)",
+            "sel": "span.flex-1.truncate"
+          }
+        ]
+      }
+    },
+    "dark": {
+      "screenshot_error": "Page.screenshot: options.quality is unsupported for the png screenshots",
+      "probe": {
+        "bodyBg": "rgb(11, 11, 24)",
+        "bodyIsDark": true,
+        "suspect": [
+          {
+            "text": "Search\n\u2318K",
+            "color": "rgba(231, 231, 243, 0.7)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.hidden.items-center"
+          },
+          {
+            "text": "Search",
+            "color": "rgba(231, 231, 243, 0.7)",
+            "bg": "rgb(250,250,255)",
+            "sel": "span.hidden.md:inline"
+          },
+          {
+            "text": "Sign In",
+            "color": "rgb(250, 250, 255)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.inline-flex.items-center"
+          },
+          {
+            "text": "PHYTONET AI SCIENTIST\n\nResearch Workflow",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div.px-5.pb-3"
+          },
+          {
+            "text": "Research Workflow",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "h2.mt-1.font-display"
+          },
+          {
+            "text": "01\nPlant Database\nADMET & Drug-Likeness Analysis\nCompound Target Identification\n",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "nav.flex-1.space-y-0.5"
+          },
+          {
+            "text": "01\nPlant Database",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div."
+          },
+          {
+            "text": "ADMET & Drug-Likeness Analysis",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div."
+          },
+          {
+            "text": "Compound Target Identification",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div."
+          },
+          {
+            "text": "Disease Target Identification",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div."
+          }
+        ]
+      }
+    }
+  },
+  {
+    "route": "/molecular-dynamics",
+    "light": {
+      "screenshot_error": "Page.screenshot: options.quality is unsupported for the png screenshots",
+      "probe": {
+        "bodyBg": "rgb(255, 255, 255)",
+        "bodyIsDark": false,
+        "suspect": [
+          {
+            "text": "07\nMolecular Dynamics\nV2.0",
+            "color": "rgb(81, 57, 237)",
+            "bg": "rgb(81,57,237)",
+            "sel": "button.group.flex"
+          },
+          {
+            "text": "Molecular Dynamics",
+            "color": "rgb(81, 57, 237)",
+            "bg": "rgb(81,57,237)",
+            "sel": "span.flex-1.truncate"
+          },
+          {
+            "text": "CONTINUE TO REPORT GENERATION",
+            "color": "rgb(255, 255, 255)",
+            "bg": "rgb(255,255,255)",
+            "sel": "a.inline-flex.items-center"
+          }
+        ]
+      }
+    },
+    "dark": {
+      "screenshot_error": "Page.screenshot: options.quality is unsupported for the png screenshots",
+      "probe": {
+        "bodyBg": "rgb(11, 11, 24)",
+        "bodyIsDark": true,
+        "suspect": [
+          {
+            "text": "Search\n\u2318K",
+            "color": "rgba(231, 231, 243, 0.7)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.hidden.items-center"
+          },
+          {
+            "text": "Search",
+            "color": "rgba(231, 231, 243, 0.7)",
+            "bg": "rgb(250,250,255)",
+            "sel": "span.hidden.md:inline"
+          },
+          {
+            "text": "Sign In",
+            "color": "rgb(250, 250, 255)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.inline-flex.items-center"
+          },
+          {
+            "text": "PHYTONET AI SCIENTIST\n\nResearch Workflow",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div.px-5.pb-3"
+          },
+          {
+            "text": "Research Workflow",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "h2.mt-1.font-display"
+          },
+          {
+            "text": "01\nPlant Database\nADMET & Drug-Likeness Analysis\nCompound Target Identification\n",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "nav.flex-1.space-y-0.5"
+          },
+          {
+            "text": "01\nPlant Database",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div."
+          },
+          {
+            "text": "ADMET & Drug-Likeness Analysis",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div."
+          },
+          {
+            "text": "Compound Target Identification",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div."
+          },
+          {
+            "text": "Disease Target Identification",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div."
+          }
+        ]
+      }
+    }
+  },
+  {
+    "route": "/network-analysis",
+    "light": {
+      "screenshot_error": "Page.screenshot: options.quality is unsupported for the png screenshots",
+      "probe": {
+        "bodyBg": "rgb(255, 255, 255)",
+        "bodyIsDark": false,
+        "suspect": [
+          {
+            "text": "05\nNetwork Analysis\nNOW",
+            "color": "rgb(81, 57, 237)",
+            "bg": "rgb(81,57,237)",
+            "sel": "button.group.flex"
+          },
+          {
+            "text": "Network Analysis",
+            "color": "rgb(81, 57, 237)",
+            "bg": "rgb(81,57,237)",
+            "sel": "span.flex-1.truncate"
+          },
+          {
+            "text": "1\nTarget Intersection Analysis",
+            "color": "rgb(81, 57, 237)",
+            "bg": "rgb(81,57,237)",
+            "sel": "button.flex.w-full"
+          },
+          {
+            "text": "Target Intersection Analysis",
+            "color": "rgb(81, 57, 237)",
+            "bg": "rgb(81,57,237)",
+            "sel": "span.truncate"
+          }
+        ]
+      }
+    },
+    "dark": {
+      "screenshot_error": "Page.screenshot: options.quality is unsupported for the png screenshots",
+      "probe": {
+        "bodyBg": "rgb(11, 11, 24)",
+        "bodyIsDark": true,
+        "suspect": [
+          {
+            "text": "Search\n\u2318K",
+            "color": "rgba(231, 231, 243, 0.7)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.hidden.items-center"
+          },
+          {
+            "text": "Search",
+            "color": "rgba(231, 231, 243, 0.7)",
+            "bg": "rgb(250,250,255)",
+            "sel": "span.hidden.md:inline"
+          },
+          {
+            "text": "Sign In",
+            "color": "rgb(250, 250, 255)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.inline-flex.items-center"
+          },
+          {
+            "text": "PHYTONET AI SCIENTIST\n\nResearch Workflow",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div.px-5.pb-3"
+          },
+          {
+            "text": "Research Workflow",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "h2.mt-1.font-display"
+          },
+          {
+            "text": "01\nPlant Database",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div."
+          },
+          {
+            "text": "ADMET & Drug-Likeness Analysis",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div."
+          },
+          {
+            "text": "Compound Target Identification",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div."
+          },
+          {
+            "text": "Disease Target Identification",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div."
+          },
+          {
+            "text": "05\nNetwork Analysis\nNOW\n1\nTarget Intersection Analysis\n2\nProtein\u2013Protein Interac",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div."
+          }
+        ]
+      }
+    }
+  },
+  {
+    "route": "/ai-scientific-report",
+    "light": {
+      "screenshot_error": "Page.screenshot: options.quality is unsupported for the png screenshots",
+      "probe": {
+        "bodyBg": "rgb(255, 255, 255)",
+        "bodyIsDark": false,
+        "suspect": [
+          {
+            "text": "08\nReport Generation\nNOW",
+            "color": "rgb(81, 57, 237)",
+            "bg": "rgb(81,57,237)",
+            "sel": "button.group.flex"
+          },
+          {
+            "text": "Report Generation",
+            "color": "rgb(81, 57, 237)",
+            "bg": "rgb(81,57,237)",
+            "sel": "span.flex-1.truncate"
+          },
+          {
+            "text": "DOWNLOAD PDF",
+            "color": "rgb(255, 255, 255)",
+            "bg": "rgb(255,255,255)",
+            "sel": "button.inline-flex.items-center"
+          }
+        ]
+      }
+    },
+    "dark": {
+      "screenshot_error": "Page.screenshot: options.quality is unsupported for the png screenshots",
+      "probe": {
+        "bodyBg": "rgb(11, 11, 24)",
+        "bodyIsDark": true,
+        "suspect": [
+          {
+            "text": "Search\n\u2318K",
+            "color": "rgba(231, 231, 243, 0.7)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.hidden.items-center"
+          },
+          {
+            "text": "Search",
+            "color": "rgba(231, 231, 243, 0.7)",
+            "bg": "rgb(250,250,255)",
+            "sel": "span.hidden.md:inline"
+          },
+          {
+            "text": "Sign In",
+            "color": "rgb(250, 250, 255)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.inline-flex.items-center"
+          },
+          {
+            "text": "PHYTONET AI SCIENTIST\n\nResearch Workflow",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div.px-5.pb-3"
+          },
+          {
+            "text": "Research Workflow",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "h2.mt-1.font-display"
+          },
+          {
+            "text": "01\nPlant Database\nADMET & Drug-Likeness Analysis\nCompound Target Identification\n",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "nav.flex-1.space-y-0.5"
+          },
+          {
+            "text": "01\nPlant Database",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div."
+          },
+          {
+            "text": "ADMET & Drug-Likeness Analysis",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div."
+          },
+          {
+            "text": "Compound Target Identification",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div."
+          },
+          {
+            "text": "Disease Target Identification",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div."
+          }
+        ]
+      }
+    }
+  },
+  {
+    "route": "/dock",
+    "light": {
+      "screenshot_error": "Page.screenshot: options.quality is unsupported for the png screenshots",
+      "probe": {
+        "bodyBg": "rgb(255, 255, 255)",
+        "bodyIsDark": false,
+        "suspect": [
+          {
+            "text": "0 ADDED",
+            "color": "rgb(43, 182, 115)",
+            "bg": "rgb(43,182,115)",
+            "sel": "span.rounded-full.bg-[#2BB673]/10"
+          },
+          {
+            "text": "Load 1 \u00d7 1 = 1 pair(s)",
+            "color": "rgb(255, 255, 255)",
+            "bg": "rgb(255,255,255)",
+            "sel": "button.inline-flex.items-center"
+          },
+          {
+            "text": "Run validation",
+            "color": "rgb(255, 255, 255)",
+            "bg": "rgb(255,255,255)",
+            "sel": "button.inline-flex.h-11"
+          }
+        ]
+      }
+    },
+    "dark": {
+      "screenshot_error": "Page.screenshot: options.quality is unsupported for the png screenshots",
+      "probe": {
+        "bodyBg": "rgb(11, 11, 24)",
+        "bodyIsDark": true,
+        "suspect": [
+          {
+            "text": "Search\n\u2318K",
+            "color": "rgba(231, 231, 243, 0.7)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.hidden.items-center"
+          },
+          {
+            "text": "Search",
+            "color": "rgba(231, 231, 243, 0.7)",
+            "bg": "rgb(250,250,255)",
+            "sel": "span.hidden.md:inline"
+          },
+          {
+            "text": "Sign In",
+            "color": "rgb(250, 250, 255)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.inline-flex.items-center"
+          },
+          {
+            "text": "0 ADDED",
+            "color": "rgb(43, 182, 115)",
+            "bg": "rgb(43,182,115)",
+            "sel": "span.rounded-full.bg-[#2BB673]/10"
+          },
+          {
+            "text": "TRY A BENCHMARK CASE\n\n1STP\n\u00b7\nStreptavidin \u00b7 Biotin\n16-atom ligand \u00b7 <60s\n3ERT\n\u00b7\n",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(251,251,255)",
+            "sel": "div.border-t.border-[#F1F1FA]"
+          },
+          {
+            "text": "1STP\n\u00b7\nStreptavidin \u00b7 Biotin\n16-atom ligand \u00b7 <60s\n3ERT\n\u00b7\nEstrogen R. \u00b7 4-OH-tam",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(251,251,255)",
+            "sel": "div.mt-2.flex"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "route": "/phytonet-ai",
+    "light": {
+      "screenshot_error": "Page.screenshot: options.quality is unsupported for the png screenshots",
+      "probe": {
+        "bodyBg": "rgb(255, 255, 255)",
+        "bodyIsDark": false,
+        "suspect": [
+          {
+            "text": "01\nPlant Database\nNOW",
+            "color": "rgb(81, 57, 237)",
+            "bg": "rgb(81,57,237)",
+            "sel": "button.group.flex"
+          },
+          {
+            "text": "Plant Database",
+            "color": "rgb(81, 57, 237)",
+            "bg": "rgb(81,57,237)",
+            "sel": "span.flex-1.truncate"
+          }
+        ]
+      }
+    },
+    "dark": {
+      "screenshot_error": "Page.screenshot: options.quality is unsupported for the png screenshots",
+      "probe": {
+        "bodyBg": "rgb(11, 11, 24)",
+        "bodyIsDark": true,
+        "suspect": [
+          {
+            "text": "Search\n\u2318K",
+            "color": "rgba(231, 231, 243, 0.7)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.hidden.items-center"
+          },
+          {
+            "text": "Search",
+            "color": "rgba(231, 231, 243, 0.7)",
+            "bg": "rgb(250,250,255)",
+            "sel": "span.hidden.md:inline"
+          },
+          {
+            "text": "Sign In",
+            "color": "rgb(250, 250, 255)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.inline-flex.items-center"
+          },
+          {
+            "text": "PHYTONET AI SCIENTIST\n\nResearch Workflow",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div.px-5.pb-3"
+          },
+          {
+            "text": "Research Workflow",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "h2.mt-1.font-display"
+          },
+          {
+            "text": "01\nPlant Database\nNOW\nADMET & Drug-Likeness Analysis\nCompound Target Identificat",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "nav.flex-1.space-y-0.5"
+          },
+          {
+            "text": "01\nPlant Database\nNOW",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div."
+          },
+          {
+            "text": "Plant Database",
+            "color": "rgb(81, 57, 237)",
+            "bg": "rgb(81,57,237)",
+            "sel": "span.flex-1.truncate"
+          },
+          {
+            "text": "ADMET & Drug-Likeness Analysis",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div."
+          },
+          {
+            "text": "Compound Target Identification",
+            "color": "rgb(237, 234, 251)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div."
+          }
+        ]
+      }
+    }
+  },
+  {
+    "route": "/referrals/leaderboard",
+    "light": {
+      "screenshot_error": "Page.screenshot: options.quality is unsupported for the png screenshots",
+      "probe": {
+        "bodyBg": "rgb(255, 255, 255)",
+        "bodyIsDark": false,
+        "suspect": [
+          {
+            "text": "Join to compete",
+            "color": "rgb(255, 255, 255)",
+            "bg": "rgb(255,255,255)",
+            "sel": "button.inline-flex.items-center"
+          },
+          {
+            "text": "Every referral counts.",
+            "color": "rgb(255, 255, 255)",
+            "bg": "rgb(255,255,255)",
+            "sel": "h3.font-headline.text-2xl"
+          }
+        ]
+      }
+    },
+    "dark": {
+      "screenshot_error": "Page.screenshot: options.quality is unsupported for the png screenshots",
+      "probe": {
+        "bodyBg": "rgb(11, 11, 24)",
+        "bodyIsDark": true,
+        "suspect": [
+          {
+            "text": "Search\n\u2318K",
+            "color": "rgba(231, 231, 243, 0.7)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.hidden.items-center"
+          },
+          {
+            "text": "Search",
+            "color": "rgba(231, 231, 243, 0.7)",
+            "bg": "rgb(250,250,255)",
+            "sel": "span.hidden.md:inline"
+          },
+          {
+            "text": "Sign In",
+            "color": "rgb(250, 250, 255)",
+            "bg": "rgb(250,250,255)",
+            "sel": "button.inline-flex.items-center"
+          },
+          {
+            "text": "sharing PhytoNet AI",
+            "color": "rgba(0, 0, 0, 0)",
+            "bg": "rgb(11,9,24)",
+            "sel": "span.bg-gradient-to-r.from-amber-300"
+          },
+          {
+            "text": "View pricing",
+            "color": "rgb(226, 232, 240)",
+            "bg": "rgb(255,255,255)",
+            "sel": "a.inline-flex.items-center"
+          },
+          {
+            "text": "The leaderboard is empty \u2014 be the first!\n\nNo successful referrals yet. Grab your",
+            "color": "rgb(241, 245, 249)",
+            "bg": "rgb(255,255,255)",
+            "sel": "div.rounded-3xl.border"
+          }
+        ]
+      }
+    }
+  }
+]

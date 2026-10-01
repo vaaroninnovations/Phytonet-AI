@@ -1,4 +1,18 @@
 # Dr. / — Network Pharmacology SaaS
+## 2026-10-01 — Full Theme Audit Pass ✅
+
+Comprehensive dark/light sweep across all 20+ public, module, and authenticated routes using a Playwright crawler + screenshot comparison. Full report in `/app/memory/THEME_AUDIT.md`.
+
+**Real bugs found & fixed** (3):
+1. `/documentation` LIGHT — Hero banner (`bg-[#0F0E24]/70`) and TOC (`bg-[#12102E]/70`) stayed dark. Fix: added `/70` opacity variants to the light remap.
+2. Every workflow module page DARK — WorkflowSidebar stayed white with light text (unreadable). Fix: added `.bg-white/85` and `.bg-white/90` to the dark remap.
+3. `/dock` DARK — Protocol Validation panel header gradient (`from-[#F5F5FC] to-white`) stayed bright. Fix: added gradient-stop remap for `from-[#F5F5FC]`, `from-[#F8FAFC]`, and generic `to-white` in dark mode.
+
+**False positives filtered**: gradient text clips, active workflow pills, CTA gradient buttons, keep-dark accent cards.
+
+**Keep-dark exceptions documented**: code blocks, Documentation walkthrough screenshot frames, auth modal (dark glass card by design in both themes).
+
+
 ## 2026-10-01 — Workspace Tabs Theme Adoption Fix ✅
 
 **Bug report**: workspace TabBar tabs didn't adopt theme changes (screenshot showed dark active "Home" tab next to light inactive tab in light mode).

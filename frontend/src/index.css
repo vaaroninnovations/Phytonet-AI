@@ -325,7 +325,9 @@ html[data-theme="dark"] .bg-\[\#F5F5FC\] {
 }
 html[data-theme="dark"] .bg-white\/70,
 html[data-theme="dark"] .bg-white\/60,
-html[data-theme="dark"] .bg-white\/80 {
+html[data-theme="dark"] .bg-white\/80,
+html[data-theme="dark"] .bg-white\/85,
+html[data-theme="dark"] .bg-white\/90 {
     background-color: rgba(15, 14, 36, 0.78) !important;
 }
 html[data-theme="dark"] .hover\:bg-\[\#F8FAFC\]:hover {
@@ -400,6 +402,21 @@ html[data-theme="dark"] .from-\[\#FFFBEB\].to-white {
     --tw-gradient-to: #1A1533 var(--tw-gradient-to-position);
 }
 
+/* Light-grey → white panel-header gradients used across modules */
+html[data-theme="dark"] .from-\[\#F5F5FC\],
+html[data-theme="dark"] .from-\[\#F8FAFC\] {
+    --tw-gradient-from: #1B1838 var(--tw-gradient-from-position);
+    --tw-gradient-to: rgb(27 24 56 / 0) var(--tw-gradient-to-position);
+    --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+html[data-theme="dark"] .from-\[\#F5F5FC\].to-white,
+html[data-theme="dark"] .from-\[\#F8FAFC\].to-white {
+    --tw-gradient-to: #121022 var(--tw-gradient-to-position);
+}
+html[data-theme="dark"] .to-white {
+    --tw-gradient-to: #121022 var(--tw-gradient-to-position);
+}
+
 /* Inputs & tables stay legible */
 html[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]),
 html[data-theme="dark"] textarea,
@@ -420,8 +437,10 @@ html[data-theme="light"] .bg-\[\#0B0B18\] {
     background-color: #FFFFFF !important;
 }
 html[data-theme="light"] .bg-\[\#0F0E24\]\/85,
+html[data-theme="light"] .bg-\[\#0F0E24\]\/70,
 html[data-theme="light"] .bg-\[\#0F0E24\]\/60,
 html[data-theme="light"] .bg-\[\#0B0A1D\]\/70,
+html[data-theme="light"] .bg-\[\#12102E\]\/70,
 html[data-theme="light"] .bg-\[\#12102E\]\/60 {
     background-color: rgba(255, 255, 255, 0.88) !important;
 }
