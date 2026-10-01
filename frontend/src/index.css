@@ -334,22 +334,32 @@ html[data-theme="dark"] .hover\:bg-\[\#F8FAFC\]:hover {
 
 /* ── Ink text → light text ── */
 html[data-theme="dark"] .text-\[\#111827\],
-html[data-theme="dark"] .text-\[\#0B0B18\] {
+html[data-theme="dark"] .text-\[\#0B0B18\],
+html[data-theme="dark"] .text-\[\#0F172A\] {
     color: #EDEAFB !important;
 }
 html[data-theme="dark"] .text-\[\#1E1E33\],
-html[data-theme="dark"] .text-\[\#374151\] {
+html[data-theme="dark"] .text-\[\#374151\],
+html[data-theme="dark"] .text-\[\#1E293B\] {
     color: #D8D3F0 !important;
 }
 html[data-theme="dark"] .text-\[\#4B5563\],
-html[data-theme="dark"] .text-\[\#6B7280\] {
+html[data-theme="dark"] .text-\[\#6B7280\],
+html[data-theme="dark"] .text-\[\#475569\] {
     color: #9B94B8 !important;
 }
-html[data-theme="dark"] .text-\[\#64748B\] {
+html[data-theme="dark"] .text-\[\#64748B\],
+html[data-theme="dark"] .text-\[\#94A3B8\] {
     color: #8E86AC !important;
 }
 html[data-theme="dark"] .text-\[\#9CA3AF\] {
     color: #8E86AC !important;
+}
+/* Pricing-card "fuchsia_700" headings also need to lift in dark mode */
+html[data-theme="dark"] .text-fuchsia-700 { color: #E879F9 !important; }
+html[data-theme="dark"] .text-fuchsia-600 { color: #D946EF !important; }
+html[data-theme="dark"] .line-through.text-slate-400 {
+    color: #6D6490 !important;
 }
 
 /* ── Light borders / dividers → dark lines ── */
@@ -376,6 +386,18 @@ html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
 html[data-theme="dark"] .shadow-lg,
 html[data-theme="dark"] .shadow-xl {
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55) !important;
+}
+
+/* Pricing "Research / Most Popular" highlighted card — the cream amber
+   gradient becomes bright even in dark mode. Deepen the background so
+   the lifted ink text stays legible. */
+html[data-theme="dark"] .from-\[\#FFFBEB\] {
+    --tw-gradient-from: #2A2238 var(--tw-gradient-from-position);
+    --tw-gradient-to: rgb(42 34 56 / 0) var(--tw-gradient-to-position);
+    --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+html[data-theme="dark"] .from-\[\#FFFBEB\].to-white {
+    --tw-gradient-to: #1A1533 var(--tw-gradient-to-position);
 }
 
 /* Inputs & tables stay legible */

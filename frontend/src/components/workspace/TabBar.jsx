@@ -15,6 +15,7 @@ import { useNodes } from "@/context/NodeContext";
 import NodeBadge from "@/components/nodes/NodeBadge";
 import SaveProjectMenu from "@/components/SaveProjectMenu";
 import BrandLogo from "@/components/BrandLogo";
+import AppearanceControls from "@/components/AppearanceControls";
 import { useCommandPalette } from "@/context/CommandPaletteContext";
 
 const TYPE_ICONS = {
@@ -183,6 +184,7 @@ export function TabBar({ tabs, activeId, onActivate, onClose }) {
           <span className="hidden md:inline">Search</span>
           <span className="ml-2 hidden lg:inline rounded border border-white/15 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400">⌘K</span>
         </button>
+        <AppearanceControls dark compact />
         {user && <SaveProjectMenu />}
         {user && <NodeBadge />}
         {user && <AvatarMenu user={user} navigate={navigate} logout={logout} />}

@@ -1,8 +1,9 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useEffect, useRef, useState } from "react";
-import { Search, User, LogOut, LayoutDashboard, FolderOpen, Download, Settings, Menu, X, Sun, Moon, Type, Check } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Search, User, LogOut, LayoutDashboard, FolderOpen, Download, Settings, Menu, X } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
+import AppearanceControls from "@/components/AppearanceControls";
 import NodeBadge from "@/components/nodes/NodeBadge";
 import SaveProjectMenu from "@/components/SaveProjectMenu";
 import BrandLogo from "@/components/BrandLogo";
@@ -19,9 +20,7 @@ export default function SiteHeader() {
   const { pathname, hash } = useLocation();
   const isActive = (p) => (p.startsWith("/#") ? false : pathname === p);
   const { user, openModal, logout } = useAuth();
-  const { isDark, toggleTheme, fontSize, setFontSize, fontSizes } = useTheme();
-  const [fontMenuOpen, setFontMenuOpen] = useState(false);
-  const fontMenuRef = useRef(null);
+  const { isDark } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -39,19 +38,6 @@ export default function SiteHeader() {
   }, []);
 
   useEffect(() => { setMobileOpen(false); }, [pathname, hash]);
-
-  // Close the font-size menu on any click outside it (capture phase so it
-  // fires before the toggle button's own click re-opens it).
-  useEffect(() => {
-    if (!fontMenuOpen) return;
-    const onDown = (e) => {
-      if (fontMenuRef.current && !fontMenuRef.current.contains(e.target)) {
-        setFontMenuOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", onDown, true);
-    return () => document.removeEventListener("mousedown", onDown, true);
-  }, [fontMenuOpen]);
 
   // Robust smooth-scroll for hash nav links (Home ▾ Pricing/Docs/Resources).
   //   • Same-page hash click → scroll immediately.
@@ -153,79 +139,7 @@ export default function SiteHeader() {
           {user && <SaveProjectMenu />}
 
           {/* Appearance controls — theme toggle + font-size modifier */}
-          <button
-            data-testid="theme-toggle"
-            type="button"
-            onClick={toggleTheme}
-            aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-            title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-            className={`grid h-9 w-9 place-items-center rounded-full border transition-colors ${
-              dark
-                ? "border-[#FAFAFF]/15 bg-[#FAFAFF]/[0.05] text-[#FAFAFF] hover:border-[#c4b5fd]/50"
-                : "border-[#E7E7F3] bg-white text-[#111827] hover:border-[#5139ED]/40 hover:text-[#5139ED]"
-            }`}
-          >
-            {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </button>
-
-          <div className="relative" ref={fontMenuRef}>
-            <button
-              data-testid="font-size-toggle"
-              type="button"
-              onClick={() => setFontMenuOpen((v) => !v)}
-              aria-label="Adjust text size"
-              aria-expanded={fontMenuOpen}
-              title="Adjust text size"
-              className={`grid h-9 w-9 place-items-center rounded-full border transition-colors ${
-                dark
-                  ? "border-[#FAFAFF]/15 bg-[#FAFAFF]/[0.05] text-[#FAFAFF] hover:border-[#c4b5fd]/50"
-                  : "border-[#E7E7F3] bg-white text-[#111827] hover:border-[#5139ED]/40 hover:text-[#5139ED]"
-              }`}
-            >
-              <Type className="h-4 w-4" />
-            </button>
-            {fontMenuOpen && (
-              <div
-                data-testid="font-size-menu"
-                className={`absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-2xl border shadow-lg ${
-                  dark ? "border-[#2A2745] bg-[#151230]" : "border-[#E7E7F3] bg-white"
-                }`}
-              >
-                  <div className={`border-b px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest ${
-                    dark ? "border-[#2A2745] text-[#9B94B8]" : "border-[#F1F1FA] text-[#6B7280]"
-                  }`}>
-                    Text size
-                  </div>
-                  {fontSizes.map((f) => (
-                    <button
-                      key={f.id}
-                      data-testid={`font-size-${f.id}`}
-                      onClick={() => { setFontSize(f.id); setFontMenuOpen(false); }}
-                      aria-pressed={fontSize === f.id}
-                      className={`flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                        dark
-                          ? "text-[#EDEAFB] hover:bg-[#1B1838]"
-                          : "text-[#111827] hover:bg-[#F8FAFC]"
-                      }`}
-                    >
-                      <span
-                        className={`font-headline font-extrabold leading-none ${
-                          fontSize === f.id ? "text-[#5139ED]" : dark ? "text-[#c4b5fd]" : "text-[#374151]"
-                        }`}
-                        style={{ fontSize: `${12 + f.px - 14}px` }}
-                      >
-                        Aa
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-[12.5px] font-bold">{f.label}</span>
-                        <span className={`block text-[10.5px] ${dark ? "text-[#9B94B8]" : "text-[#6B7280]"}`}>{f.hint}</span>
-                      </span>
-                      {fontSize === f.id && <Check className="h-3.5 w-3.5 text-[#5139ED]" />}
-                    </button>
-                  ))}
-                </div>
-            )}
-          </div>
+          <AppearanceControls dark={dark} />
 
           {!user ? (
             <button

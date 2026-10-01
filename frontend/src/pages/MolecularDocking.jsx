@@ -195,13 +195,24 @@ export default function MolecularDocking() {
       const m = {}; intersectingGenes.forEach((g) => (m[g] = true));
       setSelectedTargets(m);
     }
-  }, [intersectingGenes]); // eslint-disable-line
+    // In standalone mode there's no disease intersection to narrow things, so
+    // pre-select every resolved target instead of leaving the list empty.
+    if (standalone && Object.keys(selectedTargets).length === 0 && intersectingGenes.length === 0 && targetOptions.length > 0) {
+      const m = {}; targetOptions.forEach((t) => (m[t.gene_symbol] = true));
+      setSelectedTargets(m);
+    }
+  }, [intersectingGenes, targetOptions, standalone]); // eslint-disable-line
   useEffect(() => {
     if (Object.keys(selectedComps).length === 0 && compoundOptions.length > 0) {
-      const m = {}; compoundOptions.slice(0, 3).forEach((c) => (m[c.name] = true));
+      // Standalone: tick every compound the user resolved (bulk docking is
+      // the whole point of adding more than one). Guided workflow: cap at
+      // the first 3 so a user who imported 50 compounds from ADMET doesn't
+      // accidentally queue a huge batch.
+      const slice = standalone ? compoundOptions : compoundOptions.slice(0, 3);
+      const m = {}; slice.forEach((c) => (m[c.name] = true));
       setSelectedComps(m);
     }
-  }, [compoundOptions]); // eslint-disable-line
+  }, [compoundOptions, standalone]); // eslint-disable-line
 
   const selectedGenes = Object.keys(selectedTargets).filter((g) => selectedTargets[g]);
   const selectedComp = compoundOptions.filter((c) => selectedComps[c.name]);
@@ -507,7 +518,28 @@ export default function MolecularDocking() {
         {/* Selection panel */}
         <div data-testid="dock-selection" className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
           <div className="rounded-3xl border border-[#E7E7F3] bg-white p-5">
-            <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">Compounds ({selectedComp.length}/{compoundOptions.length})</p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">Compounds ({selectedComp.length}/{compoundOptions.length})</p>
+              {compoundOptions.length > 0 && (
+                <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest">
+                  <button
+                    data-testid="dock-comp-select-all"
+                    type="button"
+                    onClick={() => {
+                      const m = {}; compoundOptions.forEach((c) => (m[c.name] = true));
+                      setSelectedComps(m);
+                    }}
+                    className="rounded-full border border-[#E7E7F3] px-2.5 py-1 text-[#5139ED] hover:border-[#5139ED]/40 hover:bg-[#5139ED]/5"
+                  >All</button>
+                  <button
+                    data-testid="dock-comp-select-none"
+                    type="button"
+                    onClick={() => setSelectedComps({})}
+                    className="rounded-full border border-[#E7E7F3] px-2.5 py-1 text-[#64748B] hover:border-[#5139ED]/40"
+                  >None</button>
+                </div>
+              )}
+            </div>
             <div className="mt-3 max-h-64 space-y-1 overflow-auto">
               {compoundOptions.map((c) => (
                 <label key={c.name} className="flex cursor-pointer items-center gap-2 rounded-lg border border-[#F1F1FA] bg-white px-3 py-2 text-xs">
@@ -519,7 +551,28 @@ export default function MolecularDocking() {
             </div>
           </div>
           <div className="rounded-3xl border border-[#E7E7F3] bg-white p-5">
-            <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">Targets ({selectedGenes.length}/{targetOptions.length})</p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="font-heading text-xs font-bold uppercase tracking-[0.24em] text-[#5139ED]">Targets ({selectedGenes.length}/{targetOptions.length})</p>
+              {targetOptions.length > 0 && (
+                <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest">
+                  <button
+                    data-testid="dock-tgt-select-all"
+                    type="button"
+                    onClick={() => {
+                      const m = {}; targetOptions.forEach((t) => (m[t.gene_symbol] = true));
+                      setSelectedTargets(m);
+                    }}
+                    className="rounded-full border border-[#E7E7F3] px-2.5 py-1 text-[#5139ED] hover:border-[#5139ED]/40 hover:bg-[#5139ED]/5"
+                  >All</button>
+                  <button
+                    data-testid="dock-tgt-select-none"
+                    type="button"
+                    onClick={() => setSelectedTargets({})}
+                    className="rounded-full border border-[#E7E7F3] px-2.5 py-1 text-[#64748B] hover:border-[#5139ED]/40"
+                  >None</button>
+                </div>
+              )}
+            </div>
             <div className="mt-3 max-h-64 space-y-1 overflow-auto">
               {targetOptions.map((t) => (
                 <label key={t.gene_symbol} className="flex cursor-pointer items-center gap-2 rounded-lg border border-[#F1F1FA] bg-white px-3 py-2 text-xs">
@@ -532,6 +585,29 @@ export default function MolecularDocking() {
             </div>
           </div>
         </div>
+
+        {/* Batch summary — total docking pairs about to run */}
+        {(selectedComp.length > 0 || selectedGenes.length > 0) && (
+          <div data-testid="dock-batch-summary"
+               className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#5139ED]/20 bg-[#F5F3FE] px-4 py-3">
+            <div className="flex items-center gap-2 text-[12.5px] text-[#0B0B18]">
+              <Sparkles className="h-4 w-4 text-[#5139ED]" />
+              <span>
+                Batch:
+                {" "}<strong className="text-[#5139ED]">{selectedComp.length}</strong> compound{selectedComp.length === 1 ? "" : "s"}
+                {" × "}
+                <strong className="text-[#5139ED]">{selectedGenes.length}</strong> target{selectedGenes.length === 1 ? "" : "s"}
+                {" = "}
+                <strong className="text-[#0B0B18]">{selectedComp.length * selectedGenes.length}</strong> docking pair{selectedComp.length * selectedGenes.length === 1 ? "" : "s"}
+              </span>
+            </div>
+            {selectedComp.length * selectedGenes.length > 25 && (
+              <span className="rounded-full bg-amber-500/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-amber-700">
+                Large batch — may take several minutes
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Vina params */}
         <div data-testid="dock-params" className="mt-6 rounded-3xl border border-[#E7E7F3] bg-white p-5">
