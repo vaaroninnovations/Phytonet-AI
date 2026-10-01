@@ -66,7 +66,11 @@ function SiteChrome({ children }) {
   const { pathname, search } = useLocation();
   const isAdmin = pathname.startsWith("/admin");
   const isApp   = pathname.startsWith("/app");
-  const embedded = new URLSearchParams(search).get("embed") === "1";
+  // ?embed=1 is set when the page first loads inside a module iframe, but
+  // in-iframe step navigation drops the query param — so also detect the
+  // iframe context directly (window.top differs from self).
+  const embedded = new URLSearchParams(search).get("embed") === "1"
+                || window.self !== window.top;
   const hideChrome = isAdmin || isApp || embedded;
   return (
     <>

@@ -1,4 +1,15 @@
 # Dr. / — Network Pharmacology SaaS
+## 2026-10-01 — Double Navbar in Workspace Module Tabs Fixed ✅
+
+**Bug report**: Opening a module tab in the /app workspace showed TWO navbars — the workspace TabBar plus the public SiteHeader inside the module iframe.
+
+**Root cause**: Module tabs load the module page in an iframe with `?embed=1`, and `SiteChrome` in `App.js` hid SiteHeader/SiteFooter based on that query param. But any in-iframe navigation (workflow step transitions, auto-resume redirects) drops the query string, so the full chrome reappeared.
+
+**Fix** (`App.js` SiteChrome): detect the iframe context directly — `embedded = search has embed=1 || window.self !== window.top`. Chrome now stays hidden for the entire iframe session regardless of internal navigation. (Safe: comparing window references doesn't throw cross-origin.)
+
+**Verified**: workspace Plant Database module tab renders with TabBar + module strip only; iframe `/plant-database?embed=1` has no site-header/footer.
+
+
 ## 2026-10-01 — Light-mode amber/green status colors fix ✅
 
 **Bug report**: In light mode, the Execution Plan card's amber ("Resolving…" running status) and green ("Retrieved 40 compounds…" done status) sub-status text was invisible (screenshots attached by user).
