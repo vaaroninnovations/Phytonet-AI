@@ -1,0 +1,24 @@
+{
+  "summary": "Frontend-only verification of iteration 52 features. All 6 requested features verified end-to-end against the live preview URL. (1) Shared AppearanceControls on /app workspace: theme-toggle + font-size-toggle render on the authenticated TabBar, theme flips light↔dark on <html data-theme>, font-size-menu opens with sm/md/lg options, outside-click closes menu. (2) Pricing dark-mode contrast: Student/Starter/Research/Professional/pro_monthly/lab_team plan titles AND prices all resolve to rgb(237,234,251) (= #EDEAFB) in dark mode. Research 'Most Popular' card background gradient resolves to linear-gradient(rgb(42,34,56), rgb(26,21,51)) — dark surface — so the lifted ink stays legible. (3) Bulk Docking Select All/None on /dock: both dock-comp-select-all/none and dock-tgt-select-all/none buttons present and functional. (4) dock-batch-summary panel renders above Vina params with exact text 'Batch: N compound(s) × M target(s) = N*M docking pair(s)' and updates live as checkboxes toggle. (5) Auto-select on /dock Load: 5 compounds + 3 targets → ALL 5 compounds and ALL 3 targets pre-checked (no 3-cap in standalone). (6) Regression: public SiteHeader theme-toggle + font-size menu work on /, /pricing, /plant-database, /documentation — theme flips both ways, menu opens and closes via outside-click.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AppearanceControls.jsx is a clean refactor — single source of truth for the theme+font-size cluster, capture-phase mousedown handler encapsulated, dark/compact variants via props. Good move.",
+    "MolecularDocking.jsx selection panel: dock-batch-summary only renders when (selectedComp.length > 0 || selectedGenes.length > 0). If a user manually unchecks every compound AND every target the summary disappears — intentional, but may feel abrupt. Minor UX nit, not a bug.",
+    "Pricing dark-mode fix appears to be driven by the index.css global dark-remap for #0F172A → light ink (per iteration_51 note) rather than per-card theme-aware tokens. Works correctly now, but the fragile override pattern flagged previously still applies — any new near-black hex utility added to pricing cards would again be unreadable in dark mode."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "100% (6/6 feature checks pass)"},
+  "test_credentials": "rtest1785979513@phytonetai.com / TestPass123! (signed in via SiteHeader modal → /app, no resume modal appeared for this test session).",
+  "seed_data_creation": "Transient: resolved 5 compounds (curcumin, quercetin, resveratrol, genistein, luteolin) via PubChem + 3 targets (EGFR, AKT1, TP53) via UniProt on /dock using the Bulk import panels. Not persisted after reload.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Verified live (1440x900/1200 viewport):\n- /pricing dark: ALL 6 pricing-card plan titles+prices rgb(237,234,251); pricing-card-research gradient = linear-gradient(rgb(42,34,56), rgb(26,21,51)); other 5 cards bg rgb(18,16,34).\n- /app workspace signed-in: exactly 1 theme-toggle + 1 font-size-toggle in TabBar (no duplicate SiteHeader instance). Font-size-menu shows sm/md/lg, outside-click closes correctly.\n- /dock bulk flow: compound-bulk-toggle → compound-bulk-textarea paste 5 lines → compound-bulk-run resolves ~5-10s per compound via PubChem. Same for targets via target-bulk-* (UniProt, 2-4s per). After dock-submit, ALL compounds+targets pre-checked (standalone no 3-cap). dock-comp-select-all/none and dock-tgt-select-all/none functional; dock-batch-summary live text 'Batch: N compounds × M targets = N*M docking pairs'.\n- Public regression: /, /pricing, /plant-database, /documentation all have working theme-toggle + font-size-menu with outside-click dismissal.\n- Console: only pre-existing 401 auth probes; no new errors from this iteration.",
+  "rca of the issue": "N/A — all iteration-52 features verified working."
+}

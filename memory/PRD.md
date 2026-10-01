@@ -1,4 +1,34 @@
 # Dr. / — Network Pharmacology SaaS
+## 2026-10-01 — Workspace Toggles + Pricing Contrast + Bulk Docking UX ✅
+
+**User asks (triage from iter-51 action items):**
+1. Add theme + font-size toggles inside the /app workspace header
+2. Lift Pricing dark-mode card contrast
+3. Let the standalone Docking module batch-process multiple compounds
+
+**Implementation**
+- **New shared component** `frontend/src/components/AppearanceControls.jsx` — reusable theme + font-size cluster with `dark`/`compact` props and the capture-phase outside-click handler encapsulated inside. Replaces the inline implementation in `SiteHeader`.
+- **Workspace TabBar** now mounts `<AppearanceControls dark compact />` in the signed-in top bar (`components/workspace/TabBar.jsx`) so users can switch appearance without leaving /app.
+- **Pricing dark-mode contrast** (`index.css` dark remap additions):
+  - `#0F172A` + `#1E293B` + `#475569` + `#94A3B8` added to the dark→light-ink remap (titles, prices, muted meta all lift to `#EDEAFB`/`#D8D3F0`/`#8E86AC`).
+  - `.text-fuchsia-700/600` lifted to `#E879F9`/`#D946EF` (section heading on Pricing).
+  - Highlighted "Most Popular" card gradient `from-[#FFFBEB] to-white` is remapped in dark mode to `#2A2238 → #1A1533` so the amber card doesn't blow out.
+- **Bulk Docking UX** (`pages/MolecularDocking.jsx`, standalone route = `/dock`):
+  - Standalone mode auto-selects ALL resolved compounds and ALL targets (previously capped at 3 compounds and empty targets because `intersectingGenes` is empty without disease-targets).
+  - Guided workflow route still keeps the 3-compound cap (prevents accidental mega-batches when imported from ADMET).
+  - New Select-All / None toggle buttons on both Compounds and Targets panels (`dock-comp-select-all/none`, `dock-tgt-select-all/none`).
+  - New `dock-batch-summary` panel between the selection grid and the Vina parameter row: shows live `N compounds × M targets = N*M docking pairs` + an amber "Large batch — may take several minutes" chip when N*M > 25.
+- The backend `/api/docking/run-stream` SSE pipeline already handles N × M docking natively, so no backend changes needed — the ask was pure UX exposure.
+
+**Testing** — iteration 52 (testing agent): 6/6 pass. Verified live:
+- Workspace: exactly one `theme-toggle` + one `font-size-toggle` in TabBar, font menu outside-click closes.
+- Pricing: all 6 plan titles + prices resolve to `rgb(237, 234, 251)` in dark mode; Research card gradient resolves to a deep navy.
+- /dock bulk: 5 compounds + 3 targets after Load — all 15 pairs pre-checked; batch summary shows live math.
+- Public SiteHeader regression: `/`, `/pricing`, `/plant-database`, `/documentation` all working.
+
+**Files touched**: `components/AppearanceControls.jsx` (new), `components/workspace/TabBar.jsx`, `components/SiteHeader.jsx`, `index.css`, `pages/MolecularDocking.jsx`.
+
+
 ## 2026-10-01 — Global Theme System + Font Size Modifier + Sticky Transparent Navbar ✅
 
 **User asks:** (1) dark/light mode toggle on navbar, (2) font size modifier, (3) dark-by-design pages must also flip to light, (4) navbar sticky + transparent.
