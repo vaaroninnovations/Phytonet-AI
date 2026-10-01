@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Search, User, LogOut, LayoutDashboard, FolderOpen, Download, Settings, Menu, X, Sun, Moon, Type, Check } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
@@ -21,19 +21,15 @@ export default function SiteHeader() {
   const { user, openModal, logout } = useAuth();
   const { isDark, toggleTheme, fontSize, setFontSize, fontSizes } = useTheme();
   const [fontMenuOpen, setFontMenuOpen] = useState(false);
+  const fontMenuRef = useRef(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const navigate = useNavigate();
   const { open: openPalette } = useCommandPalette();
-  // These marketing routes use the dark canvas — switch header to dark-glass
-  // so the transition into each hero feels seamless. In dark mode the header
-  // is dark-glass on every route.
-  const darkRoute = pathname === "/"
-            || pathname === "/pricing"
-            || pathname === "/resources"
-            || pathname === "/referrals/leaderboard";
-  const dark = isDark || darkRoute;
+  // The whole app now responds to the theme toggle — the header simply
+  // follows the global theme on every route.
+  const dark = isDark;
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -43,6 +39,19 @@ export default function SiteHeader() {
   }, []);
 
   useEffect(() => { setMobileOpen(false); }, [pathname, hash]);
+
+  // Close the font-size menu on any click outside it (capture phase so it
+  // fires before the toggle button's own click re-opens it).
+  useEffect(() => {
+    if (!fontMenuOpen) return;
+    const onDown = (e) => {
+      if (fontMenuRef.current && !fontMenuRef.current.contains(e.target)) {
+        setFontMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDown, true);
+    return () => document.removeEventListener("mousedown", onDown, true);
+  }, [fontMenuOpen]);
 
   // Robust smooth-scroll for hash nav links (Home ▾ Pricing/Docs/Resources).
   //   • Same-page hash click → scroll immediately.
@@ -159,7 +168,7 @@ export default function SiteHeader() {
             {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </button>
 
-          <div className="relative">
+          <div className="relative" ref={fontMenuRef}>
             <button
               data-testid="font-size-toggle"
               type="button"
@@ -176,14 +185,12 @@ export default function SiteHeader() {
               <Type className="h-4 w-4" />
             </button>
             {fontMenuOpen && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setFontMenuOpen(false)} />
-                <div
-                  data-testid="font-size-menu"
-                  className={`absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-2xl border shadow-lg ${
-                    dark ? "border-[#2A2745] bg-[#151230]" : "border-[#E7E7F3] bg-white"
-                  }`}
-                >
+              <div
+                data-testid="font-size-menu"
+                className={`absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-2xl border shadow-lg ${
+                  dark ? "border-[#2A2745] bg-[#151230]" : "border-[#E7E7F3] bg-white"
+                }`}
+              >
                   <div className={`border-b px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest ${
                     dark ? "border-[#2A2745] text-[#9B94B8]" : "border-[#F1F1FA] text-[#6B7280]"
                   }`}>
@@ -217,7 +224,6 @@ export default function SiteHeader() {
                     </button>
                   ))}
                 </div>
-              </>
             )}
           </div>
 

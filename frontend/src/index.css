@@ -384,3 +384,140 @@ html[data-theme="dark"] textarea,
 html[data-theme="dark"] select {
     color-scheme: dark;
 }
+
+/* ════════════ Light theme overrides for dark-by-design pages ════════════
+   Activated by html[data-theme="light"]. The marketing pages (Home, Pricing,
+   Resources) and the /app workspace were authored dark-first, so in light
+   mode the shared dark palette is remapped to the light one. Module pages
+   (light-authored) are untouched because they never use these classes. */
+
+/* Dark backgrounds → light */
+html[data-theme="light"] .bg-\[\#0F0E24\],
+html[data-theme="light"] .bg-\[\#0B0918\],
+html[data-theme="light"] .bg-\[\#0B0B18\] {
+    background-color: #FFFFFF !important;
+}
+html[data-theme="light"] .bg-\[\#0F0E24\]\/85,
+html[data-theme="light"] .bg-\[\#0F0E24\]\/60,
+html[data-theme="light"] .bg-\[\#0B0A1D\]\/70,
+html[data-theme="light"] .bg-\[\#12102E\]\/60 {
+    background-color: rgba(255, 255, 255, 0.88) !important;
+}
+html[data-theme="light"] .bg-\[\#12102E\],
+html[data-theme="light"] .bg-\[\#141024\] {
+    background-color: #F6F4FE !important;
+}
+html[data-theme="light"] .bg-black\/20 { background-color: rgba(255,255,255,0.55) !important; }
+html[data-theme="light"] .bg-black\/25 { background-color: rgba(255,255,255,0.65) !important; }
+html[data-theme="light"] .bg-black\/30 { background-color: rgba(255,255,255,0.78) !important; }
+html[data-theme="light"] .bg-black\/40 { background-color: rgba(248,247,255,0.92) !important; }
+html[data-theme="light"] .bg-black\/60 { background-color: rgba(255,255,255,0.90) !important; }
+html[data-theme="light"] .bg-white\/5,
+html[data-theme="light"] .bg-white\/10,
+html[data-theme="light"] .bg-white\/\[0\.02\],
+html[data-theme="light"] .bg-white\/\[0\.04\],
+html[data-theme="light"] .bg-\[\#FAFAFF\]\/5,
+html[data-theme="light"] .bg-\[\#FAFAFF\]\/\[0\.03\],
+html[data-theme="light"] .bg-\[\#FAFAFF\]\/\[0\.04\],
+html[data-theme="light"] .bg-\[\#FAFAFF\]\/\[0\.05\] {
+    background-color: rgba(81, 57, 237, 0.05) !important;
+}
+
+/* Dark gradient stops → light (Tailwind gradients run off CSS vars) */
+html[data-theme="light"] .from-\[\#0B0B18\] {
+    --tw-gradient-from: #F8FAFC var(--tw-gradient-from-position);
+    --tw-gradient-to: rgb(248 250 252 / 0) var(--tw-gradient-to-position);
+    --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+html[data-theme="light"] .from-\[\#0B0918\] {
+    --tw-gradient-from: #FFFFFF var(--tw-gradient-from-position);
+    --tw-gradient-to: rgb(255 255 255 / 0) var(--tw-gradient-to-position);
+    --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+html[data-theme="light"] .via-\[\#141024\] {
+    --tw-gradient-via: #F4F1FE var(--tw-gradient-via-position);
+    --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-via), var(--tw-gradient-to);
+}
+html[data-theme="light"] .to-\[\#1A0F2E\] {
+    --tw-gradient-to: #EDE9FE var(--tw-gradient-to-position);
+}
+
+/* Light-on-dark text → dark-on-light */
+html[data-theme="light"] .text-\[\#FAFAFF\] { color: #111827 !important; }
+html[data-theme="light"] .text-\[\#E7E7F3\],
+html[data-theme="light"] .text-\[\#E7E7F3\]\/50,
+html[data-theme="light"] .text-\[\#E7E7F3\]\/55,
+html[data-theme="light"] .text-\[\#E7E7F3\]\/60,
+html[data-theme="light"] .text-\[\#E7E7F3\]\/70,
+html[data-theme="light"] .text-\[\#E7E7F3\]\/75,
+html[data-theme="light"] .text-\[\#E7E7F3\]\/80,
+html[data-theme="light"] .text-\[\#E7E7F3\]\/85 {
+    color: #4B5563 !important;
+}
+html[data-theme="light"] .text-slate-100,
+html[data-theme="light"] .text-slate-200 { color: #1E293B !important; }
+html[data-theme="light"] .text-slate-300 { color: #475569 !important; }
+html[data-theme="light"] .text-slate-400 { color: #64748B !important; }
+html[data-theme="light"] .text-slate-500 { color: #94A3B8 !important; }
+html[data-theme="light"] .text-\[\#a48bff\],
+html[data-theme="light"] .text-\[\#c4b5fd\] { color: #5139ED !important; }
+html[data-theme="light"] .text-emerald-200,
+html[data-theme="light"] .text-emerald-300 { color: #047857 !important; }
+html[data-theme="light"] .text-amber-200,
+html[data-theme="light"] .text-amber-300 { color: #B45309 !important; }
+html[data-theme="light"] .text-white { color: #111827 !important; }
+
+/* …but keep white text on genuinely coloured surfaces (CTAs, badges) */
+html[data-theme="light"] :is(button, a).text-white,
+html[data-theme="light"] :is(
+    .bg-\[\#5139ED\], .bg-\[\#4128d4\], .bg-\[\#6242f5\], .bg-\[\#2BB673\],
+    .bg-\[\#F5B301\], .from-\[\#5139ED\], .from-\[\#F59E0B\],
+    .bg-emerald-500, .bg-emerald-600, .bg-amber-500, .bg-red-500, .bg-red-600,
+    .bg-violet-600, .bg-indigo-600, .bg-slate-600, .bg-\[\#111827\], .bg-\[\#0F172A\]
+) :is(.text-white, .text-\[\#FAFAFF\]) {
+    color: #FFFFFF !important;
+}
+
+/* White-alpha borders → light lines */
+html[data-theme="light"] .border-white\/5,
+html[data-theme="light"] .border-white\/10,
+html[data-theme="light"] .border-white\/15,
+html[data-theme="light"] .border-white\/20,
+html[data-theme="light"] .border-\[\#FAFAFF\]\/8,
+html[data-theme="light"] .border-\[\#FAFAFF\]\/10,
+html[data-theme="light"] .border-\[\#FAFAFF\]\/15 {
+    border-color: #E7E7F3 !important;
+}
+
+/* Home hero — inline-styled dark scene + scrim get light counterparts */
+html[data-theme="light"] .hero-scene-bg {
+    background:
+        radial-gradient(65% 55% at 60% 45%, rgba(14,175,122,0.08) 0%, rgba(255,255,255,0) 60%),
+        radial-gradient(65% 55% at 85% 90%, rgba(129,57,237,0.10) 0%, rgba(255,255,255,0) 60%),
+        #F6F4FE !important;
+}
+html[data-theme="light"] .hero-scrim {
+    background: linear-gradient(90deg, rgba(255,255,255,0.94) 0%, rgba(255,255,255,0.78) 40%, rgba(255,255,255,0.20) 70%, rgba(255,255,255,0) 100%) !important;
+}
+html[data-theme="light"] .hover\:text-white:hover {
+    color: #5139ED !important;
+}
+html[data-theme="light"] .divide-\[\#FAFAFF\]\/5 > * + * {
+    border-color: #E7E7F3 !important;
+}
+
+/* Hero glass chips (inline-styled) + hero detail cards */
+html[data-theme="light"] .hero-glass-chip {
+    background: rgba(255, 255, 255, 0.88) !important;
+    box-shadow: 0 4px 14px rgba(81, 57, 237, 0.12) !important;
+}
+html[data-theme="light"] .hero-glass-card {
+    box-shadow: 0 12px 30px rgba(81, 57, 237, 0.14) !important;
+}
+
+/* Visualization canvases (Cytoscape) keep their dark stage so node label
+   colours baked into the graph stay legible. */
+html[data-theme="light"] .viz-keep-dark {
+    background-color: #0B0B18 !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
+}

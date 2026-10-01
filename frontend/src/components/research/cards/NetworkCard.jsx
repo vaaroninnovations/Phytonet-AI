@@ -156,7 +156,7 @@ function NetworkCardImpl({ network }) {
         </span>
       </div>
       <div ref={ref} data-testid="network-cytoscape"
-           className="mt-2 w-full h-[420px] rounded-lg border border-white/5 bg-black/40" />
+           className="viz-keep-dark mt-2 w-full h-[420px] rounded-lg border border-white/5 bg-black/40" />
     </div>
   );
 }

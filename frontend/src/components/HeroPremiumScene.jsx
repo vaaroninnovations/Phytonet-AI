@@ -15,7 +15,7 @@ export default function HeroPremiumScene() {
   return (
     <div
       data-testid="hero-premium-scene"
-      className="relative h-full w-full overflow-hidden"
+      className="hero-scene-bg relative h-full w-full overflow-hidden"
       style={{
         background:
           "radial-gradient(65% 55% at 60% 45%, rgba(14,175,122,0.10) 0%, rgba(15,14,36,0.0) 60%), " +

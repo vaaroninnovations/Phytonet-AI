@@ -22,26 +22,37 @@ import Hero3DProtein from "./Hero3DProtein";
 const PARTICLE_COUNT = 55;
 const CONNECT_RADIUS = 130;
 
-// Small green + purple orbs (dark bg friendly). Sizes are small so they read
-// as network nodes rather than fireworks.
-const COLORS = [
-  { fill: "rgba(43,182,115,0.85)",   glow: "rgba(43,182,115,0.20)"  }, // green
-  { fill: "rgba(43,182,115,0.60)",   glow: "rgba(43,182,115,0.12)"  },
-  { fill: "rgba(129,57,237,0.75)",   glow: "rgba(129,57,237,0.16)"  }, // purple
-  { fill: "rgba(196,181,253,0.75)",  glow: "rgba(196,181,253,0.14)" }, // lavender
-];
-const LINK_COLOR = "rgba(43,182,115,";
+// Small green + purple orbs. Two palettes — the field sits on a dark hero in
+// dark mode and a light hero in light mode, so the draw loop resolves the
+// active palette from <html data-theme> every frame (live toggle, no re-init).
+const PALETTES = {
+  dark: [
+    { fill: "rgba(43,182,115,0.85)",   glow: "rgba(43,182,115,0.20)"  }, // green
+    { fill: "rgba(43,182,115,0.60)",   glow: "rgba(43,182,115,0.12)"  },
+    { fill: "rgba(129,57,237,0.75)",   glow: "rgba(129,57,237,0.16)"  }, // purple
+    { fill: "rgba(196,181,253,0.75)",  glow: "rgba(196,181,253,0.14)" }, // lavender
+  ],
+  light: [
+    { fill: "rgba(21,128,61,0.55)",    glow: "rgba(21,128,61,0.10)"   },
+    { fill: "rgba(21,128,61,0.38)",    glow: "rgba(21,128,61,0.07)"   },
+    { fill: "rgba(81,57,237,0.50)",    glow: "rgba(81,57,237,0.09)"   },
+    { fill: "rgba(124,99,255,0.42)",   glow: "rgba(124,99,255,0.08)"  },
+  ],
+};
+const LINK = { dark: "rgba(43,182,115,", light: "rgba(21,128,61," };
+const curPalette = () =>
+  document.documentElement.getAttribute("data-theme") === "light"
+    ? { p: PALETTES.light, link: LINK.light }
+    : { p: PALETTES.dark, link: LINK.dark };
 
 function makeParticle(w, h) {
-  const c = COLORS[Math.floor(Math.random() * COLORS.length)];
   return {
     x:  Math.random() * w,
     y:  Math.random() * h,
     vx: (Math.random() - 0.5) * 0.25,
     vy: (Math.random() - 0.5) * 0.25,
     r:  1.4 + Math.random() * 2.2,
-    fill: c.fill,
-    glow: c.glow,
+    ci: Math.floor(Math.random() * PALETTES.dark.length),
   };
 }
 
@@ -71,6 +82,7 @@ function ParticleField() {
 
     const draw = () => {
       const { w, h, particles } = s;
+      const { p: pal, link } = curPalette();
       ctx.clearRect(0, 0, w, h);
 
       // Dashed inter-atomic links
@@ -86,7 +98,7 @@ function ParticleField() {
           const d2 = dx * dx + dy * dy;
           if (d2 < CONNECT_RADIUS * CONNECT_RADIUS) {
             const alpha = 0.28 * (1 - Math.sqrt(d2) / CONNECT_RADIUS);
-            ctx.strokeStyle = LINK_COLOR + alpha.toFixed(3) + ")";
+            ctx.strokeStyle = link + alpha.toFixed(3) + ")";
             ctx.lineWidth = 0.7;
             ctx.beginPath();
             ctx.moveTo(p.x, p.y);
@@ -99,9 +111,9 @@ function ParticleField() {
 
       // Atoms — glow halo + solid core + tiny specular
       for (const p of particles) {
-        ctx.fillStyle = p.glow;
+        ctx.fillStyle = pal[p.ci].glow;
         ctx.beginPath(); ctx.arc(p.x, p.y, p.r * 3.2, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = p.fill;
+        ctx.fillStyle = pal[p.ci].fill;
         ctx.beginPath(); ctx.arc(p.x, p.y, p.r,       0, Math.PI * 2); ctx.fill();
       }
       rafRef.current = requestAnimationFrame(draw);
@@ -135,7 +147,7 @@ function AnchorLabel({ Icon, label, className = "", accent = "#2BB673", testid, 
       className={`absolute z-20 flex items-center gap-1.5 text-[12px] font-body font-semibold text-[#E7E7F3]/85 ${className}`}
     >
       <span
-        className="grid h-7 w-7 place-items-center rounded-full border-2"
+        className="hero-glass-chip grid h-7 w-7 place-items-center rounded-full border-2"
         style={{
           borderColor: `${accent}88`,
           background: "rgba(15,14,36,0.65)",
@@ -170,7 +182,7 @@ function DetailCard({
         borderColor: `${accent}55`,
         boxShadow: `0 12px 30px rgba(0,0,0,0.45), 0 0 0 1px ${accent}22, inset 0 1px 0 rgba(255,255,255,0.04)`,
       }}
-      className={`absolute z-30 w-[196px] cursor-pointer rounded-2xl border bg-[#0F0E24]/85 backdrop-blur-md p-3.5 transition-shadow ${className}`}
+      className={`hero-glass-card absolute z-30 w-[196px] cursor-pointer rounded-2xl border bg-[#0F0E24]/85 backdrop-blur-md p-3.5 transition-shadow ${className}`}
     >
       <div className="flex items-center gap-2 text-[10.5px] font-body font-semibold uppercase tracking-[0.14em] text-[#E7E7F3]/60">
         <span

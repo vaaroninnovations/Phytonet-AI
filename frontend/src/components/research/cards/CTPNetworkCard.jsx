@@ -402,7 +402,7 @@ export function CTPNetworkCard({ data, message }) {
       </div>
 
       <div ref={ref} data-testid="ctp-network-canvas"
-           className="w-full h-[500px] rounded-lg border border-white/5 bg-black/40" />
+           className="viz-keep-dark w-full h-[500px] rounded-lg border border-white/5 bg-black/40" />
 
       {(() => {
         const topHubs = raw

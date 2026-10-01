@@ -60,7 +60,7 @@ function Hero() {
 
       {/* Readability scrim — dark gradient on the left so headline & CTAs
           stay high-contrast against the ribbon on the right. */}
-      <div aria-hidden className="pointer-events-none absolute inset-0"
+      <div aria-hidden className="hero-scrim pointer-events-none absolute inset-0"
            style={{
              background:
                "linear-gradient(90deg, rgba(15,14,36,0.88) 0%, rgba(15,14,36,0.65) 40%, rgba(15,14,36,0.10) 70%, rgba(15,14,36,0.0) 100%)",
