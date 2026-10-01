@@ -1,4 +1,36 @@
 # Dr. / — Network Pharmacology SaaS
+## 2026-10-01 — Global Theme System + Font Size Modifier + Sticky Transparent Navbar ✅
+
+**User asks:** (1) dark/light mode toggle on navbar, (2) font size modifier, (3) dark-by-design pages must also flip to light, (4) navbar sticky + transparent.
+
+**New files / architecture**
+- `frontend/src/context/ThemeContext.jsx` — global appearance provider.
+  - `theme`: `light` (default) | `dark`, persisted `phytonet.theme`, applied as `data-theme` attr + `dark` class on `<html>`.
+  - `fontSize`: `sm|md|lg` (15/16/17.5px root font-size), persisted `phytonet.fontSize`. Scales all rem-based Tailwind utilities.
+  - Mounted in `App.js` inside BrowserRouter, outside AuthProvider.
+- `SiteHeader.jsx` — new navbar controls (both with data-testids):
+  - `theme-toggle` (Sun/Moon), `font-size-toggle` (Type icon) → `font-size-menu` with `font-size-sm|md|lg` options (Aa glyph scales per size).
+  - Outside-click dismissal via document-level `mousedown` capture listener + ref (fixes iteration_50 LOW bug where an overlay div swallowed clicks).
+  - Header `dark` styling now purely follows `isDark` (route-based dark logic removed — every route responds to the toggle).
+
+**CSS strategy — dual remap blocks in `index.css`** (module pages were authored light-first; marketing pages + /app workspace dark-first):
+- `html[data-theme="dark"]` — remaps light utility classes (bg-white, bg-[#F8FAFC], text-[#111827], border-[#E7E7F3], .App bg, shadcn tokens, scrollbars, shadows) to the dark navy palette.
+- `html[data-theme="light"]` — remaps the dark palette (bg-[#0F0E24]/[#0B0918]/bg-black/* /bg-white\/5..10, text-[#FAFAFF]/[#E7E7F3]/* /slate-100..500, border-white/*, [#FAFAFF]/* borders, gradient stops from-[#0B0B18]/via-[#141024]/to-[#1A0F2E]) to light. `text-white` → ink with **restore rules** for colored CTA/badge surfaces (`:is(button,a).text-white`, `.bg-[#5139ED]`, `.from-[#5139ED]`, emerald/amber/red/violet solid bgs).
+- Marker classes for inline-styled dark elements: `hero-scene-bg` + `hero-scrim` (Home hero), `hero-glass-chip`/`hero-glass-card` (HeroMoleculeField floating cards), `viz-keep-dark` (Cytoscape canvases in NetworkCard/CTPNetworkCard intentionally keep their dark stage in light mode).
+- `HeroMoleculeField` particle field resolves its palette per-frame from `data-theme` (PALETTES.dark/light + link color) — live toggle with no re-init.
+
+**Sticky + transparent navbar**
+- `SiteHeader` at rest: fully `bg-transparent`; on scroll: `bg-[#0F0E24]/40` (dark) / `bg-white/40` (light) + `backdrop-blur-xl` + hairline border.
+- **Pre-existing bug found & fixed**: `position: sticky` never worked because `.App`/`html`/`body` used `overflow-x: hidden` (creates a scroll container). Changed to `overflow-x: clip` in `App.css` — sticky now works everywhere (also fixes WorkflowSidebar stickiness) with no horizontal-overflow regression.
+
+**Testing** — iterations 50 + 51 (testing agent): 8/8 pass. Both directions verified: Home/Pricing/Resources//app-workspace flip light↔dark; module pages flip dark↔light; theme + font-size persist across navigation/reload; outside-click closes font menu; no new console errors. Sticky verified: header `top: 0` at scroll 1200px.
+- Known cosmetic backlog (from iter-51, optional): /pricing dark-mode plan cards have low-contrast title/price text (pre-existing); theme/font toggles not present inside /app workspace header (workspace uses its own TabBar).
+
+**Files touched**: `context/ThemeContext.jsx` (new), `App.js`, `components/SiteHeader.jsx`, `index.css`, `App.css`, `pages/Home.jsx`, `components/HeroPremiumScene.jsx`, `components/HeroMoleculeField.jsx`, `components/research/cards/NetworkCard.jsx`, `components/research/cards/CTPNetworkCard.jsx`.
+
+**Caution for future agents**: when using insert_text into index.css, verify the insert didn't split an existing rule (happened twice this session — brace-balance check afterwards: `python3 -c` depth count).
+
+
 
 ## 2026-02-08 — Hero Molecular Scene (Homepage focal visualization)
 - Removed the "Compound × Target × Pathway" live network card from the hero

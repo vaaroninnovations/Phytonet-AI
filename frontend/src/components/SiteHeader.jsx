@@ -94,11 +94,11 @@ export default function SiteHeader() {
       className={`sticky top-0 z-40 transition-all duration-300 ${
         dark
           ? scrolled
-            ? "border-b border-[#FAFAFF]/10 bg-[#0F0E24]/85 backdrop-blur-xl"
-            : "border-b border-transparent bg-[#0F0E24]/60 backdrop-blur-md"
+            ? "border-b border-[#FAFAFF]/10 bg-[#0F0E24]/40 backdrop-blur-xl"
+            : "border-b border-transparent bg-transparent"
           : scrolled
-            ? "border-b border-[#E7E7F3]/80 bg-white/70 backdrop-blur-xl shadow-[0_1px_0_rgba(11,11,24,0.03)]"
-            : "border-b border-transparent bg-white/60 backdrop-blur-md"
+            ? "border-b border-[#E7E7F3]/60 bg-white/40 backdrop-blur-xl"
+            : "border-b border-transparent bg-transparent"
       }`}
     >
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-6">

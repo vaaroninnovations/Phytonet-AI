@@ -5,12 +5,14 @@
     /* Global overflow guard — prevents wide content (long IDs, big tables,
        Cytoscape canvases) from pushing horizontal scroll onto the whole page.
        Individual scrollable regions (tables, code blocks) still work because
-       overflow-x is set on their local containers, not on body. */
-    overflow-x: hidden;
+       overflow-x is set on their local containers, not on body.
+       `clip` (not `hidden`) so no scroll container is created — that would
+       break position:sticky on the SiteHeader. */
+    overflow-x: clip;
 }
 
 html, body {
-    overflow-x: hidden;
+    overflow-x: clip;
     max-width: 100vw;
 }
 

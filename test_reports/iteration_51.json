@@ -1,0 +1,30 @@
+{
+  "summary": "Retested theme/font-size regression + new light-mode remap for previously dark-by-design pages. All 8 feature checks pass, including the font-size outside-click dismissal that was broken in iteration_50. Dark-by-design pages (Home hero, Pricing, Plant Database, /app workspace) now correctly flip to light in light mode and back to dark in dark mode. Theme persists via localStorage across navigation and reload. Workspace /app renders in the current theme on both light and dark. One UX gap noted: the SiteHeader (and therefore the theme/font-size toggles) is NOT rendered inside the /app workspace — users must navigate back to a public page to change theme while signed in.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/pricing (dark mode)", "issues": ["The three glassmorphic cards (Student, Starter, Professional) have very low-contrast title/price text against the dark navy background in dark mode — e.g. 'Student', '15', '₹99', '30', '₹250', '100', '₹1,000', 'Professional' are barely visible. The 'Research' card is readable only because it has a cream/beige highlight background. Appears pre-existing (not caused by this iteration), but still worth fixing — consider raising the plan title and price colors to a lighter ink (e.g. #E7E7F3 or white) in dark mode."]},
+      {"screen": "/app workspace", "issues": ["Theme toggle and font-size toggle are NOT available in the workspace top bar — the workspace uses its own header without SiteHeader. Theme still applies correctly (via <html data-theme>), but a signed-in user cannot change theme/font-size without leaving /app. Consider adding theme-toggle + font-size-toggle to the workspace header."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "(Optional, cosmetic) Improve contrast of plan title/price text on /pricing dark-mode cards — pre-existing low contrast on Student/Starter/Professional cards.",
+    "(Optional, UX) Add theme-toggle + font-size-toggle to the /app workspace header so signed-in users can change theme/font without leaving the workspace."
+  ],
+  "critical_code_review_comments": [
+    "ThemeContext.jsx and SiteHeader.jsx outside-click fix (document-level mousedown listener with ref check) works as intended — no more overlay blocking page interactions, menu reliably closes on outside click. Clean implementation.",
+    "index.css dark→light remap block for pages like Pricing/Plant-DB/Home is doing a lot of heavy per-class overrides (bg-[#0F0E24], bg-[#0B0918], text-slate-*, border-white/*, etc.). This is pragmatic but fragile — new dark-authored classes added later will not automatically flip to light. Longer-term fix: refactor those pages to use theme-aware tokens instead of hardcoded hex/slate utilities.",
+    "Pre-existing hydration warning on /plant-database remains (<span> inside <option> at pages/PlantDatabase/index.jsx:917-918 via x-dynamic wrapper). Unrelated to theme work."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "100% (8/8 feature checks pass)"},
+  "test_credentials": "rtest1785979513@phytonetai.com / TestPass123! — verified sign-in works via SiteHeader 'Sign In' button → modal with data-testid signin-email/signin-password/signin-submit. Note: direct URL /signin renders only header+footer (no form), signin is modal-only.",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Verified (fresh Playwright context, 1440x900 viewport):\n- Home / light: scene_bg rgb(246,244,254), body_bg rgb(255,255,255), H1 color rgb(17,24,39) (dark readable). Dark: scene_bg rgb(15,14,36), body_bg rgb(11,11,24), H1 color rgb(250,250,255).\n- /pricing light: body_bg rgb(255,255,255). Dark: body_bg rgb(11,11,24).\n- /plant-database light: .App bg rgb(255,255,255), H1 color rgb(11,11,24). Dark: bg rgb(11,11,24).\n- Font-size menu: opens via data-testid font-size-toggle, OUTSIDE CLICK NOW CLOSES IT (previous bug fixed). Selecting font-size-lg sets root font-size 17.5px; survives reload via localStorage 'phytonet.fontSize'.\n- Theme persists in localStorage 'phytonet.theme' across navigation to /documentation and page reload.\n- /app workspace (signed-in with provided creds, discard resume modal): renders LIGHT mode (body rgb(255,255,255), H1 'Welcome back, R.' in dark readable text) when theme=light; DARK mode (body rgb(11,11,24), H1 color rgb(241,245,249)) when theme=dark. BUT workspace header does NOT include theme-toggle/font-size-toggle controls.\n- Console: only pre-existing 401s (auth probe) and hydration <span>-inside-<option> warning on /plant-database; no new theme-related errors.",
+  "rca of the issue": "N/A — iteration_50's font-size outside-click bug is confirmed fixed via document-level mousedown listener in SiteHeader.jsx."
+}
